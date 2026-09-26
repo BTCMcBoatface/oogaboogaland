@@ -342,17 +342,28 @@
     for (const [key] of v.map) if (+key.split(",")[1] >= 3) v.map.set(key, +key.split(",")[1] === 3 ? 13 : 12);
     return v;
   };
-  const labFlaskGeometry = () => {
+  const LAB_FLASK_HEIGHT = 0.88;
+  const shorterFlask = (profile) => profile.map(([radius, y]) => [radius, y * LAB_FLASK_HEIGHT]);
+  const labFlaskGeometry = (level = 0.14) => {
     // Smooth circular glass keeps the same physical bounds and neck grip as
     // the original vessel. The rolled rim turns inward into its open neck.
-    const profile = [[0, 0], [0.177, 0], [0.19, 0.005], [0.19565, 0.016], [0.19565, 0.042],
-      [0.19, 0.061], [0.12, 0.255], [0.055, 0.445], [0.047, 0.474], [0.045, 0.501],
-      [0.045, 0.626], [0.048, 0.643], [0.069, 0.648], [0.074, 0.655], [0.074, 0.663],
-      [0.067, 0.6708], [0.048, 0.6708], [0.041, 0.664], [0.039, 0.655], [0.035, 0.642],
-      [0.035, 0.501], [0.037, 0.477], [0.045, 0.451], [0.176, 0.065], [0, 0.045]];
-    return BL.models.lathe({ profile, segments: 32, emissive: 0.15,
-      color: t => profile[Math.round(t * (profile.length - 1))][1] < 0.26 ? "#57c6a0" : "#9de3dc" });
+    return BL.models.glassVessel({
+      liquidProfile: shorterFlask([[0, 0], [0.15, 0], [0.17, 0.042], [0.17, 0.061],
+        [0.17 - (level - 0.061) * 0.34, level], [0, level]]),
+      glassProfile: shorterFlask([[0.177, 0], [0.19, 0.005], [0.19565, 0.016], [0.19565, 0.042],
+        [0.19, 0.061], [0.161, 0.14], [0.12, 0.255], [0.055, 0.445], [0.047, 0.474], [0.045, 0.501],
+        [0.045, 0.626], [0.048, 0.643], [0.069, 0.648], [0.074, 0.655], [0.074, 0.663],
+        [0.067, 0.6708], [0.048, 0.6708], [0.041, 0.664], [0.039, 0.655], [0.035, 0.642],
+        [0.035, 0.501], [0.037, 0.477], [0.045, 0.451], [0.143, 0.14], [0.17, 0.061],
+        [0.175, 0.016], [0.16, 0]]),
+      liquid: "#57c6a0", segments: 32
+    });
   };
+  const labFlaskVariants = BL.models.variants((i) => {
+    const geometry = labFlaskGeometry(i ? 0.19 : 0.10);
+    geometry.labGripY = 9.5 * U * 0.65 * LAB_FLASK_HEIGHT;
+    return geometry;
+  });
   // One voxel map per part, two palettes: ape and code.
   const geometries = cached(() => {
     const part = (name, build, origin) => {
@@ -364,7 +375,7 @@
     };
     const lab = (build, origin, unit = U) => voxelGeometry(build(mulberry32(fnv1a("agent/lab"))), { unit, palette: LAB_PALETTE, origin });
     const flask = labFlaskGeometry();
-    flask.labGripY = 9.5 * U * 0.65;
+    flask.labGripY = 9.5 * U * 0.65 * LAB_FLASK_HEIGHT;
     return {
       legL: part("legL", legVox, { x: -2 * U, y: -8 * U, z: -2 * U }),
       legR: part("legR", legVox, { x: -2 * U, y: -8 * U, z: -2 * U }),
@@ -451,6 +462,7 @@
       parts.head.rotation.x = -QUAD * 0.85;
     }
     const labPlaceholder = managed ? createNode({ geometry: geos.labFlask, visible: false, sightHidden: true }) : null;
+    if (labPlaceholder) BL.models.attachGlassShell(labPlaceholder);
     let labFlask = labPlaceholder, labGripY = geos.labFlask.labGripY;
     const labItemRotation = managed ? new Float32Array([0, 0, 0, 1]) : null;
     const labArmRotation = managed ? new Float32Array(4) : null, labUprightRotation = managed ? new Float32Array(4) : null;
@@ -1554,5 +1566,5 @@
     return { start, stop, update, get active() { return !!agent; }, get agent() { return agent; }, get startedAt() { return startedAt; } };
   };
   BL.agent = { create, createPlay, labCoatClip, GAITS, TRIPLE_MS, QUAD, HUNCH, BODY, POUND_TIME, MANAGED_BEAT_TIME, MANAGED_MOTION_RADIUS, MANAGED_MOTION_HEIGHT, MANAGED_SMASH_RADIUS, LAB_RADIUS, LAB_HEIGHT, LAB_CENTERS, LAB_IDLE_RADIUS, LAB_WALK_RADIUS, LAB_SQUEEZE_RADIUS, footprint, torso,
-    labFlaskGeometry: () => geometries().labFlask };
+    labFlaskGeometry: (variant) => variant === undefined ? geometries().labFlask : labFlaskVariants(variant) };
 })();

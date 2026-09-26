@@ -1569,6 +1569,8 @@
       f.burning = f.rolling = f.requested = f.escaping = false; f.retry = f.escapeRetry = 0; f.age = f.heat = f.soot = f.cooldown = f.rollRecover = 0;
       m.charge = m.takeoff = m.landing = m.roll = m.rollAngle = m.climb = m.mantle = m.groom = m.supportOffset = 0;
       e.climb.active = e.climb.claimPending = e.climb.crestPending = e.climb.searchPending = false;
+      e.climb.debugTraverse = false;
+      e.climb.traverseStart = e.climb.traverseEnd = 0;
       e.climb.retry = d.climbAxis = 0; e.roam.count = e.roam.index = 0; e.roam.departPending = false;
       e.actionControlled = e.motion.smash = false;
       releaseLab(e); e.motion.lab = false;
@@ -1655,6 +1657,7 @@
           searchGoalX: 0, searchGoalY: 0, searchGoalZ: 0,
           claimPending: false, crestPending: false, claimOrder: 0, claimFor: -1, claimOwnerOrder: 0, claimProgress: 0, claimProgressAt: 0, claimRetreat: false,
           returning: false, reversals: 0, holdPose: false,
+          debugRole: -1, debugCursor: 0, debugAt: 0, debugTraverse: false, traverseStart: 0, traverseEnd: 0,
           peerCheck: false, peerX: 0, peerY: 0, peerZ: 0, peerHeading: 0,
           points: new Float64Array(CLIMB_POINTS * 3), lengths: new Float64Array(CLIMB_POINTS) },
         fire: { burning: false, age: 0, heat: 0, rolling: false, rollTime: 0, soot: 0, cooldown: 0,
@@ -1676,6 +1679,17 @@
       for (let i = 0; i < list.length; i++) if (!list[i].active && alive(list[i].owner)) activate(list[i]);
     };
     sync();
+    if (ctx.debugClimbSites) {
+      let role = 0;
+      for (const state of ["chilling", "working"]) for (const e of list) {
+        if (role >= 3) break;
+        if (!e.active || e.owner === ctx.debugClimbExclude || e.owner.state !== state || e.motion.lab) continue;
+        e.climb.debugRole = role;
+        e.climb.debugCursor = role * 3;
+        e.climb.debugAt = 2 + role;
+        role++;
+      }
+    }
     const startLabShuttle = (owner) => {
       const e = byOwner.get(owner);
       if (labSite < 0 || !e) return false;
@@ -1942,6 +1956,46 @@
       c.index = savedIndex;
       return fits;
     };
+    const appendClimbTraverse = (e, x, y, z, heading) => {
+      const c = e.climb, start = c.count, length = c.length;
+      const sx = Math.sin(heading), sz = Math.cos(heading);
+      plannedTurnMotion.climbBlend = 1; plannedTurnMotion.mantle = 0;
+      plannedTurnMotion.climbStride = e.motion.climbStride + y - e.root.position.y;
+      plannedTurnMotion.climbDirection = 0;
+      for (let choice = 0; choice < 2; choice++) {
+        const side = (e.index % 2 ? 1 : -1) * (choice ? -1 : 1);
+        c.count = start; c.length = length;
+        let clear = true;
+        for (let step = 1; step <= 6; step++) {
+          const tx = x + sz * side * step * 0.28, tz = z - sx * side * step * 0.28;
+          let wall = Infinity;
+          for (let depth = 0.08; depth <= 3; depth += 0.16) {
+            if (climbSolidAt(tx + sx * depth, y + 0.6, tz + sz * depth)
+              || climbSolidAt(tx + sx * depth, y + 1.6, tz + sz * depth)) { wall = depth; break; }
+          }
+          if (!Number.isFinite(wall)) { clear = false; break; }
+          const before = c.count, beforeLength = c.length;
+          let placed = false;
+          for (let retreat = 0; retreat <= 0.72; retreat += 0.12) {
+            c.count = before; c.length = beforeLength;
+            const nx = tx + sx * (wall - CLIMB_STANDOFF - retreat);
+            const nz = tz + sz * (wall - CLIMB_STANDOFF - retreat);
+            if (appendClimbPoint(e, nx, y, nz)
+              && e.gorilla.climbPoseClear(2, nx, y, nz, heading, plannedTurnMotion,
+                ctx.solidAt, plannedTurnClear, e, 0, true)) { placed = true; break; }
+          }
+          if (!placed) { clear = false; break; }
+        }
+        if (!clear) continue;
+        for (let step = 5; step >= 0; step--) {
+          const at = (start + step - 1) * 3;
+          if (!appendClimbPoint(e, c.points[at], c.points[at + 1], c.points[at + 2])) { clear = false; break; }
+        }
+        if (clear) { c.traverseStart = length; c.traverseEnd = c.length; return true; }
+      }
+      c.count = start; c.length = length;
+      return false;
+    };
     const climbPointDistance2 = (x, z, ax, az, bx, bz) => {
       const dx = bx - ax, dz = bz - az, length = dx * dx + dz * dz;
       const t = length ? clamp(((x - ax) * dx + (z - az) * dz) / length, 0, 1) : 0;
@@ -2111,6 +2165,8 @@
         if (!placed) return false;
         if (!i) c.lowerGroundDistance = c.length;
         lastX = x; lastZ = z;
+        if (c.debugTraverse && i === Math.max(2, Math.floor(count / 2))
+          && !appendClimbTraverse(e, x, y, z, heading)) return false;
       }
       c.failure = "mantle"; c.mantleStart = c.length;
       const topDX = ux - lastX, topDZ = uz - lastZ, topRun = Math.hypot(topDX, topDZ);
@@ -2135,6 +2191,44 @@
       c.failure = "crest pose";
       c.claimPending = c.crestPending = true; c.claimOrder = ++climbClaimSerial;
       return admitClimb(e);
+    };
+    const startDebugClimb = (e) => {
+      const c = e.climb, sites = c.debugRole === 2 ? ctx.debugClimbSites.outer : ctx.debugClimbSites.cave;
+      if (!sites.length) return false;
+      const site = sites[c.debugCursor++ % sites.length], y = climbSurfaceAt(site.x, site.z);
+      c.debugAt = elapsed + 0.4;
+      if (y < 3.2 || !landing(site.x, y, site.z)) return false;
+      const heading = Math.atan2(-site.outwardX, -site.outwardZ);
+      const p = e.root.position, oldX = p.x, oldY = p.y, oldZ = p.z, oldHeading = e.heading;
+      const oldParked = e.parked, oldBiped = e.biped, oldLounge = e.lounge;
+      const oldMode = e.footprintMode, oldCompact = e.compact, oldRadius = e.radius, oldHeight = e.height;
+      e.parked = e.biped = e.compact = false; e.lounge = "";
+      e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
+      const topHeading = heading + Math.PI;
+      if (!climbWalkClear(e, site.x, y, site.z, site.x, y, site.z, topHeading)) {
+        e.parked = oldParked; e.biped = oldBiped; e.compact = oldCompact; e.lounge = oldLounge;
+        e.footprintMode = oldMode; e.radius = oldRadius; e.height = oldHeight;
+        return false;
+      }
+      p.x = site.x; p.y = y; p.z = site.z; e.heading = topHeading;
+      e.gorilla.poseManaged(2, p.x, p.y, p.z, e.heading, 0, false, false, "", e.motion);
+      c.debugTraverse = true;
+      c.traverseStart = c.traverseEnd = 0;
+      const lowerY = c.debugRole === 2 ? Math.max(0.35, y - 4.5) : Math.max(0.45, y - 4.2);
+      const started = buildClimb(e, site.lowerX, lowerY, site.lowerZ,
+        site.x, y, site.z, heading, true, false);
+      if (started) {
+        e.phase = "chill"; e.route = ""; e.roam.count = e.roam.index = 0;
+        e.drive.resume = true; c.searchPending = c.searchDeferred = false; c.debugAt = elapsed + 12;
+        return true;
+      }
+      p.x = oldX; p.y = oldY; p.z = oldZ; e.heading = oldHeading;
+      e.parked = oldParked; e.biped = oldBiped; e.compact = oldCompact; e.lounge = oldLounge;
+      e.footprintMode = oldMode; e.radius = oldRadius; e.height = oldHeight;
+      e.gorilla.poseManaged(2, p.x, p.y, p.z, e.heading, 0, false, oldBiped, oldLounge, e.motion);
+      c.debugTraverse = c.claimPending = c.crestPending = c.searchPending = c.searchDeferred = false;
+      c.claimOrder = 0; c.claimFor = -1; c.retry = 0;
+      return false;
     };
     const pendingClimbSearch = (e) => {
       const c = e.climb;
@@ -2402,8 +2496,10 @@
       let speed = ground ? Math.hypot(POINT.x - p.x, POINT.z - p.z) / dt : 0;
       if ((POINT.x - p.x) * Math.sin(facing) + (POINT.z - p.z) * Math.cos(facing) < 0) speed = -speed;
       m.climbBlend = blend; m.mantle = top;
-      m.climbStride += POINT.y - p.y; m.climbDirection = Math.sign(axis);
-      const transition = blend < 0.999 || e.gorilla.debug.climbing < 0.999 || Math.abs(facing - e.heading) > 0.001;
+      m.climbStride += !ground && top === 0 ? next - c.progress : POINT.y - p.y;
+      m.climbDirection = Math.sign(axis);
+      const transition = c.debugTraverse && next >= c.traverseStart - 0.2 && next <= c.traverseEnd + 0.2
+        || blend < 0.999 || e.gorilla.debug.climbing < 0.999 || Math.abs(facing - e.heading) > 0.001;
       if (!transition && !climbClear(e, p.x, p.y, p.z, POINT.x, POINT.y, POINT.z)) {
         m.climbBlend = oldBlend; m.mantle = oldMantle; m.climbStride = oldStride; m.climbDirection = 0;
         climbBlocked(e, dt);
@@ -2426,6 +2522,7 @@
       p.x = POINT.x; p.y = POINT.y; p.z = POINT.z; c.progress = next; e.heading = facing;
       if (next === c.length && axis > 0 || next === bottom && axis < 0 && c.lowerExit) {
         c.active = false; c.retry = 0.8; d.grounded = true;
+        if (c.debugRole >= 0) { c.debugTraverse = false; c.debugAt = elapsed + 8; }
         m.climb = 0; m.climbBlend = NaN; m.mantle = 0;
         e.compact = e.gorilla.compact; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = 2.7;
         e.recover = e.blocked = 0;
@@ -3769,14 +3866,23 @@
         if (e.motion.lab) workLab(e, dt);
         else if (sites[e.site].mirrorRoom) {
           // Mirror-room clankers run side to side on alternating depth lanes.
+          // Pause at each turn and rear up to beat the chest every fifth run.
           // Keep each run inside the glass and reserve its destination first.
           if (Math.hypot(e.goalX - p.x, e.goalZ - p.z) > 0.18) move(e, dt, SPEED * 1.3);
           else {
             e.speed = damp(e.speed, 0, 12, dt); e.rest -= dt;
             if (e.rest <= 0) {
-              e.workCycle++;
-              if (reserve(e, true)) { setGoal(e, e.slotX, e.slotY, e.slotZ); e.rest = 0.12 + e.random() * 0.18; }
-              else e.rest = 0.25;
+              const beatTurn = (e.workCycle + 1) % 5 === 0;
+              if (beatTurn && Math.abs(e.speed) >= 0.05) e.rest = 0.1;
+              else {
+                e.workCycle++;
+                if (beatTurn && expandGesture(e, 1.55) && e.gorilla.beat()) {
+                  e.biped = true; e.beat = BL.agent.MANAGED_BEAT_TIME; e.beats++;
+                } else if (reserve(e, true)) {
+                  setGoal(e, e.slotX, e.slotY, e.slotZ);
+                  e.rest = e.workCycle % 5 === 4 ? 0.8 + e.random() * 0.5 : 0.3 + e.random() * 0.35;
+                } else e.rest = 0.25;
+              }
             }
           }
         }
@@ -3993,6 +4099,14 @@
           || e.pound || e.beat || e.parked || e.fire.rolling) continue;
         if (e.controlled ? !c.requested && Math.hypot(e.drive.x, e.drive.z) <= 0.05 : Math.hypot(e.goalX - e.root.position.x, e.goalZ - e.root.position.z) <= 0.18) continue;
         climbTurn = index; climbNext = (index + 1) % list.length;
+        break;
+      }
+      if (ctx.debugClimbSites && climbFrameBudget && climbTurn < 0) for (let i = 0; i < list.length; i++) {
+        const e = list[i];
+        const c = e.climb;
+        if (c.debugRole < 0 || !e.active || e.controlled || c.active || e.drive.airborne || e.jump.active
+          || e.fire.burning || e.fire.rolling || e.motion.lab || e.recover > 0 || elapsed < c.debugAt) continue;
+        startDebugClimb(e);
         break;
       }
       while (remaining > 1e-8) {

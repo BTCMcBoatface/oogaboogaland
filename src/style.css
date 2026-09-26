@@ -1637,9 +1637,9 @@ body[data-active-scene="mine"] .mode-hud {
 .mode-hud[data-selected="false"] .freeroam-icon {
   position: absolute;
   left: 50%;
-  top: 4px;
-  width: 28px;
-  height: 28px;
+  top: 2px;
+  width: 32px;
+  height: 32px;
   transform: translateX(-50%);
 }
 
@@ -2425,6 +2425,89 @@ body[data-active-scene="mine"] .mode-hud {
   image-rendering: pixelated;
   box-shadow: 0 0 0 2px var(--stone-dk), 0 0 18px rgba(255, 216, 74, 0.18);
 }
+
+.chalk-modal {
+  width: min(94vw, 1040px);
+  max-width: none;
+  max-height: min(96vh, 820px);
+  padding: 14px;
+  border: 7px solid #5b3924;
+  border-radius: 12px;
+  background: #6c4729;
+  color: #f2ebd6;
+  box-shadow: 0 28px 80px #000b, inset 0 0 0 3px #a27140;
+  animation: chalk-zoom 220ms ease-out;
+}
+
+.chalk-modal::backdrop { background: #050b09b8; }
+
+@keyframes chalk-zoom {
+  from { opacity: 0; transform: scale(0.72); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.chalk-head, .chalk-ledge { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.chalk-head { margin: 0 0 10px; }
+.chalk-head h2 { margin: 0; font-size: clamp(17px, 2vw, 24px); }
+.chalk-close { width: 38px; height: 38px; border: 2px solid #d2a166; border-radius: 5px; background: #3f271a; color: #fff5dd; font-size: 28px; line-height: 1; cursor: pointer; }
+.chalk-close:hover, .chalk-close:focus-visible { background: #694126; }
+
+.chalk-frame {
+  position: relative;
+  overflow: hidden;
+  border: 9px solid #4c3020;
+  border-radius: 4px;
+  background: #173b31;
+  box-shadow: inset 0 0 0 2px #ac7941, 0 8px 18px #1b100b8c;
+}
+
+.chalk-frame canvas { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; touch-action: none; cursor: crosshair; }
+.chalk-frame.has-tool canvas { cursor: none; }
+
+.chalk-ledge {
+  min-height: 64px;
+  padding: 9px 14px;
+  background: linear-gradient(#9f7041, #724725);
+  border: 2px solid #4c3020;
+  border-top: 0;
+  box-shadow: inset 0 3px #c19055;
+}
+
+.chalk-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 95px;
+  padding: 8px 12px;
+  border: 2px solid #53351f;
+  border-radius: 5px;
+  background: #80522f;
+  color: #fff3d8;
+  font: inherit;
+  cursor: pointer;
+}
+.chalk-tool[aria-pressed="true"], .chalk-tool:hover, .chalk-tool:focus-visible { background: #3a5a48; border-color: #d8e8c3; }
+.chalk-hint { font-size: 13px; text-align: center; color: #f2dfbd; }
+.chalk-eraser-shape { display: block; width: 24px; height: 14px; border: 2px solid #c6ad8c; border-radius: 3px; background: #403a35; box-shadow: inset 0 -4px #899280; transform: rotate(-13deg); }
+.chalk-stick-shape { display: block; width: 23px; height: 6px; border-radius: 3px; background: #e5e8d0; box-shadow: 0 1px 3px #17241b; transform: rotate(-28deg); }
+
+.chalk-pointer { position: absolute; display: none; width: 1px; height: 1px; pointer-events: none; z-index: 2; }
+.chalk-pointer.visible { display: block; }
+.chalk-pointer .chalk-held { position: absolute; left: -4px; top: -2px; width: 24px; height: 7px; border-radius: 3px; background: #e5e8d0; transform: rotate(-38deg); transform-origin: 4px 4px; box-shadow: 0 2px 4px #061f18b0; }
+.chalk-pointer.eraser .chalk-held { left: -10px; top: -7px; width: 34px; height: 22px; border: 3px solid #b8a183; background: #44413c; transform: rotate(-18deg); }
+.chalk-pointer .chalk-sleeve, .chalk-pointer .chalk-hand { display: none; }
+.chalk-pointer.controlled .chalk-sleeve { display: block; position: absolute; left: 16px; top: 21px; width: 75px; height: 160px; border: 6px solid #25221f; border-radius: 24px; background: linear-gradient(90deg, #3d332d, var(--chalk-arm, #92816b) 45%, #25221f); transform: rotate(-28deg); transform-origin: 15px 12px; }
+.chalk-pointer.controlled .chalk-hand { display: block; position: absolute; left: 7px; top: 7px; width: 37px; height: 42px; border: 4px solid #40332b; border-radius: 16px 15px 18px 13px; background: var(--chalk-skin, #b69a77); transform: rotate(-28deg); }
+
+@media (max-width: 600px) {
+  .chalk-modal { width: 98vw; padding: 7px; border-width: 4px; }
+  .chalk-frame { border-width: 5px; }
+  .chalk-ledge { padding: 7px; gap: 4px; }
+  .chalk-tool { min-width: 68px; padding: 6px; font-size: 12px; }
+  .chalk-hint { font-size: 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) { .chalk-modal { animation: none; } }
 
 .board-nav {
   display: grid;

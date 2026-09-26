@@ -11,7 +11,7 @@
   "use strict";
   const BL = window.BL = window.BL || {};
   const { hexToRgb, mulberry32 } = BL.math;
-  const { geometry, pushVert, face, box, bevelBox, lathe, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords, moved, turnedY, turnedZ } = BL.models;
+  const { geometry, pushVert, face, box, bevelBox, lathe, glassVessel, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords, moved, turnedY, turnedZ } = BL.models;
   const blob = (v, { cx, cy, cz, rx, ry, rz, chip = 0, floor = -Infinity, rand, color }) => {
     for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       for (let y = Math.max(floor, Math.floor(cy - ry)); y <= Math.ceil(cy + ry); y++) {
@@ -124,7 +124,7 @@
     "-": ["000", "000", "111", "000", "000"],
     ".": ["000", "000", "000", "000", "010"]
   };
-  const SIGN_CELL = 0.075, SIGN_PIXEL = 0.061, SIGN_PAD = 0.855, SIGN_FRONT = 0.23;
+  const SIGN_CELL = 0.075, SIGN_PAD = 0.855, SIGN_FRONT = 0.23;
   const SIGN_CACHE = new Map();
   // The emblem each cave flies, 5 by 7: on its sign either side of the name and on its banners.
   const SIGN_ICONS = {
@@ -135,8 +135,7 @@
     glyph: ["#.##.", "##..#", ".#.#.", "#..##", ".##.#", "#.#..", "##.##"],
     banana: ["....#", "...##", "..##.", ".##..", "##...", "#....", "....."]
   };
-  // The sign emblems: 7x7 art in named inks, drawn a size up from the banners' SIGN_ICONS and ringed in a dark
-  // outline worked out from the art itself, so each reads as an enamel badge proud of the planks.
+  // The sign emblems: 7x7 art in named inks, ringed in a dark outline worked out from the art itself.
   const SIGN_BADGES = {
     bolt: { ink: { "#": "#ffcf2e", "+": "#fff1a0" }, rows: ["....+##", "...+##.", "..+##..", ".+#####", "....##.", "...##..", "..##..."] },
     die: { ink: { "#": "#f2efe8", "+": "#ffffff", "*": "#1f6f6a" }, rows: [".+++++.", "+*###*#", "+######", "+##*###", "+######", "+*###*#", ".#####."] },
@@ -146,6 +145,7 @@
     banana: { ink: { "#": "#f5d142", "+": "#fff3a0", "S": "#6b4a26" }, rows: [".....S.", ".....##", "....+#.", "...+##.", "..+##..", "#+##...", ".##...."] }
   };
   const BADGE_OUTLINE = "#2a1a0c", BADGE_CELLS = 9;
+  const BADGE_CELL = SIGN_CELL * 5 / 7, BADGE_GAP = SIGN_CELL * 2;
   // Every art cell plus the ring of cells round it, as [col, row, colour, proud] on a 9x9 grid, top row first.
   const badgeCells = (name) => {
     const { ink, rows } = SIGN_BADGES[name], out = [];
@@ -173,10 +173,10 @@
     let cells = -1;
     for (const ch of text) cells += ch === " " ? 2 : 4;
     const textW = cells * SIGN_CELL;
-    const iconW = iconName ? SIGN_CELL * BADGE_CELLS : 0;
-    const width = Math.max(CAVE_SIGN_WIDTH, textW + SIGN_PAD + (iconName ? iconW + SIGN_CELL : 0));
+    const iconW = iconName ? BADGE_CELL * BADGE_CELLS : 0;
+    const width = Math.max(CAVE_SIGN_WIDTH, textW + SIGN_PAD + (iconName ? iconW + BADGE_GAP : 0));
     // The badge leads the name; the pair is centred together, so the name moves right by half the badge and its gap.
-    const shift = iconName ? (iconW + SIGN_CELL) * 0.5 : 0;
+    const shift = iconName ? (iconW + BADGE_GAP) * 0.5 : 0;
     const half = CAVE_SIGN_HEIGHT * 0.5, plankH = (CAVE_SIGN_HEIGHT - 0.04) / 3, depth = 0.3, mid = SIGN_FRONT - depth / 2;
     const geos = [];
     // Posts first, so the planks cover them and only their ends show.
@@ -210,9 +210,11 @@
     }
     if (iconName) {
       const badge = badgeCells(iconName);
-      const x0 = shift - textW * 0.5 - SIGN_CELL - iconW + SIGN_CELL * 0.5;
+      const x0 = shift - textW * 0.5 - BADGE_GAP - iconW + BADGE_CELL * 0.5;
+      geos.push(bevelBox({ w: iconW + 0.04, h: 0.52, d: 0.02, color: "#3f2513", bevel: 0.008,
+        offset: { x: x0 + 4 * BADGE_CELL, y: -0.035, z: SIGN_FRONT + 0.015 } }));
       for (const [col, row, color, proud] of badge) {
-        geos.push(box({ w: SIGN_PIXEL + 0.014, h: SIGN_PIXEL + 0.014, d: proud ? 0.07 : 0.045, color, emissive: proud ? 0.35 : 0, offset: { x: x0 + col * SIGN_CELL, y: (4 - row) * SIGN_CELL, z: SIGN_FRONT + (proud ? 0.03 : 0.0175) } }));
+        geos.push(box({ w: BADGE_CELL, h: BADGE_CELL, d: proud ? 0.07 : 0.045, color, emissive: proud ? 0.35 : 0, offset: { x: x0 + col * BADGE_CELL, y: (4 - row) * BADGE_CELL, z: SIGN_FRONT + (proud ? 0.03 : 0.0175) } }));
       }
     }
     // Iron plates on the four corners, each held by two rivets.
@@ -430,12 +432,12 @@
     }
     return merge(...parts);
   });
-  const labBeaker = cached(() => merge(
-    lathe({ profile: [[0, 0], [0.14, 0], [0.15, 0.015], [0.15, 0.345], [0.162, 0.355], [0.17, 0.37],
-      [0.165, 0.385], [0.15, 0.39], [0.13, 0.385], [0.12, 0.37], [0.12, 0.1]],
-      segments: 32, color: "#efb348", emissive: 0.2 }),
-    box({ w: 0.16, h: 0.1, d: 0.015, color: "#e0e6d5", offset: { y: 0.16, z: 0.145 } })
-  ));
+  const labBeaker = variants((i) => glassVessel({
+    liquidProfile: [[0, 0], [0.115, 0], [0.12, 0.015], [0.12, i ? 0.17 : 0.08], [0, i ? 0.17 : 0.08]],
+    glassProfile: [[0.14, 0], [0.15, 0.015], [0.15, 0.345], [0.162, 0.355], [0.17, 0.37],
+      [0.165, 0.385], [0.15, 0.39], [0.13, 0.385], [0.12, 0.37], [0.12, 0.015], [0.11, 0]],
+    liquid: "#efb348", segments: 32
+  }));
   const labDie = cached(() => {
     const geometry = BL.models.die({ size: 0.26 });
     // Bench items share a base-at-zero origin and an explicit hand grip.
@@ -444,13 +446,11 @@
     return geometry;
   });
   const labTouchscreen = cached(() => {
-    const parts = [box({ w: 1.55, h: 0.98, d: 0.12, color: "#283b40", offset: { y: 2.27 } }),
-      box({ w: 1.39, h: 0.81, d: 0.025, color: "#255263", emissive: 0.65, offset: { y: 2.27, z: 0.075 } })];
+    const parts = [box({ w: 1.55, h: 0.98, d: 0.07, color: "#283b40", offset: { y: 2.27, z: -0.015 } }),
+      box({ w: 1.47, h: 0.9, d: 0.008, color: "#255263", emissive: 0.65, offset: { y: 2.27, z: 0.032 } })];
+    for (const x of [-0.755, 0.755]) parts.push(box({ w: 0.04, h: 0.98, d: 0.028, color: "#344446", offset: { x, y: 2.27, z: 0.035 } }));
+    for (const y of [1.8, 2.74]) parts.push(box({ w: 1.47, h: 0.04, d: 0.028, color: "#344446", offset: { y, z: 0.035 } }));
     for (const x of [-0.55, 0.55]) parts.push(box({ w: 0.09, h: 0.1, d: 0.49, color: "#344446", offset: { x, y: 2.26, z: -0.28 } }));
-    for (let i = 0; i < 4; i++) {
-      parts.push(box({ w: 0.42, h: 0.055, d: 0.012, color: "#93dfdf", emissive: 1, offset: { x: -0.34, y: 2.53 - i * 0.16, z: 0.096 } }));
-      parts.push(box({ w: 0.1, h: 0.12 + i * 0.1, d: 0.012, color: i % 2 ? "#efbc64" : "#70e2ac", emissive: 1, offset: { x: 0.07 + i * 0.15, y: 2.02 + i * 0.05, z: 0.096 } }));
-    }
     return merge(...parts);
   });
   const LAB_CODE_COLORS = ["#102b33", "#47616a", "#b996eb", "#7ad8ec", "#b3d7cb", "#eac679", "#81d4a1"].map(hexToRgb);
@@ -482,7 +482,7 @@
   // the furniture's collision shell or its object-outline registrations.
   const labScreenContent = variants((kind) => {
     const geometry = { verts: [], faces: [], lines: [], castShadow: false };
-    const touch = kind === 1, z = touch ? 0.104 : -0.091;
+    const touch = kind === 1, z = touch ? 0.04 : -0.091;
     labScreenRect(geometry, touch ? -0.69 : -0.55, touch ? 1.87 : 1.47, touch ? 1.38 : 1.1,
       touch ? 0.8 : 0.62, z - 0.001, 0, 0.35);
     if (touch) {
@@ -529,7 +529,7 @@
     const { createNode, addChild } = BL.scene;
     const node = createNode({ geometry: codeGeometry ? labScreenContent(kind) : labIdentityScreen(), position: { ...parent.position },
       rotation: { ...parent.rotation }, sightHidden: true, matrixNative: !codeGeometry });
-    const markers = [], strips = [], touch = kind === 1, z = touch ? 0.105 : -0.09;
+    const markers = [], strips = [], touch = kind === 1, z = touch ? 0.041 : -0.09;
     const span = LAB_CODE.length * 0.088, clock = station * 3.37 * 0.088 / LAB_SCROLL_SPEED;
     if (codeGeometry) for (let i = 0; i < 2; i++) {
       const strip = createNode({ geometry: codeGeometry, position: { x: 0,
@@ -576,9 +576,10 @@
         const home = { x: bench.position.x + Math.cos(facing) * offset + Math.sin(facing) * front,
           y: 1.14, z: i === 2 ? -1.08 : side < 0 ? -2.3 - i * 0.8 : -2.5 - i * 0.68 };
         const kind = side > 0 && i === 2 ? "die" : i === 1 ? "beaker" : "flask";
-        const geometry = kind === "die" ? labDie() : kind === "beaker" ? labBeaker() : BL.agent.labFlaskGeometry();
+        const geometry = kind === "die" ? labDie() : kind === "beaker" ? labBeaker(side > 0 ? 1 : 0) : BL.agent.labFlaskGeometry(side > 0 ? 1 : 0);
         if (i === 1) geometry.labGripY = 0.3;
         const item = createNode({ geometry, position: { ...home }, rotation: { x: 0, y: facing, z: 0 } });
+        BL.models.attachGlassShell(item);
         addChild(node, item);
         equipment.push({ node: item, parent: node, bench, home, homeRotation: { x: 0, y: facing, z: 0 }, homeScale: { x: 1, y: 1, z: 1 },
           station: i === 2 ? side < 0 ? 5 : 6 : stations.length, kind, rolling: false,
@@ -975,20 +976,6 @@
     }
     const top = pushVert(geo, -0.03, 1.11, 0.02), rim = rings[rings.length - 1];
     for (let s = 0; s < sides; s++) face(geo, [top, rim[(s + 1) % sides], rim[s]], moss[Math.floor(rand() * moss.length)]);
-    // Fine, uneven tufts texture the continuous cap without reading as separate round clumps.
-    for (let n = 0; n < 190; n++) {
-      const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * 0.94;
-      const x = Math.cos(a) * 0.45 * r, z = Math.sin(a) * 0.37 * r;
-      const y = 1.11 - 0.08 * r + (rand() - 0.5) * 0.012;
-      const spread = 0.012 + rand() * 0.017, height = 0.02 + rand() * 0.045;
-      const tip = pushVert(geo, x + (rand() - 0.5) * spread, y + height, z + (rand() - 0.5) * spread);
-      const a0 = pushVert(geo, x - spread, y, z - spread);
-      const b0 = pushVert(geo, x + spread, y, z - spread);
-      const c0 = pushVert(geo, x, y, z + spread);
-      face(geo, [a0, b0, tip], moss[Math.floor(rand() * moss.length)]);
-      face(geo, [b0, c0, tip], moss[Math.floor(rand() * moss.length)]);
-      face(geo, [c0, a0, tip], moss[Math.floor(rand() * moss.length)]);
-    }
     return geo;
   });
   const altarSlab = cached(() => lathe({
@@ -1043,8 +1030,13 @@
       const plank = bevelBox({ w: 0.78, h: 0.24, d: 0.05, color: CRATE_PLANKS[(k + side) % 3], bevel: 0.02, offset: { y: 0.18 + k * 0.27, z: 0.425 } });
       parts.push(turn(plank, side * Math.PI / 2));
     }
-    if (!open || variant === 0) for (let k = 0; k < 3; k++) parts.push(bevelBox({ w: 0.78, h: 0.05, d: 0.24, color: CRATE_PLANKS[(k + 1) % 3], bevel: 0.02, offset: { x: variant === 0 ? 0.34 : 0, y: variant === 0 ? 0.97 : 0.875, z: (k - 1) * 0.27 } }));
-    if (variant === 0) for (const z of [-0.27, 0.27]) parts.push(bevelBox({ w: 0.72, h: 0.035, d: 0.08, color: WOOD_DK, bevel: 0.01, offset: { x: 0.34, y: 1.005, z } }));
+    if (!open) for (let k = 0; k < 3; k++) parts.push(bevelBox({ w: 0.78, h: 0.05, d: 0.24, color: CRATE_PLANKS[(k + 1) % 3], bevel: 0.02, offset: { y: 0.875, z: (k - 1) * 0.27 } }));
+    if (variant === 0) {
+      const lid = [];
+      for (let k = 0; k < 3; k++) lid.push(bevelBox({ w: 0.78, h: 0.05, d: 0.24, color: CRATE_PLANKS[(k + 1) % 3], bevel: 0.02, offset: { y: 0.97, z: (k - 1) * 0.27 } }));
+      for (const z of [-0.27, 0.27]) lid.push(bevelBox({ w: 0.72, h: 0.035, d: 0.08, color: WOOD_DK, bevel: 0.01, offset: { y: 1.005, z } }));
+      parts.push(moved(turn(merge(...lid), 0.25), 0.3, 0, 0.03));
+    }
     for (const [x, z] of [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]]) parts.push(bevelBox({ w: 0.12, h: 0.94, d: 0.12, color: WOOD_DK, bevel: 0.03, offset: { x, y: 0.47, z } }));
     for (const y of [0.05, 0.89]) {
       for (const z of [-0.42, 0.42]) parts.push(bevelBox({ w: 0.94, h: 0.1, d: 0.11, color: WOOD_DK, bevel: 0.025, offset: { y, z } }));
@@ -1092,14 +1084,16 @@
     };
     const parts = [geo];
     if (ammo) {
-      parts.push(lathe({ profile: [[0.3, 0.875], [0, 0.875]], segments: segs, color: "#5e3f22" }));
+      parts.push(lathe({ profile: [[0.335, 0.875], [0, 0.875]], segments: segs, color: "#5e3f22" }));
       for (const k of [-1, 0, 1]) parts.push(box({ w: 0.012, h: 0.006, d: 0.5, color: "#3e2814", offset: { x: k * 0.1, y: 0.879 } }));
       parts.push(moved(lathe({ profile: [[0.045, 0.875], [0.045, 0.9], [0, 0.9]], segments: 8, color: "#3e2814" }), 0.16, 0, 0.08));
     } else {
-      // The inset floor and inner staves show below a head resting partway across the opening.
-      parts.push(lathe({ profile: [[0.29, 0.88], [0.27, 0.58], [0, 0.58]], segments: segs, color: "#382514" }));
-      parts.push(moved(lathe({ profile: [[0.3, 0.92], [0.3, 0.97], [0, 0.97]], segments: segs, color: "#77502e" }), 0.22, 0, -0.04));
-      for (const k of [-1, 0, 1]) parts.push(box({ w: 0.012, h: 0.007, d: 0.48, color: "#4b301a", offset: { x: 0.22 + k * 0.1, y: 0.975, z: -0.04 } }));
+      // Overlap the staves at the lip so an oblique view cannot see through their shared edge.
+      const lidX = 0.13, lidZ = -0.02;
+      parts.push(lathe({ profile: [[0.325, 0.895], [0.29, 0.87], [0.27, 0.7], [0, 0.7]], segments: segs,
+        color: (t) => t < 0.3 ? "#76502f" : t < 0.6 ? "#5c3c24" : "#4d321e" }));
+      parts.push(moved(lathe({ profile: [[0.3, 0.92], [0.3, 0.97], [0, 0.97]], segments: segs, color: "#77502e" }), lidX, 0, lidZ));
+      for (const k of [-1, 0, 1]) parts.push(box({ w: 0.012, h: 0.007, d: 0.48, color: "#4b301a", offset: { x: lidX + k * 0.1, y: 0.975, z: lidZ } }));
     }
     // Hoops: bevelled iron bands at the foot, either side of the belly and the lip, with rivets on the two middle ones.
     for (const [y, h] of [[0.05, 0.05], [0.26, 0.06], [0.64, 0.06], [0.85, 0.05]]) {
@@ -1296,5 +1290,5 @@
       ...[-0.8, 0.8].map(brace)
     );
   });
-  BL.hubModels = { SIGN_GLYPHS, SIGN_ICONS, jetpack, jetFlame, caveMouthRim, mirrorPanel, matrixPrisonBars, sealedCaveFace, matrixLeverPlate, matrixLeverLights, matrixLeverHub, matrixLeverArm, matrixLeverGrip, matrixLeverLabels, matrixGlyph, caveSign, postSign, CAVE_SIGN_WIDTH, CAVE_SIGN_HEIGHT, gate, caveShelves, entropyLab, bedroll, tree, bush, rock, breakableRock, voxelRock, puff, leafy, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, altarSlab, altarBlock, woodCrate, barrel, flowerTuft, torch, grass, lawnTuft, lantern, firepit, fireFlame, butterfly, firefly, ember, vine, cloud, ladder, dock, TREE_HEIGHT };
+  BL.hubModels = { SIGN_GLYPHS, SIGN_ICONS, AMMO_BANANA, jetpack, jetFlame, caveMouthRim, mirrorPanel, matrixPrisonBars, sealedCaveFace, matrixLeverPlate, matrixLeverLights, matrixLeverHub, matrixLeverArm, matrixLeverGrip, matrixLeverLabels, matrixGlyph, caveSign, postSign, CAVE_SIGN_WIDTH, CAVE_SIGN_HEIGHT, gate, caveShelves, entropyLab, bedroll, tree, bush, rock, breakableRock, voxelRock, puff, leafy, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, altarSlab, altarBlock, woodCrate, barrel, flowerTuft, torch, grass, lawnTuft, lantern, firepit, fireFlame, butterfly, firefly, ember, vine, cloud, ladder, dock, TREE_HEIGHT };
 })();

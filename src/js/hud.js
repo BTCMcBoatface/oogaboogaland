@@ -210,6 +210,24 @@
       recipe: $("recipe"),
       recipeText: $("recipe-text")
     };
+    const favicon = new Image();
+    favicon.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = favicon.width;
+      canvas.height = favicon.height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(favicon, 0, 0);
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < image.data.length; i += 4) {
+        const brightness = Math.max(image.data[i], image.data[i + 1], image.data[i + 2]);
+        const alpha = Math.max(0, Math.min(1, (brightness - 24) / 56));
+        image.data[i + 3] = Math.round(alpha * 255);
+        if (alpha > 0 && alpha < 1) for (let color = 0; color < 3; color++) image.data[i + color] = Math.min(255, image.data[i + color] / alpha);
+      }
+      ctx.putImageData(image, 0, 0);
+      el.modeFree.src = canvas.toDataURL("image/png");
+    };
+    favicon.src = document.querySelector('link[rel="icon"][sizes="64x64"]').href;
     el.lootTab.hidden = !lootEnabled;
     el.crateHelp.hidden = !lootEnabled;
     el.worldLootHint.hidden = !lootEnabled;
