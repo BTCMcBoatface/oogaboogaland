@@ -286,12 +286,7 @@
       <div class="weapon-equipment-row">
       <button type="button" class="mode-hud" id="mode-hud" data-action="mode-toggle" data-selected="false" data-shooter="false"
         aria-label="Free roam. Select an Ooga Booga to take control" title="Free roam" hidden>
-        <svg class="freeroam-icon" id="freeroam-icon" viewBox="0 0 32 32" shape-rendering="crispEdges" aria-hidden="true">
-          <path fill="#7dba69" d="M14 3h4v5h-4zM14 24h4v5h-4zM3 14h5v4H3zM24 14h5v4h-5z" />
-          <path fill="#b8d8aa" d="M10 6h4v3h-2v3H9V10H6V8h4zM18 6h4v2h4v2h-3v2h-3V9h-2zM6 22v-4h3v2h3v3h2v3h-4v-2H6zM20 20h3v-2h3v4h-4v4h-4v-3h2z" />
-          <path fill="#323b35" d="M13 12h6v2h2v6h-2v2h-6v-2h-2v-6h2z" />
-          <path fill="#ffd84a" d="M15 14h2v6h-2zM13 16h6v2h-6z" />
-        </svg>
+        <img class="freeroam-icon" id="freeroam-icon" alt="" aria-hidden="true">
         <canvas class="mode-face-icon" id="mode-face-icon" width="48" height="48" aria-hidden="true" hidden></canvas>
         <span class="mode-health" id="mode-health" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="25" aria-valuenow="25" hidden><span id="mode-health-fill"></span></span>
         <span class="detached-destinations" id="detached-destinations" aria-label="Detached camera destinations">
@@ -943,6 +938,21 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
         <button type="button" data-action="recipe-copy">Copy prompt</button>
       </div>
     </dialog>
+    <dialog class="chalk-modal" id="chalk-modal" aria-labelledby="chalk-title">
+      <div class="chalk-head">
+        <h2 id="chalk-title">EntropyLab chalkboard</h2>
+        <button type="button" class="chalk-close" id="chalk-close" aria-label="Leave chalkboard">&times;</button>
+      </div>
+      <div class="chalk-frame" id="chalk-frame">
+        <canvas id="chalk-canvas" width="800" height="500" aria-label="Chalkboard drawing surface"></canvas>
+        <div class="chalk-pointer" id="chalk-pointer" aria-hidden="true"><span class="chalk-sleeve"></span><span class="chalk-hand"></span><span class="chalk-held"></span></div>
+      </div>
+      <div class="chalk-ledge" aria-label="Chalkboard tools">
+        <button type="button" class="chalk-tool" id="chalk-eraser" aria-pressed="false"><span class="chalk-eraser-shape" aria-hidden="true"></span>Eraser</button>
+        <span class="chalk-hint" id="chalk-hint">Pick up the chalk or eraser</span>
+        <button type="button" class="chalk-tool" id="chalk-chalk" aria-pressed="false"><span class="chalk-stick-shape" aria-hidden="true"></span>Chalk</button>
+      </div>
+    </dialog>
     <dialog class="modal board-modal" id="board-modal" aria-labelledby="board-title">
       <div class="panel-head">
         <h2><span data-sign id="board-title">Board</span></h2>
@@ -1009,6 +1019,7 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
   <script src="js/lab-wallpaper.js"></script>
   <script src="js/hub-models.js"></script>
   <script src="js/dressing.js"></script>
+  <script src="js/chalkboard.js"></script>
   <script src="js/lifehash.js"></script>
   <script src="js/jumbotron-data.js"></script>
   <script src="js/jumbotron.js"></script>

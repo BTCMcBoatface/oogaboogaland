@@ -619,19 +619,20 @@
         && (!clear || clear(targetOrigin.x, targetOrigin.y, targetOrigin.z, targetOrigin.x + mx * near, targetOrigin.y + my * near, targetOrigin.z + mz * near, out.node, true));
     };
     const meleeTarget = (out, cave) => {
-      if (cave !== player() || !cave.weapon.primaryEquipped) return false;
+      if (cave !== player() || !cave.weapon.primaryEquipped && !cave.weapon.equipped) return false;
+      const primary = cave.weapon.primaryEquipped;
       if (!armed()) {
         crew.weaponOrigin(targetOrigin, cave, true);
         const yaw = cave.root.rotation.y;
         return input.weaponTargets.verticalRay(out, targetOrigin.x, targetOrigin.y, targetOrigin.z,
-          Math.sin(yaw), Math.cos(yaw), crew.meleeReach(cave), cave, sightClear || cursorClear) && out.type === "object";
+          Math.sin(yaw), Math.cos(yaw), crew.meleeReach(cave), cave, sightClear || cursorClear) && (!primary || out.type === "object");
       }
       if (assistedView()) {
-        if (!assistedTargetActive || !assistedTargetInRange || assistedTargetHit.type !== "object") return false;
+        if (!assistedTargetActive || !(primary ? assistedTargetInRange : assistedMeleeInRange(cave)) || primary && assistedTargetHit.type !== "object") return false;
         Object.assign(out, assistedTargetHit);
         return true;
       }
-      return resolveReticleTarget(out, cave, true) && out.type === "object";
+      return resolveReticleTarget(out, cave, true) && (!primary || out.type === "object");
     };
     const updateFeedback = (cave, dt) => {
       if (hitRemaining > 0) {
@@ -1150,6 +1151,11 @@
       // Otherwise R stays the free camera's pitch.
       const cave = player();
       const key = e.key.toLowerCase();
+      if (key === "f" && armed() && cave.weapon.equipped) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (!e.repeat) weaponAction("weapon-bash");
+        return;
+      }
       if (birdsEye() && key === "n") {
         e.preventDefault(); e.stopImmediatePropagation();
         if (e.repeat) return;
@@ -1535,18 +1541,20 @@
         crew.toggleWeapon(cave);
         syncAim();
         if (armed() && cave.weapon.equipped) lockAim();
-        if (cave.weapon.equipped) hud.hint(armed() ? "Left-click bursts · zoom: tap one shot, hold for auto · 1 melee · 2 AK · scroll to change view · Space reloads or jumps / jetpacks" : "AK equipped · right-click or scroll in to aim · 1 melee · Space reloads beside the pile or jumps / jetpacks");
+        if (cave.weapon.equipped) hud.hint(armed() ? "Left-click bursts · F rifle strike · zoom: tap one shot, hold for auto · 1 melee · 2 AK · scroll to change view · Space reloads or jumps / jetpacks" : "AK equipped · right-click or scroll in to aim · 1 melee · Space reloads beside the pile or jumps / jetpacks");
         else hud.hint(armed() ? "Hold left-click to raise the club · release to strike · right-click focuses a harder swing · 2 AK · scroll out for navigation" : "Club equipped · right-click or scroll in to aim · 2 AK");
       } else if (action === "weapon-fire") {
         if (cave.weapon.primaryEquipped) crew.swingWeapon(cave, false, ads);
         else if (!(held ? crew.setWeaponTrigger(true, ads) : crew.fireWeapon(cave, null, ads ? 1 : undefined)) && cave.weapon.equipped && !cave.weapon.unlimited && !cave.weapon.ammo) hud.hint("Empty magazine · press Space within reach of the pile to reload");
+      } else if (action === "weapon-bash") {
+        crew.bashWeapon(cave);
       } else if (action === "weapon-reload") {
         crew.startReload(cave);
       } else if (action === "magazine-swap" || action === "weapon-magazine") {
         if (!crew.swapMagazine(cave) && !crew.hasMagazine(cave)) hud.hint("Find a spare magazine · Space reloads the AK and both spares beside the pile");
       } else return false;
       syncWeaponHud();
-      if (ctx.reloadAnywhere) hud.hint("1 melee · 2 AK · right-click to aim · V fire · R reload · Space use / reload / jump");
+      if (ctx.reloadAnywhere) hud.hint("1 melee · 2 AK · right-click to aim · F rifle strike · V fire · R reload · Space use / reload / jump");
       return true;
     };
     const weaponMode = (slot) => {
@@ -1560,8 +1568,8 @@
       syncAim();
       if (armed()) lockAim();
       syncWeaponHud();
-      hud.hint(armed() ? slot === 1 ? "Hold left-click to raise the club · release to strike · right-click focuses a harder swing · 2 AK · scroll out for navigation" : "Left-click bursts · zoom: tap one shot, hold for auto · 1 melee · scroll out for navigation · Space reloads beside the pile" : "1 melee · 2 AK · right-click or scroll in to aim · Space reloads beside the pile or jumps / jetpacks");
-      if (ctx.reloadAnywhere) hud.hint("1 melee · 2 AK · right-click to aim · V fire · R reload · Space use / reload / jump");
+      hud.hint(armed() ? slot === 1 ? "Hold left-click to raise the club · release to strike · right-click focuses a harder swing · 2 AK · scroll out for navigation" : "Left-click bursts · F rifle strike · zoom: tap one shot, hold for auto · 1 melee · scroll out for navigation · Space reloads beside the pile" : "1 melee · 2 AK · right-click or scroll in to aim · Space reloads beside the pile or jumps / jetpacks");
+      if (ctx.reloadAnywhere) hud.hint("1 melee · 2 AK · right-click to aim · F rifle strike · V fire · R reload · Space use / reload / jump");
       return true;
     };
     const shooterView = (active, px = null, py = null, combat = null) => {

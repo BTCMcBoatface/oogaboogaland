@@ -202,6 +202,31 @@
     }
     return out;
   };
+  // Draw the liquid and rolled lip as solids, with the vessel wall in its own
+  // translucent pass. Keep the wall vertices on the solid for grip bounds.
+  const glassVessel = ({ liquidProfile, glassProfile, liquid, segments = 24 }) => {
+    const fluid = lathe({ profile: liquidProfile, segments, color: liquid, emissive: 0.75 });
+    const glass = lathe({ profile: glassProfile, segments, color: "#d5ece8" });
+    const rim = geometry(), wall = geometry();
+    rim.verts = wall.verts = glass.verts;
+    let top = -Infinity;
+    for (const point of glassProfile) top = Math.max(top, point[1]);
+    for (let i = 0; i < glass.faces.length; i++) {
+      const band = Math.floor(i / segments);
+      const atLip = Math.min(glassProfile[band][1], glassProfile[band + 1][1]) >= top - 0.026;
+      (atLip ? rim.faces : wall.faces).push(glass.faces[i]);
+    }
+    wall.glassOpacity = 0.14;
+    wall.castShadow = false;
+    wall.smooth = true;
+    const vessel = merge(fluid, rim);
+    vessel.glassShell = wall;
+    return vessel;
+  };
+  const attachGlassShell = (node) => {
+    if (node.geometry.glassShell) addChild(node, createNode({ geometry: node.geometry.glassShell }));
+    return node;
+  };
   // Key stays a string: cells are not all integral (half-steps) and the span exceeds a bit-packed key's range.
   const voxKey = (x, y, z) => x + "," + y + "," + z;
   const voxCoords = (k, out) => {
@@ -838,20 +863,34 @@
     const skins = { club: { ...template.skins.club }, gun: { ...template.skins.gun } };
     return { root, parts, traits, headOffset: template.headOffset, headOpen: template.headOpen, headClosed: template.headClosed, portraitHead: template.portraitHead, skins, clubRest: template.clubRest, clubCarry: template.clubCarry, tint: template.tint, gunHeadBounds: template.gunHeadBounds };
   };
-  // A real die: opposite faces sum to seven.
-  const die = ({ size = 0.3 } = {}) => {
+  // A real die: opposite faces sum to seven. Round pip faces sit just above the
+  // voxel shell so even the smallest die does not render them as square cells.
+  const DIE_PIPS = [[], [[2, 2]], [[1, 1], [3, 3]], [[1, 1], [2, 2], [3, 3]],
+    [[1, 1], [1, 3], [3, 1], [3, 3]], [[1, 1], [1, 3], [2, 2], [3, 1], [3, 3]],
+    [[1, 1], [1, 2], [1, 3], [3, 1], [3, 2], [3, 3]]];
+  const die = ({ size = 0.3, variant = null } = {}) => {
     const n = 5, u = size / n;
     const v = makeVox();
     v.fill(0, n - 1, 0, n - 1, 0, n - 1, 0);
     for (const cx of [0, n - 1]) for (const cy of [0, n - 1]) for (const cz of [0, n - 1]) v.del(cx, cy, cz);
-    const corners = [[1, 1], [1, 3], [3, 1], [3, 3]];
-    for (const [a, b] of [...corners, [2, 2]]) v.set(a, n - 1, b, 1);
-    for (const [a, b] of [[1, 1], [3, 3]]) v.set(a, 0, b, 1);
-    for (const [a, b] of [...corners, [1, 2], [3, 2]]) v.set(n - 1, a, b, 1);
-    v.set(0, 2, 2, 1);
-    for (const [a, b] of [[1, 1], [2, 2], [3, 3]]) v.set(a, b, n - 1, 1);
-    for (const [a, b] of corners) v.set(a, b, 0, 1);
-    return voxelGeometry(v, { unit: u, palette: [hexToRgb("#f3efe4"), hexToRgb("#141414")], origin: { x: -size / 2, y: -size / 2, z: -size / 2 } });
+    const dots = geometry(), ink = hexToRgb("#141414"), radius = u * 0.43;
+    const values = variant === null ? [1, 6, 2, 5, 4, 3] :
+      [6 - (variant + 1) % 6, (variant + 1) % 6 + 1, 6 - (variant + 2) % 6,
+        (variant + 2) % 6 + 1, 6 - variant % 6, variant % 6 + 1];
+    const pip = (axis, side, a, b) => {
+      const ids = [], fixed = side * size * 0.506;
+      const ca = (a + 0.5) * u - size / 2, cb = (b + 0.5) * u - size / 2;
+      for (let i = 0; i < 12; i++) {
+        const angle = i * Math.PI / 6, p = ca + Math.cos(angle) * radius, q = cb + Math.sin(angle) * radius;
+        ids.push(axis === 0 ? pushVert(dots, fixed, p, q) : axis === 1 ? pushVert(dots, p, fixed, q) : pushVert(dots, p, q, fixed));
+      }
+      face(dots, (axis === 1 ? -side : side) < 0 ? ids.reverse() : ids, ink);
+    };
+    for (let axis = 0; axis < 3; axis++) for (let side = -1; side <= 1; side += 2) {
+      const value = values[axis * 2 + (side > 0 ? 1 : 0)];
+      for (const [a, b] of DIE_PIPS[value]) pip(axis, side, a, b);
+    }
+    return merge(voxelGeometry(v, { unit: u, palette: [hexToRgb("#f3efe4")], origin: { x: -size / 2, y: -size / 2, z: -size / 2 } }), dots);
   };
   const dieRotationFor = (pips, spin) => ({
     5: { x: 0, y: spin, z: 0 },
@@ -1015,11 +1054,18 @@
     addChild(bench, createNode({ position: { y: 1.02, x: 0, z: 0 }, geometry: slab({ w: 1.3, d: 3.4, color: "#2a2a2d", sz: 6 }) }));
     for (const dz of [-1.5, 1.5]) addChild(bench, createNode({ position: { x: 0, y: 0.5, z: dz }, geometry: box({ w: 1.1, h: 1, d: 0.14, color: "#202022" }) }));
     ["#22c55e", "#6f9fca", "#d8892b"].forEach((liquid, i) => {
+      const level = [0.10, 0.17, 0.13][i];
       const flask = createNode({
         position: { x: 0, y: 1.13, z: -0.8 + i * 0.8 },
-        geometry: lathe({ profile: [[0.02, 0], [0.22, 0.02], [0.24, 0.14], [0.1, 0.34], [0.06, 0.52], [0.08, 0.56]], segments: 8, color: liquid, emissive: 0.75 })
+        geometry: glassVessel({
+          liquidProfile: [[0, 0], [0.19, 0.02], [0.20, level], [0, level]],
+          glassProfile: [[0.21, 0.02], [0.24, 0.14], [0.23, 0.17], [0.1, 0.34], [0.06, 0.52],
+            [0.08, 0.56], [0.055, 0.56], [0.045, 0.52], [0.085, 0.34], [0.205, 0.17], [0.19, 0.02]],
+          liquid
+        })
       });
       flask.color = liquid;
+      attachGlassShell(flask);
       leds.push(flask);
       equipment.flasks.push(flask);
       addChild(bench, flask);
@@ -1225,5 +1271,5 @@
       item.buildNode = () => createNode({ geometry: swagGeo(item.id, item.build) });
     }
   }
-  BL.models = { geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, tube, ring, polyline, merge, forward, cached, variants, noShadow, makeVox, voxelGeometry, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
+  BL.models = { geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, glassVessel, attachGlassShell, tube, ring, polyline, merge, forward, cached, variants, noShadow, makeVox, voxelGeometry, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
 })();

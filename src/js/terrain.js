@@ -260,8 +260,11 @@
   const PATH_LIFT = 0.006;
   const MASTER_PATH_CENTER = 2;
   const GATE_Z = -(RADIUS - 2), PASS_HALF = 2.5, PASS_TOP = 5, TRAIL_HALF = 1;
-  const TIMECHAIN = { bearing: 8.25 / 12 * Math.PI * 2, from: 20, top: 4, halfWidth: 1.8, blend: 1.5 };
+  const STAIR_TERRACE = { from: 20, top: 4, halfWidth: 1.8, blend: 1.5 };
+  const TIMECHAIN = { bearing: 8.25 / 12 * Math.PI * 2, ...STAIR_TERRACE };
   const TIMECHAIN_X = Math.sin(TIMECHAIN.bearing), TIMECHAIN_Z = -Math.cos(TIMECHAIN.bearing);
+  const POOL_APPROACH = { bearing: 3.625 / 12 * Math.PI * 2, from: MEADOW, to: RADIUS - 0.5, top: 6.25, tread: 0.3, halfWidth: 2.6, blend: 1.5 };
+  const POOL_X = Math.sin(POOL_APPROACH.bearing), POOL_Z = -Math.cos(POOL_APPROACH.bearing);
   const BLUFF_LEN = 8, SIDE_OUT = 2.5, APRON = 3, TRAIL_LEAN = 1.2;
   const P = { grass: 1, grassLight: 2, grassDark: 3, path: 4, stone: 5, stoneDark: 6, inner: 7, dirt: 8, floor: 9 };
   const PALETTE = [null, "#6f7d3e", "#7b8945", "#65733a", "#a3874f", "#877869", "#5e5449", "#2f2824", "#6a4e39", "#3a302a"].map((hex) => hex && hexToRgb(hex));
@@ -512,6 +515,24 @@
       if (timechainAlong >= TIMECHAIN.from - 1 && timechainAcross < TIMECHAIN.halfWidth + TIMECHAIN.blend) {
         const tread = Math.min(TIMECHAIN.top, Math.max(0, Math.floor((timechainAlong - TIMECHAIN.from) / 0.5) * UNIT));
         const mix = smooth((timechainAcross - TIMECHAIN.halfWidth) / TIMECHAIN.blend);
+        top = Math.round((tread + (top - tread) * mix) / UNIT) * UNIT;
+        surface = grassAt(wx, wz);
+        meadow[i] = top === 0 ? 1 : 0;
+      }
+      // Match those treads on the south route where the Ooga Orbit bridge meets the rim.
+      if (wz >= STAIR_TERRACE.from - 1 && Math.abs(wx) < STAIR_TERRACE.halfWidth + STAIR_TERRACE.blend) {
+        const tread = Math.min(STAIR_TERRACE.top, Math.max(0, Math.floor((wz - STAIR_TERRACE.from) / 0.5) * UNIT));
+        const mix = smooth((Math.abs(wx) - STAIR_TERRACE.halfWidth) / STAIR_TERRACE.blend);
+        top = Math.round((tread + (top - tread) * mix) / UNIT) * UNIT;
+        surface = grassAt(wx, wz);
+        meadow[i] = top === 0 ? 1 : 0;
+      }
+      // The rainforest crossing gets the same grass-topped, terrain-solid stair terrace, without a trail.
+      const poolAlong = wx * POOL_X + wz * POOL_Z;
+      const poolAcross = Math.abs(wx * POOL_Z - wz * POOL_X);
+      if (poolAlong >= POOL_APPROACH.from - 1 && poolAlong <= POOL_APPROACH.to + 0.5 && poolAcross < POOL_APPROACH.halfWidth + POOL_APPROACH.blend) {
+        const tread = Math.min(POOL_APPROACH.top, Math.max(0, Math.floor((poolAlong - POOL_APPROACH.from) / POOL_APPROACH.tread) * UNIT));
+        const mix = smooth((poolAcross - POOL_APPROACH.halfWidth) / POOL_APPROACH.blend);
         top = Math.round((tread + (top - tread) * mix) / UNIT) * UNIT;
         surface = grassAt(wx, wz);
         meadow[i] = top === 0 ? 1 : 0;
@@ -2287,5 +2308,5 @@
     ISLANDS.set(seed, built);
     return built;
   };
-  BL.terrain = { makeGrid, gridGeometry, island, segmentBoxClear, cutawaySourceFromVox, PALETTE, MAX_HEIGHT, TIMECHAIN };
+  BL.terrain = { makeGrid, gridGeometry, island, segmentBoxClear, cutawaySourceFromVox, PALETTE, MAX_HEIGHT, TIMECHAIN, POOL_APPROACH };
 })();
