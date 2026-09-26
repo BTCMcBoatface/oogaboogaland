@@ -260,7 +260,15 @@
       box(SOLID, -5, 4, 12, 12, 6, 8, 5);
     }),
     chalkboard: () => author((put, box) => {
-      for (const x of [-14, 13]) for (let y = 0; y <= 29; y++) put(SOLID, x, y, -(y >> 3), 2);
+      for (let y = 0; y <= 29; y++) {
+        const z = Math.round(-2 - y * 3 / 29);
+        box(SOLID, -1, 0, y, y, z, z + 1, 2);
+      }
+      for (const side of [-1, 1]) for (let y = 0; y <= 17; y++) {
+        const x = side < 0 ? Math.round(-1 - 8 * (1 - y / 17)) : Math.round(8 * (1 - y / 17));
+        const z = Math.round(-10 + y * 6 / 17);
+        box(SOLID, x, x + 1, y, y, z, z + 1, 2);
+      }
       box(SOLID, -13, 12, 10, 26, -2, -2, (x, y) => x === -13 || x === 12 || y === 10 || y === 26 ? 2 : 37);
       box(SOLID, -14, 13, 9, 9, -2, 2, 1);
       box(SOLID, -10, -6, 10, 11, 1, 2, 5);
@@ -846,6 +854,21 @@
     const boats = spots.map(([r, a, s], i) => {
       const node = BL.scene.createNode({ scale: { x: s, y: s * 0.85, z: s }, sightHidden: true });
       for (const geometry of boatGeometry[i % 3]) BL.scene.addChild(node, BL.scene.createNode({ geometry, sightHidden: true }));
+      const seated = (i & 1) === 0;
+      const passenger = BL.models.caveman(BL.contributors.traitsFor(`boat-ooga-${i % 2}`));
+      const figure = passenger.root, size = 0.78, deck = 3 * U;
+      figure.scale.x = figure.scale.y = figure.scale.z = size;
+      figure.position.x = seated ? -0.3 : 0.3;
+      figure.position.y = deck + size * passenger.traits.height * 5 / 16 * (seated ? 0.4 : 1);
+      figure.position.z = -0.65;
+      figure.rotation.y = seated ? -0.12 : 0.12;
+      passenger.parts.club.visible = false;
+      if (seated) {
+        passenger.parts.legL.rotation.x = passenger.parts.legR.rotation.x = -1.15;
+        passenger.parts.armL.rotation.x = passenger.parts.armR.rotation.x = -0.65;
+      }
+      figure.sightHidden = true;
+      BL.scene.addChild(node, figure);
       return { node, r, a, w: (0.004 + rand() * 0.004) * (i & 1 ? 1 : -1), ph: rand() * 6.3 };
     });
     for (const b of boats) nodes.push(b.node);

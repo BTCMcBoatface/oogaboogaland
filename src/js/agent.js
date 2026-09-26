@@ -477,7 +477,7 @@
       vy: 0, air: false, revealFor: 0, pound: 0, chewing: 0, biped: false, lounge: "", hipHeight: HIP,
       charge: 0, poundCharge: 0, dragging: false, takeoff: 0, landing: 0, crouch: 0, roll: 0, rollBlend: 0, rollAngle: 0, rollTarget: 0,
       smash: false, hipOffsetZ: 0, sideAngle: 0,
-      climb: 0, climbBlend: 0, climbPose: NaN, climbStride: 0, climbDirection: 0, mantle: 0,
+      climb: 0, climbBlend: 0, climbPose: NaN, climbStride: 0, climbDirection: 0, climbSide: 0, mantle: 0,
       groom: 0, groomBlend: 0, groomSide: 1, groomTime: 0, sitLook: 0, sitShift: 0,
       lab: false, labRunIn: false, coatSplit: false, labWork: "", labPhase: 0, labSide: 1, labReach: 0, labReachGrip: geos.labFlask.labGripY, labPreviewItem: false, labSqueeze: false, labDie: false, labRoll: 0,
       labPalmLift: 0, labBench: null, labTouchArm: false, labTouchSide: 1,
@@ -743,6 +743,7 @@
             - (leaning && (!leanSide || l.side === leanSide) ? 0.077 : 0), 20, dt);
           leg.position.y = damp(leg.position.y, Math.max(0, -climbStroke) * 0.09 * climbing, 18, dt);
           leg.position.z = damp(leg.position.z, (0.424 + climbStroke * 0.034) * climbing, 20, dt);
+          leg.rotation.z = damp(leg.rotation.z, -state.climbSide * climbStroke * 0.07 * climbing, 18, dt);
         }
         let legAngle = lounge ? onSide ? -0.42 : reclining ? 0.1 : leaning ? leanSide ? -1.1 : -1.14 : -1.28 + l.side * sitShift * 0.1 : jumping ? 0.7 - takeoff * 0.85 : o ? -(squeeze ? 0.1 : labSqueeze ? 0.16 : g.legs) * moving * wave(state.phase, o[l.leg]) : 0;
         legAngle += (-1.2 - legAngle) * crouch;
@@ -796,6 +797,18 @@
           const k = Math.min(1, (beatTime - state.beat) * 4) * Math.min(1, state.beat * 4);
           arm.rotation.x = damp(arm.rotation.x, -state.pitch - (1.25 + 0.3 * Math.sin((beatTime - state.beat) * 16 + (l.side < 0 ? 0 : Math.PI))) * k, 18, dt);
           arm.rotation.z = damp(arm.rotation.z, -l.side * 0.45 * k, 12, dt);
+        } else if (climbing > 0.001 && !jumping) {
+          let armAngle = -state.pitch - (o && !squeeze ? g.arms * moving * wave(state.phase, o[l.arm]) : 0);
+          armAngle += (-state.pitch - 1 - armAngle) * crouch;
+          const raised = -2.8 + 0.035 * climbStroke;
+          // Blend targets before damping. Mixing the resulting pose afterward
+          // made small live steps raise the arms farther than route previews.
+          limb(arm, armAngle + (raised - armAngle) * climbing, dt);
+          const rest = state.gait === "hunch" ? l.side * 0.12 : 0;
+          // Transfer one grip sideways while the opposite foot follows;
+          // diagonal motion combines this with the vertical stroke.
+          const reach = l.side * 0.14 + state.climbSide * climbStroke * 0.1;
+          arm.rotation.z = damp(arm.rotation.z, rest + (reach - rest) * climbing, 18, dt);
         } else {
           let armAngle = -state.pitch - (jumping ? state.biped ? 0.2 : 0.7 - takeoff * 0.85 : o && !squeeze ? (labSqueeze ? 0.08 : labWalking ? 0.1 : g.arms) * moving * wave(state.phase, o[l.arm]) : 0);
           armAngle += (-state.pitch - 1 - armAngle) * crouch;
@@ -805,14 +818,6 @@
         if (managed) {
           const groomArm = lounge === "sit" && l.side === state.groomSide ? grooming : 0;
           arm.rotation.y = damp(arm.rotation.y, l.side * 0.67 * groomArm, 12, dt);
-          // Reach high with one hand as the opposite foot takes its next hold.
-          // The controller advances the phase by actual signed wall travel, so
-          // stopping freezes the grip and descending reverses the same gait.
-          if (climbing > 0.001) {
-            const raised = -2.8 + 0.035 * climbStroke;
-            arm.rotation.x += (raised - arm.rotation.x) * climbing;
-            arm.rotation.z += (l.side * 0.14 - arm.rotation.z) * climbing;
-          }
         }
       }
       if (managed) {
@@ -843,7 +848,7 @@
       if (managed) {
         parts.head.rotation.x += (-0.04 - state.climbDirection * 0.16 - parts.head.rotation.x) * climbing;
         parts.head.rotation.x += Math.sin(restTime * 0.65) * 0.055 * restMotion - Math.abs(sitLook) * 0.065;
-        parts.head.rotation.y = damp(parts.head.rotation.y, state.groomSide * 0.36 * grooming + Math.sin(restTime * 0.5) * 0.16 * restMotion + sitLook * 0.3 + sitShift * 0.12, 8, dt);
+        parts.head.rotation.y = damp(parts.head.rotation.y, state.groomSide * 0.36 * grooming + Math.sin(restTime * 0.5) * 0.16 * restMotion + sitLook * 0.3 + sitShift * 0.12 + state.climbSide * 0.16 * climbing, 8, dt);
         if (labWork) {
           parts.head.rotation.x = labWork === "type" || labWork === "roll" ? 0.22 : labWork === "carry" ? 0.08 : -0.08;
           parts.head.rotation.y = labWork === "touch" ? state.labSide * 0.12 : Math.sin(state.labPhase * 0.7) * 0.05;
@@ -1046,7 +1051,7 @@
       return out;
     };
     // Managed motion adds climb (0..1 wall grip), signed climbStride in metres,
-    // climbDirection (-1/0/1 travel) and mantle (0..1 return over the top edge).
+    // climbDirection/climbSide (vertical/lateral travel) and mantle (0..1 over the top edge).
     // Seated grooming uses groom (0..1), groomSide (-1 left/+1 right), and an
     // optional groomPhase in seconds. All transitions reuse the existing rig.
     const poseManaged = (dt, px, py, pz, facing, speed, airborne = false, biped = false, lounge = "", motion = null) => {
@@ -1099,6 +1104,7 @@
       state.climbPose = state.climb && motion && Number.isFinite(motion.climbBlend) ? clamp(motion.climbBlend, 0, 1) : NaN;
       state.climbStride = motion ? motion.climbStride || 0 : 0;
       state.climbDirection = motion ? clamp(motion.climbDirection || 0, -1, 1) : 0;
+      state.climbSide = motion ? clamp(motion.climbSide || 0, -1, 1) : 0;
       state.mantle = motion ? clamp(motion.mantle || 0, 0, 1) : 0;
       state.groom = motion && lounge === "sit" && state.speed <= 0.1 && !airborne && !state.roll && !state.climb ? clamp(motion.groom || 0, 0, 1) : 0;
       state.sitLook = motion && lounge === "sit" ? clamp(motion.sitLook || 0, -1, 1) : 0;

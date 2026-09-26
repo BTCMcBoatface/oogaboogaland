@@ -156,6 +156,14 @@
   };
   const BADGE_OUTLINE = "#2a1a0c", BADGE_CELLS = 9;
   const BADGE_CELL = SIGN_CELL * 5 / 7, BADGE_GAP = SIGN_CELL * 2;
+  // The 32px favicon reduced to its 16px colour blocks; dots are transparent.
+  const FAVICON_INK = { d: "#47563b", g: "#657a56", G: "#7aa872", L: "#a6c889", y: "#736429", Y: "#f6d758" };
+  const FAVICON_ROWS = [
+    "................", ".......GG.......", ".....ggGGgg.....", "...gGLGggLLGg...",
+    "..dGLG....GLGd..", "....GG....gG....", ".......yy.......", ".GGg..yYYy..dGG.",
+    ".GGg..dYYd..gGG.", ".dGG...yy...GGd.", "..gLGg....gGLg..", "..gLLG....GLLg..",
+    "..dgGLGddGLGgd..", ".....GgGGgG.....", ".......GG.......", "................"
+  ];
   // Every art cell plus the ring of cells round it, as [col, row, colour, proud] on a 9x9 grid, top row first.
   const badgeCells = (name) => {
     const { ink, rows } = SIGN_BADGES[name], out = [];
@@ -194,8 +202,9 @@
     [[0.07, 0.03], [-0.05, -0.04], [0.11, 0.02]].forEach(([grow, shift], k) => {
       geos.push(bevelBox({ w: width + grow, h: plankH, d: depth, color: SIGN_PLANKS[k], bevel: 0.05, offset: { x: shift, y: half - plankH * (k + 0.5) - 0.02 * k, z: mid } }));
     });
-    // The dark panel the name sits on: one piece, a little proud of the planks, covering descenders too.
-    geos.push(bevelBox({ w: textW + 0.14, h: 0.52, d: 0.035, color: "#3f2513", bevel: 0.012, offset: { x: shift, y: -0.035, z: SIGN_FRONT + 0.0125 } }));
+    // One continuous dark panel backs the badge and name, with a glyph cell added above and below for descenders.
+    geos.push(bevelBox({ w: textW + (iconName ? iconW + BADGE_GAP : 0) + 0.14, h: 0.52 + 2 * SIGN_CELL, d: 0.035,
+      color: "#3f2513", bevel: 0.012, offset: { x: 0, y: 0, z: SIGN_FRONT + 0.0125 } }));
     // Letters as solid horizontal runs of whole cells, touching row to row, so a glyph is one clean shape.
     const run = (x0, y, n) => geos.push(box({ w: SIGN_CELL * n, h: SIGN_CELL, d: 0.07, color: SIGN_INK, emissive: 0.25, offset: { x: x0 + SIGN_CELL * (n - 1) * 0.5, y, z: SIGN_FRONT + 0.03 } }));
     let cursor = shift - textW * 0.5;
@@ -219,12 +228,23 @@
       cursor += SIGN_CELL * 4;
     }
     if (iconName) {
-      const badge = badgeCells(iconName);
-      const x0 = shift - textW * 0.5 - BADGE_GAP - iconW + BADGE_CELL * 0.5;
-      geos.push(bevelBox({ w: iconW + 0.04, h: 0.52, d: 0.02, color: "#3f2513", bevel: 0.008,
-        offset: { x: x0 + 4 * BADGE_CELL, y: -0.035, z: SIGN_FRONT + 0.015 } }));
-      for (const [col, row, color, proud] of badge) {
-        geos.push(box({ w: BADGE_CELL, h: BADGE_CELL, d: proud ? 0.07 : 0.045, color, emissive: proud ? 0.35 : 0, offset: { x: x0 + col * BADGE_CELL, y: (4 - row) * BADGE_CELL, z: SIGN_FRONT + (proud ? 0.03 : 0.0175) } }));
+      const left = shift - textW * 0.5 - BADGE_GAP - iconW;
+      if (iconName === "favicon") {
+        const cell = iconW / FAVICON_ROWS.length;
+        for (let row = 0; row < FAVICON_ROWS.length; row++) for (let col = 0; col < FAVICON_ROWS[row].length; col++) {
+          const color = FAVICON_INK[FAVICON_ROWS[row][col]];
+          if (color) geos.push(box({ w: cell, h: cell, d: 0.07, color, emissive: 0.35,
+            offset: { x: left + (col + 0.5) * cell, y: (7.5 - row) * cell, z: SIGN_FRONT + 0.03 } }));
+        }
+      } else {
+        const badge = badgeCells(iconName);
+        let top = BADGE_CELLS, bottom = 0;
+        for (const cell of badge) { top = Math.min(top, cell[1]); bottom = Math.max(bottom, cell[1]); }
+        const center = (top + bottom) * 0.5;
+        for (const [col, row, color, proud] of badge) {
+          geos.push(box({ w: BADGE_CELL, h: BADGE_CELL, d: proud ? 0.07 : 0.045, color, emissive: proud ? 0.35 : 0,
+            offset: { x: left + (col + 0.5) * BADGE_CELL, y: (center - row) * BADGE_CELL, z: SIGN_FRONT + (proud ? 0.03 : 0.0175) } }));
+        }
       }
     }
     // Iron plates on the four corners, each held by two rivets.
@@ -421,12 +441,14 @@
       box({ w: 1.8, h: 0.12, d: 0.4, color: "#626f70", offset: { y: 1.08 } }),
       box({ w: 1.7, h: 0.1, d: 0.1, color: "#273437", offset: { y: 0.28, z: -0.14 } }),
       box({ w: 0.12, h: 0.35, d: 0.12, color: "#273437", offset: { y: 1.3, z: -0.18 } }),
-      box({ w: 1.26, h: 0.78, d: 0.13, color: "#16272b", offset: { y: 1.78, z: -0.2 } }),
-      box({ w: 1.12, h: 0.64, d: 0.025, color: "#164751", emissive: 0.5, offset: { y: 1.78, z: -0.12 } }),
+      box({ w: 1.26, h: 0.78, d: 0.13, color: "#1d2425", offset: { y: 1.78, z: -0.2 } }),
+      box({ w: 1.14, h: 0.66, d: 0.006, color: "#050607", offset: { y: 1.78, z: -0.131 } }),
       box({ w: 0.85, h: 0.055, d: 0.23, color: "#202c2f", offset: { y: 1.17, z: 0.1 } }),
       box({ w: 0.32, h: 0.68, d: 0.34, color: "#273437", offset: { x: 0.64, y: 0.39 } }),
       box({ w: 0.16, h: 0.035, d: 0.025, color: "#5de7c7", emissive: 1, offset: { x: 0.64, y: 0.62, z: 0.185 } })
     ];
+    for (const x of [-0.6, 0.6]) parts.push(box({ w: 0.05, h: 0.78, d: 0.018, color: "#303637", offset: { x, y: 1.78, z: -0.12 } }));
+    for (const y of [1.415, 2.145]) parts.push(box({ w: 1.16, h: 0.05, d: 0.018, color: "#303637", offset: { y, z: -0.12 } }));
     for (const x of [-0.79, 0.79]) for (const z of [-0.14, 0.14]) parts.push(box({ w: 0.1, h: 1.02, d: 0.1, color: "#344446", offset: { x, y: 0.51, z } }));
     // Display content belongs to createLabScreen. Baked code bars here sat
     // only 0.001 behind that surface and fought its depth at distant views.
@@ -456,14 +478,14 @@
     return geometry;
   });
   const labTouchscreen = cached(() => {
-    const parts = [box({ w: 1.55, h: 0.98, d: 0.07, color: "#283b40", offset: { y: 2.27, z: -0.015 } }),
-      box({ w: 1.47, h: 0.9, d: 0.008, color: "#255263", emissive: 0.65, offset: { y: 2.27, z: 0.032 } })];
-    for (const x of [-0.755, 0.755]) parts.push(box({ w: 0.04, h: 0.98, d: 0.028, color: "#344446", offset: { x, y: 2.27, z: 0.035 } }));
-    for (const y of [1.8, 2.74]) parts.push(box({ w: 1.47, h: 0.04, d: 0.028, color: "#344446", offset: { y, z: 0.035 } }));
+    const parts = [box({ w: 1.55, h: 0.98, d: 0.07, color: "#1d2425", offset: { y: 2.27, z: -0.015 } }),
+      box({ w: 1.43, h: 0.87, d: 0.006, color: "#050607", offset: { y: 2.27, z: 0.023 } })];
+    for (const x of [-0.755, 0.755]) parts.push(box({ w: 0.04, h: 0.98, d: 0.018, color: "#303637", offset: { x, y: 2.27, z: 0.03 } }));
+    for (const y of [1.8, 2.74]) parts.push(box({ w: 1.47, h: 0.04, d: 0.018, color: "#303637", offset: { y, z: 0.03 } }));
     for (const x of [-0.55, 0.55]) parts.push(box({ w: 0.09, h: 0.1, d: 0.49, color: "#344446", offset: { x, y: 2.26, z: -0.28 } }));
     return merge(...parts);
   });
-  const LAB_CODE_COLORS = ["#102b33", "#47616a", "#b996eb", "#7ad8ec", "#b3d7cb", "#eac679", "#81d4a1"].map(hexToRgb);
+  const LAB_CODE_COLORS = ["#050607", "#47616a", "#b996eb", "#7ad8ec", "#b3d7cb", "#eac679", "#81d4a1"].map(hexToRgb);
   const LAB_CODE_SIGNS = {
     "=": ["000", "111", "000", "111", "000"], "(": ["010", "100", "100", "100", "010"],
     ")": ["010", "001", "001", "001", "010"], "{": ["011", "010", "100", "010", "011"],
@@ -492,9 +514,9 @@
   // the furniture's collision shell or its object-outline registrations.
   const labScreenContent = variants((kind) => {
     const geometry = { verts: [], faces: [], lines: [], castShadow: false };
-    const touch = kind === 1, z = touch ? 0.04 : -0.091;
+    const touch = kind === 1, z = touch ? 0.03 : -0.122;
     labScreenRect(geometry, touch ? -0.69 : -0.55, touch ? 1.87 : 1.47, touch ? 1.38 : 1.1,
-      touch ? 0.8 : 0.62, z - 0.001, 0, 0.35);
+      touch ? 0.8 : 0.62, z - 0.001, 0, 0);
     if (touch) {
       labScreenText(geometry, "SYS", 0.18, 2.58, z, 0.01, 4);
       labScreenText(geometry, "CPU", 0.17, 1.965, z, 0.007, 1);
@@ -527,7 +549,7 @@
   });
   const labIdentityScreen = cached(() => {
     const geometry = { verts: [], faces: [], lines: [], castShadow: false };
-    labScreenRect(geometry, -0.55, 1.47, 1.1, 0.62, -0.092, 0, 0.35);
+    labScreenRect(geometry, -0.55, 1.47, 1.1, 0.62, -0.123, 0, 0);
     geometry.faces[0].color = [0, 0, 0];
     // Preserve the supplied JPEG and its aspect ratio; the narrow side bars
     // remain black. Both renderers share one lazily decoded source image.
@@ -539,7 +561,7 @@
     const { createNode, addChild } = BL.scene;
     const node = createNode({ geometry: codeGeometry ? labScreenContent(kind) : labIdentityScreen(), position: { ...parent.position },
       rotation: { ...parent.rotation }, sightHidden: true, matrixNative: !codeGeometry });
-    const markers = [], strips = [], touch = kind === 1, z = touch ? 0.041 : -0.09;
+    const markers = [], strips = [], touch = kind === 1, z = touch ? 0.031 : -0.121;
     const span = LAB_CODE.length * 0.088, clock = station * 3.37 * 0.088 / LAB_SCROLL_SPEED;
     if (codeGeometry) for (let i = 0; i < 2; i++) {
       const strip = createNode({ geometry: codeGeometry, position: { x: 0,
@@ -601,7 +623,7 @@
             minZ: kind === "die" ? -1.5 : sideZ - 1.3, maxZ: sideZ + 1.3, y: 1.13 },
           pickup: { x: home.x, y: home.y + geometry.labGripY, z: home.z } });
       }
-      stations.push({ x: side * (half - 2.06), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side });
+      stations.push({ x: side * (half - 1.78), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side });
     }
     for (const side of [-1, 1]) stations.push({ x: side * (half - 0.44 - 1.213094), y: 0, z: -1.08 + side * 0.272893, heading: side * Math.PI / 2, kind: "carry", side });
     const updateScreens = (dt, activeMask) => {

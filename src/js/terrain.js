@@ -260,10 +260,10 @@
   const PATH_LIFT = 0.006;
   const MASTER_PATH_CENTER = 2;
   const GATE_Z = -(RADIUS - 2), PASS_HALF = 2.5, PASS_TOP = 5, TRAIL_HALF = 1;
-  const STAIR_TERRACE = { from: 20, top: 4, halfWidth: 1.8, blend: 1.5 };
+  const STAIR_TERRACE = { from: MEADOW, top: 2.5, halfWidth: 1.8, blend: 1.5 };
   const TIMECHAIN = { bearing: 8.25 / 12 * Math.PI * 2, ...STAIR_TERRACE };
   const TIMECHAIN_X = Math.sin(TIMECHAIN.bearing), TIMECHAIN_Z = -Math.cos(TIMECHAIN.bearing);
-  const POOL_APPROACH = { bearing: 3.625 / 12 * Math.PI * 2, from: MEADOW, to: RADIUS - 0.5, top: 6.25, tread: 0.3, halfWidth: 2.6, blend: 1.5 };
+  const POOL_APPROACH = { bearing: 3.625 / 12 * Math.PI * 2, from: MEADOW, to: RADIUS - 0.5, top: 6.25, tread: 0.285, halfWidth: 2.6, blend: 1.5 };
   const POOL_X = Math.sin(POOL_APPROACH.bearing), POOL_Z = -Math.cos(POOL_APPROACH.bearing);
   const BLUFF_LEN = 8, SIDE_OUT = 2.5, APRON = 3, TRAIL_LEAN = 1.2;
   const P = { grass: 1, grassLight: 2, grassDark: 3, path: 4, stone: 5, stoneDark: 6, inner: 7, dirt: 8, floor: 9 };
@@ -413,6 +413,16 @@
     const frames = CLOCKS.map(([id, clock, axis = clock]) => ({ id, clock, ...spoke(clock / 12 * Math.PI * 2, axis / 12 * Math.PI * 2) }));
     const pass = spoke(0);
     const spokes = [...frames.filter((frame) => frame.id !== "c730" && frame.id !== "c5"), pass, spoke(Math.PI)];
+    const south = spokes[spokes.length - 1], stairStraight = RADIUS - 2;
+    // Join the incoming trail at its existing angle, wind across the treads, then face the bridge head squarely.
+    const stairCenter = (along, entrySlope, wind) => {
+      const t = clamp((along - MEADOW) / (stairStraight - MEADOW), 0, 1), u = 1 - t;
+      const wave = Math.sin(Math.PI * t);
+      return entrySlope * (stairStraight - MEADOW) * t * u * u + wind * Math.sin(2 * Math.PI * t) * wave * wave;
+    };
+    const southEntrySlope = -south.wobble * 2 * Math.PI / (MEADOW - MASTER_PATH_CENTER);
+    const southStairCenter = (along) => stairCenter(along, southEntrySlope, 1);
+    const timechainStairCenter = (along) => stairCenter(along, 0, -1.1);
     const headquartersFrames = [frames.find((f) => f.id === "c730"), frames.find((f) => f.id === "c5")];
     const headquartersFronts = headquartersFrames.map((f) => ({
       id: f.id,
@@ -509,7 +519,7 @@
         const step = coarse && !(Math.abs(wx) < PASS_HALF && wz < 0) ? 0.5 : UNIT;
         top = clamp(Math.round(h / step) * step, 0, MAX_HEIGHT);
       }
-      // A grass terrace cut into the ridge, like the launch approach; the same voxels render and support it.
+      // A grass terrace cut into the ridge; the same voxels render and support it.
       const timechainAlong = wx * TIMECHAIN_X + wz * TIMECHAIN_Z;
       const timechainAcross = Math.abs(wx * TIMECHAIN_Z - wz * TIMECHAIN_X);
       if (timechainAlong >= TIMECHAIN.from - 1 && timechainAcross < TIMECHAIN.halfWidth + TIMECHAIN.blend) {
@@ -1710,6 +1720,7 @@
       if (!path && meadow[c] && r >= MASTER_PATH_CENTER) {
         const theta = Math.atan2(wx, -wz);
         for (const s of spokes) {
+          if (s === south && r >= MEADOW) continue;
           const d = theta - s.angle;
           const lateral = r * Math.atan2(Math.sin(d), Math.cos(d));
           const t = (r - MASTER_PATH_CENTER) / (MEADOW - MASTER_PATH_CENTER);
@@ -1724,15 +1735,17 @@
       if (!path && !meadow[c]) {
         if (Math.abs(wx) < PASS_HALF && wz < 0) {
           path = Math.abs(wx - pass.wobble * Math.sin((r - MEADOW) / (-GATE_Z - MEADOW) * Math.PI * 2)) < TRAIL_HALF;
-        } else if (Math.abs(wx) < PATH_HALF && wz > 0) path = true;
+        }
       }
+      if (wz >= MEADOW && Math.abs(wx - southStairCenter(wz)) < PATH_HALF) path = true;
       for (let n = 0; n < headquartersFronts.length && !headquartersPath; n++) {
         const front = headquartersFronts[n], dx = wx - front.center.x, dz = wz - front.center.z;
         const across = dx * front.tangent.x + dz * front.tangent.z;
         const depth = dx * -front.tangent.z + dz * front.tangent.x;
         headquartersPath = Math.abs(across) < front.halfLength && Math.abs(depth) < front.halfWidth && tops[c] === 0;
       }
-      if (wx * TIMECHAIN_X + wz * TIMECHAIN_Z >= MASTER_PATH_CENTER && Math.abs(wx * TIMECHAIN_Z - wz * TIMECHAIN_X) < PATH_HALF) path = true;
+      const timechainAlong = wx * TIMECHAIN_X + wz * TIMECHAIN_Z;
+      if (timechainAlong >= MASTER_PATH_CENTER && Math.abs(wx * TIMECHAIN_Z - wz * TIMECHAIN_X - timechainStairCenter(timechainAlong)) < PATH_HALF) path = true;
       if (headquartersPath) {
         path = true;
       }
@@ -1862,13 +1875,16 @@
     for (const north of [true, false]) {
       const points = [];
       for (let r = MEADOW; r <= RADIUS; r += PATH_UNIT) {
-        const x = north ? pass.wobble * Math.sin((r - MEADOW) / (-GATE_Z - MEADOW) * Math.PI * 2) : 0;
+        const x = north ? pass.wobble * Math.sin((r - MEADOW) / (-GATE_Z - MEADOW) * Math.PI * 2) : southStairCenter(r);
         points.push({ x, z: (north ? -1 : 1) * Math.sqrt(r * r - x * x) });
       }
       centerlines.push(points);
     }
     const timechainPath = [];
-    for (let r = MASTER_PATH_CENTER; r <= RADIUS; r += PATH_UNIT) timechainPath.push({ x: TIMECHAIN_X * r, z: TIMECHAIN_Z * r });
+    for (let r = MASTER_PATH_CENTER; r <= RADIUS; r += PATH_UNIT) {
+      const across = timechainStairCenter(r);
+      timechainPath.push({ x: TIMECHAIN_X * r + TIMECHAIN_Z * across, z: TIMECHAIN_Z * r - TIMECHAIN_X * across });
+    }
     centerlines.push(timechainPath);
     for (const front of headquartersFronts) {
       centerlines.push(front.connector);
