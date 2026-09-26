@@ -325,7 +325,7 @@
       return -1;
     };
     const shadeNode = (node) => {
-      const opacity = (node.smokeOpacity === undefined ? 1 : node.smokeOpacity) * (node.geometry.cutawayHide ? 1 - cutawayFade : 1);
+      const opacity = (node.smokeOpacity === undefined ? 1 : node.smokeOpacity) * (node.geometry.cutawayHide ? 1 - cutawayFade : 1) * (node.geometry.glass || 1);
       if (opacity === 0) return;
       if (node.mirrorRippleOnly && !node.mirrorRipples?.active && !node.mirrorBody?.contacts && !node.mirrorBody?.active) return;
       const { verts, faces, lines } = node.geometry;
@@ -338,7 +338,7 @@
       const f = lastF;
       const ember = Math.min(1, node.ember || 0), scorch = 1 - Math.min(1, node.scorch || 0) * 0.88;
       const materialGlow = ember > 0 ? 0 : node.glow;
-      const mirrorFace = !!(node.mirror || node.mirrorPortal || node.mirrorShard || node.mirrorRippleOnly);
+      const mirrorFace = !!(node.mirror || node.mirrorPortal || node.mirrorShard || node.mirrorRippleOnly || node.geometry.reflector);
       const portalFace = !!node.mirrorPortal || !!node.mirrorWalkThrough && mirrorDebug.portal;
       const localMatrixGlyph = !!node.geometry.matrixGlyph;
       const liquid = !!node.geometry.portalSurface;
