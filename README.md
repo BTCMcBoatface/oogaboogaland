@@ -43,7 +43,9 @@ The mempool is the weather over the Mempool island: the fee-paying backlog sets 
 
 ## Debug
 
-Each game and cave has an address to share, with its own preview card: `/oogarally`, `/oogadrop`, `/oogaorbit`, `/oogamine`, `/mempool`, `/dsb`, `/entropylab`, `/lightning` and `/sphere`. They work on the site and under `npm run serve`, and as `oogaboogaland.html#/oogarally` when the file is opened from disk; routes live in `src/js/routes.js`, and `npm run cards` recaptures the cards. `?scene=lab`, `race`, `drop`, `orbit`, `mine` or `dsb` opens that scene; `?nosim=1` silences the simulator and every feed; `?canvas2d=1` forces the Canvas 2D fallback; `?debug=1` exposes `window.__ooga`. Add `&climbers=1` to that debug URL to watch gorillas climb cave faces and the outer island wall, including sideways movement. AGENTS.md lists every flag and fixture.
+Each game and cave has an address to share, with its own preview card: `/oogarally`, `/oogadrop`, `/oogaorbit`, `/oogamine`, `/mempool`, `/dsb`, `/entropylab`, `/lightning` and `/sphere`. They work on the site and under `npm run serve`, and as `oogaboogaland.html#/oogarally` when the file is opened from disk; routes live in `src/js/routes.js`, and `npm run cards` recaptures the cards. `?scene=lab`, `race`, `drop`, `orbit`, `mine` or `dsb` opens that scene; `?nosim=1` silences the simulator and every feed; `?canvas2d=1` forces the Canvas 2D fallback; `?debug=1` exposes `window.__ooga`. AGENTS.md lists every flag and fixture.
+
+With `?debug=1&gorillamove=1`, use detached mode to click a gorilla, then click its destination on the ground, a ledge or a wall. The selected gorilla stays highlighted and plans walking and climbing from its current position. Wall routes can move sideways or diagonally while keeping the gorilla facing the stone. Click another destination to redirect it; **Escape** deselects it. A marker and status show its progress, and a blocked climb stays in place for inspection. The former `climbers=1` flag is an alias for this mode.
 
 ## Test
 

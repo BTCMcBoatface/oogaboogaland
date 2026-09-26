@@ -953,12 +953,19 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
       </div>
       <div class="chalk-frame" id="chalk-frame">
         <canvas id="chalk-canvas" width="800" height="500" aria-label="Chalkboard drawing surface"></canvas>
-        <div class="chalk-pointer" id="chalk-pointer" aria-hidden="true"><span class="chalk-sleeve"></span><span class="chalk-hand"></span><span class="chalk-held"></span></div>
+        <div class="chalk-pointer" id="chalk-pointer" aria-hidden="true"><span class="chalk-held"></span></div>
+        <div class="chalk-caret" id="chalk-caret" aria-hidden="true" hidden></div>
+        <textarea class="chalk-type-input" id="chalk-type-input" aria-label="Type on chalkboard" autocomplete="off" autocapitalize="off" spellcheck="false" tabindex="-1"></textarea>
       </div>
       <div class="chalk-ledge" aria-label="Chalkboard tools">
         <button type="button" class="chalk-tool" id="chalk-eraser" aria-pressed="false"><span class="chalk-eraser-shape" aria-hidden="true"></span>Eraser</button>
         <span class="chalk-hint" id="chalk-hint">Pick up the chalk or eraser</span>
         <button type="button" class="chalk-tool" id="chalk-chalk" aria-pressed="false"><span class="chalk-stick-shape" aria-hidden="true"></span>Chalk</button>
+      </div>
+      <div class="chalk-actions">
+        <button type="button" class="chalk-keyboard" id="chalk-keyboard" aria-label="Type with keyboard" aria-pressed="false" title="Type with keyboard"><svg viewBox="0 0 24 18" aria-hidden="true"><rect x="1" y="1" width="22" height="16" rx="2"/><path d="M4 5h2m2 0h2m2 0h2m2 0h2M4 9h2m2 0h2m2 0h2m2 0h2M6 13h12"/></svg></button>
+        <button type="button" id="chalk-clean">Clean board</button>
+        <button type="button" id="chalk-reset">Reset message</button>
       </div>
     </dialog>
     <dialog class="modal board-modal" id="board-modal" aria-labelledby="board-title">

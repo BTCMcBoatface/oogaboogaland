@@ -15,6 +15,7 @@
   const yawParam = parseFloat(params.get("yaw"));
   // Debug-only clock params: hour pins the hour, daylen is the day length in seconds.
   const DEBUG = params.has("debug");
+  const DEBUG_GORILLA_MOVE = DEBUG && (params.get("gorillamove") === "1" || params.get("climbers") === "1");
   const timeParam = DEBUG ? params.get("time") : null;
   const hourParam = DEBUG ? parseFloat(params.get("hour")) : NaN;
   const daylenParam = DEBUG ? parseFloat(params.get("daylen")) : NaN;
@@ -211,6 +212,12 @@
   // One visit's state: created in enter, dropped in leave.
   let jumbotronSpot, oogatronUnsub, renderer, game, world, go, lootEnabled, testBananas, root, camera, overlayCanvas, island, terrainRampRoof, pathNode, altar, hud, hooks, input, pilot, fx, cameraCover, bananaCover, solids, rockGuides, objectGuides, sightGuides, bananaGuides, pileGuides, platformGuides, mirrorGuides, pile, crew, crates, critters, clock, presets, entering, mirrorCave, matrixCave, matrixControl, gateRain, fire, headquarters, dockStairs, jumbotron, positionDebug, pitGate;
   let magazine, magazineState, breakables, clankers, clankerPlay, clankerMeshes, clankerPartOwners, entropyLab, chalkboard, factoryMouth = null, glCanvas = null;
+  let debugSelectedGorilla = null, debugMovementTerrain = null;
+  const debugGorillaHighlights = [];
+  const DEBUG_MOVE_HIT = { node: null, owner: null, type: "none", distance: Infinity, x: 0, y: 0, z: 0, normal: { x: 0, y: 0, z: 0 } };
+  const DEBUG_GORILLA_HIT = { node: null, owner: null, type: "none", distance: Infinity, x: 0, y: 0, z: 0 };
+  const debugGorillaTarget = owner => owner.kind === "clanker";
+  const DEBUG_MOVE_LABELS = { planning: "Planning route", walking: "Walking", climbing: "Climbing", arrived: "Arrived", blocked: "Route blocked" };
   const clankerEquipment = [];
   const terrainSections = [], caveSections = [];
   // Above the island and its cave roofs; never interpolate from the renderer's
@@ -1483,13 +1490,13 @@
   // Headquarters ramps run down a cutting rather than into a cliff and wear none. Each mouth bakes to one solid, one hanging and one glowing mesh, memoised per island
   // so a revisit only places nodes. Pieces are [kind, x, z, quarter turns, variant, lift] in the mouth's frame.
   const THEMES = {
-    lab: { glass: 1, icon: "die", string: ["bulb", 1], pieces: [["flaskBench", -5.3, 1.1], ["die", -4.1, 2.8, 0, 1], ["die", -3.5, 3.6, 1, 3], ["die", -4.1, 2.8, 1, 4, 0.5], ["terminal", 5.2, 1.0], ["chalkboard", 6.5, 2.5], ["die", 4.3, 3.2, 1, 2], ["banner", -6.7, 0.7, 0, 1], ["sack", 6.0, 3.6, 0, 1]] },
+    lab: { glass: 1, icon: "die", string: ["bulb", 1], pieces: [["flaskBench", -5.3, 1.1], ["die", -4.1, 2.8, 0, 1], ["die", -3.5, 3.6, 1, 3], ["die", -4.1, 2.8, 1, 4, 0.5], ["terminal", 5.2, 1.0], ["die", 4.3, 3.2, 1, 2], ["banner", -6.7, 0.7, 0, 1], ["sack", 6.0, 3.6, 0, 1]] },
     rally: { glass: 0, icon: "flag", string: ["pennant", 0], inside: [["checkerMat", 0, -3.6, 0, 0, 0], ["toolWall", -3.15, -4.4, 1], ["workbench", -2.55, -4.4, 1], ["tireRack", 3.1, -4.6, 3], ["oilDrum", 2.6, -5.9, 0, 0], ["oilDrum", 2.9, -2.3, 0, 1], ["cone", -2.2, -1.6], ["cone", 2.3, -1.2]], ceiling: [[-2.2, 2.2, -1.4, -6.2, 3.05, [0.2, 0.5, 0.8]]], pieces: [["tireStack", -5.0, 0.9, 0, 0], ["tireStack", -5.8, 2.0, 0, 1], ["tireStack", -5.8, 2.0, 0, 0, 0.56], ["cone", -3.6, 3.0], ["cone", -4.0, 3.7], ["fuelPump", -6.6, 3.2], ["startLights", 5.0, 0.9], ["barrier", 5.7, 2.5, 0, 0], ["flag", 6.6, 0.9, 0, 0], ["flag", 3.7, 3.5, 0, 1], ["tireStack", 6.7, 3.4, 0, 1]] },
     mine: { glass: 0, icon: "pick", string: ["hanging", 0, [0.28, 0.72]], pieces: [["pickRack", -5.4, 0.9], ["dynamiteCrate", -4.3, 2.6], ["oreHeap", -6.3, 2.7, 0, 0], ["coalCrate", 5.0, 1.0, 0, 2], ["oreHeap", 6.1, 2.6, 0, 1], ["barrel", 4.3, 3.0, 0, 1], ["banner", 6.7, 0.8, 0, 3], ["crate", 5.1, 2.1, 0, 0]] },
     matrix: { glass: 2, icon: "glyph", string: ["bulb", 2], pieces: [["monolith", -5.0, 0.9, 0, 0], ["monolith", 5.0, 0.9, 0, 1], ["runeStone", -4.2, 2.8, 0, 0], ["runeStone", 4.4, 2.9, 0, 1], ["banner", 6.5, 0.8, 0, 4], ["banner", -6.5, 0.8, 0, 4], ["rubble", -6.3, 2.6, 0, 1]] },
     lightning: { glass: 0, icon: "bolt", string: ["hanging", 0, [0.3, 0.7]], boards: true, pieces: [["coalCrate", -5.1, 0.8, 0, 3], ["crate", -5.4, 2.1, 1, 0], ["crate", -5.4, 2.1, 0, 1, 0.75], ["barrel", -4.3, 2.9, 0, 1], ["sack", -3.5, 2.8, 1, 0], ["rubble", -6.4, 0.9, 0, 1], ["gauge", 5.0, 0.9], ["cart", 5.7, 2.4, 1], ["banner", 6.6, 0.8, 0, 0], ["coil", 3.8, 3.4], ["coalCrate", 6.4, 3.4, 0, 1]] },
   };
-  const THEME_ICON = (slot) => THEMES[slot.theme]?.icon || null;
+  const THEME_ICON = (slot) => slot.id === "c1" ? "favicon" : THEMES[slot.theme]?.icon || null;
   const mouthDressing = (slot, m) => {
     let byIsland = DRESSED.get(island);
     if (!byIsland) DRESSED.set(island, byIsland = new Map());
@@ -1535,19 +1542,35 @@
       else if (node.geometry === baked.glow || node.geometry === baked.swingGlow) addLamp(node, LAMP.lantern, x, y, z, false, lamps.length, `${id}:${lamps.length}`).always = true;
     }
   };
+  const CHALKBOARD_X = 6.75, CHALKBOARD_Z = 2.15, CHALKBOARD_YAW = -0.57;
+  let chalkboardDressing = null;
+  const placeChalkboard = (m, group) => {
+    const sr = Math.sin(m.ry), cr = Math.cos(m.ry);
+    const wx = m.x + cr * CHALKBOARD_X + sr * CHALKBOARD_Z;
+    const wz = m.z - sr * CHALKBOARD_X + cr * CHALKBOARD_Z;
+    const y = island.surfaceAt(wx, wz) - m.floorY;
+    if (Math.abs(y) > 0.9) return;
+    if (!chalkboardDressing) {
+      const set = BL.dressing.set();
+      set.put("chalkboard", 0, 0, 0);
+      chalkboardDressing = set.build();
+    }
+    const boardGroup = createNode({ position: { x: CHALKBOARD_X, y, z: CHALKBOARD_Z }, rotation: { x: 0, y: CHALKBOARD_YAW, z: 0 } });
+    addChild(group, boardGroup);
+    addDressing(chalkboardDressing, boardGroup, wx, m.floorY + y, wz, `${m.id}:chalkboard`, false);
+    const sa = Math.sin(CHALKBOARD_YAW), ca = Math.cos(CHALKBOARD_YAW);
+    addPieceTargets(chalkboardDressing.picks, (px, py, pz) => {
+      const lx = CHALKBOARD_X + ca * px + sa * pz;
+      const lz = CHALKBOARD_Z - sa * px + ca * pz;
+      return { x: m.x + cr * lx + sr * lz, y: m.floorY + y + py, z: m.z - sr * lx + cr * lz };
+    });
+    chalkboard.attach(boardGroup, 0, 0, 0);
+    claim(wx, wz, 0.8);
+  };
   const dressMouth = (slot, m, group) => {
     // The Canvas 2D fallback keeps the plain island, but the writable board remains available.
     if (renderer.kind === "canvas2d" && slot.theme === "lab") {
-      const lx = 6.5, lz = 2.5, sr = Math.sin(m.ry), cr = Math.cos(m.ry);
-      const y = island.surfaceAt(m.x + cr * lx + sr * lz, m.z - sr * lx + cr * lz) - m.floorY;
-      if (Math.abs(y) <= 0.9) {
-        const set = BL.dressing.set();
-        set.put("chalkboard", lx, y, lz);
-        const baked = set.build();
-        addDressing(baked, group, m.x, m.floorY, m.z, `${slot.id}:chalkboard`, false);
-        addPieceTargets(baked.picks, (x, cy, z) => ({ x: m.x + cr * x + sr * z, y: m.floorY + cy, z: m.z - sr * x + cr * z }));
-        chalkboard.attach(group, lx, y, lz);
-      }
+      placeChalkboard(m, group);
       return;
     }
     if (renderer.kind === "canvas2d" || !THEMES[slot.theme]) return;
@@ -1556,11 +1579,7 @@
     const sr = Math.sin(m.ry), cr = Math.cos(m.ry), g = baked.ground, lit = baked.lights;
     for (let i = 0; i < lit.length; i += 4) dressingLights.push(m.x + cr * lit[i] + sr * lit[i + 2], m.floorY + lit[i + 1], m.z - sr * lit[i] + cr * lit[i + 2], lit[i + 3]);
     addPieceTargets(baked.picks, (lx, ly, lz) => lz < 0.3 ? null : { x: m.x + cr * lx + sr * lz, y: m.floorY + ly, z: m.z - sr * lx + cr * lz });
-    if (slot.theme === "lab") {
-      const lx = 6.5, lz = 2.5;
-      const y = island.surfaceAt(m.x + cr * lx + sr * lz, m.z - sr * lx + cr * lz) - m.floorY;
-      if (Math.abs(y) <= 0.9) chalkboard.attach(group, lx, y, lz);
-    }
+    if (slot.theme === "lab") placeChalkboard(m, group);
     // Headquarters and a sealed cave that is coming soon still hang their name over the door.
     if ((slot.status !== "open" || slot.scene === "factory") && slot.status !== "mirror" && slot.name) addChild(group, createNode({ position: { x: 0, y: 4.5, z: 0.52 }, geometry: hubModels.caveSign(slot.name, THEME_ICON(slot)) }));
     for (let i = 0; i < g.length; i += 2) claim(m.x + cr * g[i] + sr * g[i + 1], m.z - sr * g[i] + cr * g[i + 1], 0.8);
@@ -1922,7 +1941,7 @@
         ]
       });
       if (mirrorCave && mirrorCave.slot === slot) mirrorCave.sign = sign;
-      const lantern = createNode({ position: { x: halfW + 0.1, y: sign.position.y + halfH + 0.14, z: 0.52 }, geometry: hubModels.lantern() });
+      const lantern = createNode({ position: { x: halfW + 0.34, y: sign.position.y + halfH + 0.14, z: 0.52 }, geometry: hubModels.lantern() });
       addChild(group, lantern);
       const lx = lantern.position.x, ly = lantern.position.y - 0.27, lz = lantern.position.z;
       const wx = m.x + Math.cos(m.ry) * lx + ax * lz;
@@ -2488,7 +2507,7 @@
   // Dock over the drop and ladder on the bluff
   const buildRim = () => {
     const d = polar(DOCK_DEG, CLIFF_OUTER);
-    const dock = place(hubModels.dock(), d.x, d.z, Math.PI / 2 - DOCK_DEG * DEG, island.surfaceAt(d.x, d.z), "dock", 2.2);
+    const dock = place(hubModels.dock(), d.x, d.z, Math.PI / 2 - DOCK_DEG * DEG, island.surfaceAt(d.x, d.z) + 0.05, "dock", 2.2);
     dockStairs = buildDockStairs(dock);
     headquarters.dockStairs = dockStairs;
     claim(d.x, d.z, 2.5);
@@ -4844,8 +4863,74 @@
     return !pitGate.receiving && !(player && pilot.moving)
       && actionWithinReach(at.x, at.y + (player ? 1.1 - player.baseY : 0), at.z, point.x, point.y, point.z, 2);
   };
+  const selectDebugGorilla = (entry) => {
+    if (debugSelectedGorilla) for (let i = 0; i < debugGorillaHighlights.length; i++) {
+      debugSelectedGorilla.renderParts[i].highlight = debugGorillaHighlights[i];
+    }
+    debugGorillaHighlights.length = 0;
+    debugSelectedGorilla = entry;
+    if (entry) for (const part of entry.renderParts) {
+      debugGorillaHighlights.push(part.highlight);
+      part.highlight = 1;
+    }
+  };
+  const debugMovementPoint = (p) => {
+    // Build only when a destination is clicked. Terrain partitions mutate
+    // their face lists, so give those queries a fresh geometry snapshot.
+    const picks = [], seen = new Set();
+    const add = (node, terrain, mutable = false) => {
+      if (!node.geometry?.faces.length || node.instanceData || node.cameraHidden || node.smokeOpacity === 0 || seen.has(node)) return;
+      for (let parent = node.parent; parent; parent = parent.parent) if (parent.smokeOpacity === 0) return;
+      seen.add(node);
+      const pickNode = mutable ? createNode({ parent: node,
+        geometry: { ...node.geometry, faces: node.geometry.faces.slice() } }) : node;
+      picks.push({ node: pickNode, owner: { terrain }, radius: 0 });
+    };
+    add(debugMovementTerrain, true);
+    traverseVisible(terrainRampRoof.node, node => add(node, true, true));
+    for (const section of terrainSections) traverseVisible(section.cap.node, node => add(node, true));
+    for (const section of caveSections) traverseVisible(section.cap.node, node => add(node, true));
+    traverseVisible(root, node => { if (solids.isActive(node)) add(node, false); });
+    const picker = BL.weaponTargets.create(picks);
+    renderer.ray(p.x, p.y, camera, TAP_RAY);
+    let distance = 0;
+    for (let i = 0; i < 64 && distance < camera.far; i++) {
+      if (!picker.ray(DEBUG_MOVE_HIT, TAP_RAY.ox + TAP_RAY.dx * distance,
+        TAP_RAY.oy + TAP_RAY.dy * distance, TAP_RAY.oz + TAP_RAY.dz * distance,
+        TAP_RAY.dx, TAP_RAY.dy, TAP_RAY.dz, camera.far - distance)) return false;
+      const geometry = DEBUG_MOVE_HIT.node.geometry;
+      const ceiling = Math.min(geometry.clipMaxY ?? Infinity,
+        geometry.cutawayPreserve ? Infinity : cutawayHeightAt(DEBUG_MOVE_HIT.x, DEBUG_MOVE_HIT.z));
+      if (DEBUG_MOVE_HIT.y >= (geometry.clipMinY ?? -Infinity) - 0.03 && DEBUG_MOVE_HIT.y <= ceiling + 0.03) {
+        DEBUG_MOVE_HIT.distance += distance;
+        return true;
+      }
+      distance += DEBUG_MOVE_HIT.distance + 0.01;
+    }
+    return false;
+  };
+  const debugMovementTap = (hit, p) => {
+    if (!DEBUG_GORILLA_MOVE || pilot.player || clankerPlay.active) return false;
+    if (!debugSelectedGorilla && hit?.owner.kind !== "clanker") return false;
+    const worldHit = debugMovementPoint(p);
+    if (hit?.owner.kind === "clanker" && input.weaponTargets.ray(DEBUG_GORILLA_HIT,
+      TAP_RAY.ox, TAP_RAY.oy, TAP_RAY.oz, TAP_RAY.dx, TAP_RAY.dy, TAP_RAY.dz,
+      camera.far, null, debugGorillaTarget, true)
+      && (!worldHit || DEBUG_GORILLA_HIT.distance < DEBUG_MOVE_HIT.distance + 0.02)) {
+      selectDebugGorilla(DEBUG_GORILLA_HIT.owner.entry);
+      hud.tooltip.hide();
+      hud.toast("Gorilla selected · click a destination · Esc to deselect");
+      return true;
+    }
+    if (!debugSelectedGorilla) return true;
+    if (!worldHit) hud.toast("Click the ground, a ledge, or a wall");
+    else if (clankers.debugMove(debugSelectedGorilla, DEBUG_MOVE_HIT.x, DEBUG_MOVE_HIT.y, DEBUG_MOVE_HIT.z, DEBUG_MOVE_HIT.normal)) hud.toast("Destination set");
+    else hud.toast("Gorilla cannot take a movement order right now");
+    return true;
+  };
   const onTap = (hit, p) => {
     if (pitArrival || pitGate?.isOpen) return;
+    if (debugMovementTap(hit, p)) return;
     if (!hit) return;
     const o = hit.owner;
     switch (o.kind) {
@@ -4865,10 +4950,7 @@
       case "piece":
         if (o.piece === "chalkboard") {
           const bounds = document.getElementById("scene").getBoundingClientRect();
-          chalkboard.open(!!pilot.player || clankerPlay.active,
-            pilot.player?.traits.skin || (clankerPlay.active ? "#aeb8bb" : null),
-            pilot.player?.traits.fur || (clankerPlay.active ? "#626f74" : null),
-            { x: bounds.left + p.x, y: bounds.top + p.y });
+          chalkboard.open({ x: bounds.left + p.x, y: bounds.top + p.y });
         }
         else pokePiece(o);
         break;
@@ -6100,6 +6182,7 @@
     prepareClankerRiders();
     prepareClankerStrike();
     clankers.update(dt);
+    if (debugSelectedGorilla && (!debugSelectedGorilla.active || !debugSelectedGorilla.root.visible || pilot.player || clankerPlay.active)) selectDebugGorilla(null);
     updateLabEquipment(dt);
     clankerMeshes.sync();
     carryClankerRiders();
@@ -6192,6 +6275,37 @@
   const drawExtra = (ctx2d, project, drawBubble) => {
     crew.drawQuotes(ctx2d, project, drawBubble);
     breakables.drawOverlay(ctx2d);
+    if (debugSelectedGorilla) {
+      const entry = debugSelectedGorilla, move = entry.debugMove, p = entry.root.position;
+      ctx2d.save();
+      ctx2d.strokeStyle = "#b7ef73"; ctx2d.lineWidth = 2;
+      const center = project(p.x, p.y + 1.25, p.z);
+      if (center) {
+        const x = center.x, y = center.y;
+        ctx2d.beginPath();
+        ctx2d.moveTo(x - 20, y - 18); ctx2d.lineTo(x - 26, y - 18); ctx2d.lineTo(x - 26, y + 18); ctx2d.lineTo(x - 20, y + 18);
+        ctx2d.moveTo(x + 20, y - 18); ctx2d.lineTo(x + 26, y - 18); ctx2d.lineTo(x + 26, y + 18); ctx2d.lineTo(x + 20, y + 18);
+        ctx2d.stroke();
+      }
+      if (move?.status && move.status !== "idle") {
+        const point = project(move.target.x, move.target.y + 0.05, move.target.z);
+        if (point) {
+          const x = point.x, y = point.y;
+          if (move.status === "blocked") ctx2d.strokeStyle = "#ffb45e";
+          ctx2d.beginPath(); ctx2d.arc(x, y, 9, 0, Math.PI * 2);
+          ctx2d.moveTo(x - 13, y); ctx2d.lineTo(x + 13, y);
+          ctx2d.moveTo(x, y - 13); ctx2d.lineTo(x, y + 13); ctx2d.stroke();
+        }
+      }
+      const label = DEBUG_MOVE_LABELS[move?.status] || "Click a destination";
+      const x = renderer.size.width / 2, y = renderer.size.height - 82;
+      ctx2d.font = "12px monospace"; ctx2d.textAlign = "center"; ctx2d.textBaseline = "middle";
+      const width = 286;
+      ctx2d.fillStyle = "rgba(13, 26, 15, 0.9)"; ctx2d.fillRect(x - width / 2, y - 22, width, 44);
+      ctx2d.fillStyle = "#b7ef73"; ctx2d.fillText(label, x, y - 8);
+      ctx2d.fillStyle = "#e1e5d9"; ctx2d.fillText("Click to redirect · Esc to deselect", x, y + 9);
+      ctx2d.restore();
+    }
   };
   const cameraPlatformAt = (x, y, z) => y >= 0 && y <= ALTAR_HEIGHT && Math.hypot(x, z) <= altar.platformRadius;
   // One solid mask spans the terrain, dais and fruit contact.
@@ -6977,6 +7091,7 @@
   };
   const onKey = (e) => {
     if (pitArrival) return;
+    if (e.key === "Escape" && debugSelectedGorilla) { selectDebugGorilla(null); e.preventDefault(); return; }
     if (clankerPlay.active) {
       if (!e.repeat && (e.key === "x" || e.key === "X")) clankerPlay.action("mode-toggle");
       return;
@@ -7079,7 +7194,7 @@
       onOpen: () => { pilot.setActive(false); pilot.controls.reset(); input.reset(); hud.tooltip.hide(); },
       onClose: () => { pilot.setActive(true); pilot.controls.reset(); input.reset(); } });
     terrainRampRoof = BL.terrainCutaway.createRampRoof(island.cutawaySource, island.geometry, renderer.releaseGeometry);
-    place(terrainRampRoof.baseGeometry, 0, 0, 0, 0);
+    debugMovementTerrain = place(terrainRampRoof.baseGeometry, 0, 0, 0, 0);
     addChild(root, terrainRampRoof.node);
     placed.push(terrainRampRoof.node);
     addTerrainSection(island.cutawaySource, root);
@@ -7429,30 +7544,12 @@
       const y = island.surfaceAt(x, z);
       if (Number.isFinite(y)) loungeRoofs.push({ x, y, z, angle: mouth.ry });
     }
-    const debugClimbSites = DEBUG && params.get("climbers") === "1" ? { cave: [], outer: [] } : null;
-    if (debugClimbSites) {
-      for (const mouth of island.mouths) {
-        const outwardX = -Math.sin(mouth.ry), outwardZ = -Math.cos(mouth.ry);
-        for (const side of [-3.8, 3.8]) debugClimbSites.cave.push({
-          x: mouth.x + outwardX * 4.8 + outwardZ * side,
-          z: mouth.z + outwardZ * 4.8 - outwardX * side,
-          lowerX: mouth.x - outwardX * 2.2 + outwardZ * side,
-          lowerZ: mouth.z - outwardZ * 2.2 - outwardX * side,
-          outwardX, outwardZ
-        });
-      }
-      for (let i = 0; i < 24; i++) {
-        const angle = (i + 0.35) * Math.PI * 2 / 24, outwardX = Math.sin(angle), outwardZ = -Math.cos(angle);
-        debugClimbSites.outer.push({ x: outwardX * 27.8, z: outwardZ * 27.8,
-          lowerX: outwardX * 31.3, lowerZ: outwardZ * 31.3, outwardX, outwardZ });
-      }
-    }
     const labSiteIndex = shared.workSites.findIndex(site => site.mouth === entropyLab.mouth);
     const debugLabShuttle = DEBUG && !contributors.solo && !contributors.debugState && labSiteIndex >= 0
       ? crew.list.find(cave => cave.state === "working" && cave.work.site === labSiteIndex) || crew.list[0] : null;
     if (debugLabShuttle) debugLabShuttle.override = "working";
     clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs,
-      debugClimbSites, debugClimbExclude: debugLabShuttle,
+      debugMovement: DEBUG_GORILLA_MOVE, debugMinY: ABYSS_RESPAWN_Y,
       labSite: labSiteIndex,
       labInside: entropyLab.phase.inside, labStations: entropyLab.stations,
       labEquipment: entropyLab.equipment, labPickup: pickUpLabEquipment, labReturn: returnLabEquipment, labRoll: rollLabEquipment,
@@ -7517,7 +7614,8 @@
         else pilot.hooks.onZoom(factor, gesture, px, py);
       },
       onDoubleTap: (hit, p) => {
-        if (pitArrival) return;
+        if (pitArrival || pitGate?.isOpen) return;
+        if (debugMovementTap(hit, p)) return;
         if (hit && (hit.owner.prop === "timechainchair" || hit.owner.cave?.traits.name === "SaniExp" && timechainIsland?.seat.active)) { spinTimechainChair(); return; }
         if (hit && hit.owner.kind === "clanker") return;
         else {
@@ -7840,10 +7938,14 @@
     mark("covered-view-start");
     prepareCoveredView(ctx.overlay);
     mark("covered-view");
+    if (DEBUG_GORILLA_MOVE) hud.toast("Gorilla movement debug · click a gorilla, then a destination");
   };
   const leave = () => {
     if (factoryMouth && factoryMouth.snap) snapFactoryView();
     glCanvas = null;
+    selectDebugGorilla(null);
+    debugMovementTerrain = DEBUG_MOVE_HIT.node = DEBUG_MOVE_HIT.owner = null;
+    DEBUG_GORILLA_HIT.node = DEBUG_GORILLA_HIT.owner = null;
     chalkboard.dispose();
     chalkboard = null;
     clearCutawayHidden();

@@ -117,9 +117,8 @@
     return geometry;
   });
 
-  // The deck runs onto both shores. At the home stair, overlap one terrain cell
-  // without projecting a full plank length over the top tread.
-  const DECK_START = -3, DECK_END = SITE.span + 0.25;
+  // Meet the level top tread with a short overlap instead of floating over the rising stairs.
+  const DECK_START = -0.3, DECK_END = SITE.span + 0.25;
   const deckY = (t) => { t = Math.max(0, Math.min(1, t)); return -SITE.sag * 4 * t * (1 - t); };
   // The crossing as it was first built, kept as the bridge's collision shell so walking on it never changes.
   const bridgeShell = cached(() => {
@@ -187,6 +186,8 @@
         deck.push({ x, y: deckY(t) - 0.04, z: t * SITE.span });
         under.push({ x: side * w * 0.32, y: deckY(t) - 0.5 - Math.sin(t * Math.PI) * 0.55, z: t * SITE.span });
       }
+      under.unshift({ x: side * w * 0.36, y: -1.1, z: -2.2 });
+      under.push({ x: side * w * 0.36, y: -1.1, z: SITE.span + 2.2 });
       vine(rail, 0.075, 0.075, VINE);
       vine(deck, 0.06, 0.06, VINE_DK);
       vine(under, 0.055, 0.055, VINE_DK);
@@ -208,6 +209,11 @@
     for (let i = 0; i < count; i++) {
       const z = DECK_START + (i + 0.5) * pitch;
       flatInto(geo, bevelBox({ w, h: 0.18, d: pitch + 0.02, color: i % 3 === 0 ? BARK : BARK_LT, bevel: 0.04, offset: { y: deckY(z / SITE.span) - 0.05, z } }));
+      if (i % 6 === 1 || i % 9 === 5) {
+        const side = i & 1 ? -1 : 1;
+        flatInto(geo, bevelBox({ w: 0.28 + rand() * 0.16, h: 0.025, d: pitch * (0.5 + rand() * 0.25), color: i & 1 ? MOSS : "#4f7f36", bevel: 0.01,
+          offset: { x: side * (w / 2 - 0.27 - rand() * 0.12), y: deckY(z / SITE.span) + 0.045, z: z + (rand() - 0.5) * pitch * 0.25 } }));
+      }
     }
     for (const z of [0, SITE.span]) {
       for (const side of [-1, 1]) {
