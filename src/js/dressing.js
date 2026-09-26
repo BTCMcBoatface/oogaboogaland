@@ -181,9 +181,9 @@
         for (let y = bottom; y <= 42; y++) put(HANG, x, y, 1, x === -8 || x === 7 ? EDGE : v === 2 ? ((x + 8 >> 2) + (y >> 2) & 1 ? 34 : 35) : CLOTH);
       }
       if (EMBLEM) icon(put, v === 4 ? GLOW : HANG, ICONS[EMBLEM[0]], -5, 22, 2, 2, EMBLEM[1]);
-      if (v === 5) for (let row = 0; row < 14; row++) for (let col = 0; col < 14; col++) {
-        const ink = BANANA_ART.rows[Math.floor(row * 9 / 14)][Math.floor(col * 9 / 14)];
-        if (ink !== ".") put(HANG, col - 7, 35 - row, 2, ink === "D" ? 62 : ink === "Y" ? 63 : 64);
+      if (v === 5) for (let row = 0; row < 15; row++) for (let col = 0; col < 15; col++) {
+        const ink = BANANA_ART.rows[Math.floor(row * 9 / 15)][Math.floor(col * 9 / 15)];
+        if (ink !== ".") put(HANG, col - 7, 36 - row, 2, ink === "D" ? 62 : ink === "Y" ? 63 : 64);
       }
     }),
     // Ooga Rally: a stack of three tyres, the top ring of each striped.
