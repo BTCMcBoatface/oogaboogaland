@@ -983,12 +983,14 @@
     for (let i = 0; i < s.crew.length; i++) s.crew[i].agent.update(dt);
     // Out through the gate: walked into it, or flown into it with the free view.
     if (!leaving) {
+      const p = avatar ? avatar.root.position : camera.position, y = p.y - (avatar ? avatar.baseY : 0) - LAYOUT.entrance.y;
+      const inOpening = p.x >= GATE_OPENING.minX && p.x <= GATE_OPENING.maxX && y >= GATE_OPENING.floorY - 0.12 && y < GATE_OPENING.ceilingY;
       if (avatar) {
-        if (avatar.root.position.z > HALL.front - 1.3) leaveCave();
+        if (inOpening && p.z > HALL.front - 1.3) leaveCave();
         else peerShield(s);
       } else {
         const a = pilot.controls.read();
-        if (Math.hypot(a.x, a.y) > 0.05 && camera.position.z > HALL.front - 2.2 && Math.abs(camera.position.x) < 3) leaveCave();
+        if (inOpening && Math.hypot(a.x, a.y) > 0.05 && p.z > HALL.front - 2.2) leaveCave();
       }
     }
     const node = feed.reading.node, signal = feed.signal, running = node === "ready" || node === "starting";

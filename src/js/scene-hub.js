@@ -4712,7 +4712,8 @@
     if (!player || entering || !BL.scenes.factory) return;
     const p = player.root.position, sr = Math.sin(m.ry), cr = Math.cos(m.ry), shield = BL.factoryModels.SHIELD_Z;
     const along = (p.x - m.x) * sr + (p.z - m.z) * cr, across = (p.x - m.x) * cr - (p.z - m.z) * sr;
-    if (along > shield || along < shield - 2 || Math.abs(across) > 2.4) return;
+    const feet = p.y - player.baseY - m.floorY;
+    if (along > shield || along < shield - 2 || Math.abs(across) > 2.4 || feet < o.floorY - 0.12 || feet >= o.ceilingY) return;
     f.phase.ripples.pulse(across, p.y - m.floorY + 1, 0);
     entering = true;
     world.pilot = player.traits.name;
