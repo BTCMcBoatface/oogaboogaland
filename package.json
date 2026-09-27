@@ -11,6 +11,7 @@
     "poker:verify": "node server/poker/verify.mjs",
     "site": "node scripts/site.mjs",
     "cards": "node scripts/build.mjs && node scripts/cards.mjs",
+    "build:dist": "node scripts/build.mjs && mkdir -p dist && cp oogaboogaland.html dist/index.html && cp worker/_headers dist/_headers",
     "serve": "node scripts/serve.mjs",
     "watch": "node scripts/serve.mjs --watch",
     "characters": "node scripts/characters.mjs --list",
