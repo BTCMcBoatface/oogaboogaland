@@ -6263,6 +6263,7 @@
     // free: the landing view looks at the pile from farther out than the loop carries.
     const listener = crew.player ? crew.player.root.position : camera.target;
     pileSound.update(dt, listener.x, listener.z);
+    BL.voice.updateGains(listener.x, listener.z, BL.net.remotes);
     mempoolIsland.wildlife.update(dt, elapsed);
     dockStairs.update(dt, pilot.player);
     updateRoomSigns(dt);

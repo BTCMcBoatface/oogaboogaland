@@ -424,6 +424,7 @@
   // The account needs the Worker: without one /api/me finds nothing and the sheet shows no sign-in.
   const net = window.BL.net;
   const unsubscribeAccount = net.subscribe(window.BL.hud.showAccount);
+  const unsubscribeVoice = window.BL.voice.subscribe(() => window.BL.hud.showAccount(net.state));
   if (!params.has("nosim") && params.get("net") !== "0") net.start();
   // A tab opened in the background waits for its first look before it holds any socket.
   if (document.hidden) {
@@ -560,6 +561,8 @@
     chain.dispose();
     window.BL.oogatronLive.dispose();
     unsubscribeAccount();
+    unsubscribeVoice();
+    window.BL.voice.dispose();
     net.dispose();
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", clearRightShift);
