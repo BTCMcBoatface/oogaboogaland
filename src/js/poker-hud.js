@@ -65,7 +65,7 @@
       const title = make("strong", "", b), info = make("span", "", b), state = make("small", "", b);
       title.textContent = `Table ${String(i + 1).padStart(2, "0")}`; rows.push({ b, info, state });
     }
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < R.SEATS; i++) {
       const wrapper = make("div", "poker-seat", seatRoot), b = make("button", "poker-seat-button", wrapper);
       b.type = "button"; b.dataset.seat = i;
       const badge = make("span", "poker-position", b), name = make("strong", "poker-player", b), stack = make("span", "poker-stack", b), last = make("small", "poker-last-action", b);
@@ -142,9 +142,9 @@
       paused = isPaused; const idle = (s.phase === "waiting" || s.phase === "showdown") && (!live || ["idle", "complete", "aborted"].includes(s.fairPhase)), fresh = switched || s.hand !== lastHand;
       snapshots.forEach((table, i) => {
         const row = rows[i], occupied = table.seats.filter(Boolean).length;
-        row.info.textContent = `${occupied} / 12 seats`; row.state.textContent = live && !["idle", "complete", "aborted", "betting"].includes(table.fairPhase) ? fairName[table.fairPhase] || "Connecting" : table.phase === "waiting" ? "Open a game" : table.phase === "showdown" ? "Between hands" : `${streetName[table.phase]} · Watch`;
+        row.info.textContent = `${occupied} / ${R.SEATS} seats`; row.state.textContent = live && !["idle", "complete", "aborted", "betting"].includes(table.fairPhase) ? fairName[table.fairPhase] || "Connecting" : table.phase === "waiting" ? "Open a game" : table.phase === "showdown" ? "Between hands" : `${streetName[table.phase]} · Watch`;
         row.b.classList.toggle("selected", i === index); row.b.disabled = !!viewer && i !== index;
-        row.b.setAttribute("aria-label", `Table ${i + 1}, ${occupied} of 12 seats, ${row.state.textContent}`);
+        row.b.setAttribute("aria-label", `Table ${i + 1}, ${occupied} of ${R.SEATS} seats, ${row.state.textContent}`);
         if (table.result && table.hand !== recorded[i]) {
           recorded[i] = table.hand;
           history[i].unshift(`Hand #${table.hand} · ${resultText(table)} · Board: ${table.board.map(R.cardName).join(" ") || "no community cards"}`);
@@ -160,7 +160,7 @@
       by("street").textContent = streetName[s.phase];
       by("balance").textContent = own ? `${chips(own.stack)} banana chips` : "Spectating · private cards stay hidden";
       by("hand-name").textContent = own?.cards.length === 2 && own.cards.every(Number.isInteger) && s.board.length >= 3 && s.board.every(Number.isInteger) ? `${own.folded ? "Folded · " : ""}${R.evaluate(own.cards.concat(s.board)).name}` : own ? "Your private cards" : "Take a seat to play";
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < R.SEATS; i++) {
         const p = s.seats[i], node = seats[i], winner = !!p?.inHand && !!s.result?.pots.some(pot => !pot.refund && pot.winners.includes(i));
         node.wrapper.dataset.position = position(i, ownIndex);
         node.wrapper.classList.toggle("turn", !paused && i === s.turn);

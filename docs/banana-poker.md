@@ -45,7 +45,7 @@ the basement arrival route. Repository caves are unchanged.
 **Quick Play** takes a free seat, adds enough computer opponents for four
 players and deals. Or choose any of the ten lobby rows, take a specific seat,
 add three bots at a time, and deal when ready. You can also run a bots-only table
-while spectating. Every table has twelve player seats plus a suited gorilla
+while spectating. Every table has nine player seats plus a suited gorilla
 dealer. Two funded seats suffice; there is no table owner or privileged host.
 
 Choosing a table opens a focused oval-table view over the room. Your seat stays
@@ -220,13 +220,13 @@ Checks live in the existing `test/run.mjs`; no test framework or dependency was
 added. The repository's browser driver and shared renderers were not modified.
 
 The combined run passed **124/124 Node checks**: the 119 existing checks and
-five protocol checks, including a twelve-party encrypted hand, side pots,
+five protocol checks, including a nine-party encrypted hand, side pots,
 folded-card privacy, native P-256 interoperability, tampering/replay rejection,
 independent record replay and real worker clients over HTTP. The final focused
 protocol run also passed **5/5 checks** after disconnect cleanup, including
 release of abandoned seats and retention of cancellation/refund records. The build and syntax checks also passed. Existing checks cover payouts, odd
 chips, secure-entropy failure, rejection sampling, turn/seat validation, snapshot
-isolation, heads-up order, 300 twelve-player settlements, spectator collision
+isolation, heads-up order, 300 nine-player settlements, spectator collision
 lanes, pot presets including the call, short-all-in caps, closed raise rights,
 public blind metadata and theme switching. The theme contract switches through
 all five looks twice, checking that table pick targets, chairs, dealers and dealt

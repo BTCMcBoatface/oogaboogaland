@@ -2,7 +2,7 @@
 
 This is working source for an experimental mental-poker service and client,
 not a cryptographic audit or production security certification. It extends the
-existing ten-table floor; five cave themes, suited gorilla dealers, twelve seats
+existing ten-table floor; five cave themes, suited gorilla dealers, nine seats
 per table and walkable spectator aisles remain. All chips are free, disposable
 play points. No rake, purchase, transfer, redemption, wallet, Spark integration
 or outside-settlement feature is included.
@@ -192,7 +192,7 @@ node test/run.mjs poker-protocol
 ```
 
 They compare P-256 math with native Node/OpenSSL, test network routing, play a
-twelve-party encrypted hand with side pots and a fold, reject tampered proofs
+nine-party encrypted hand with side pots and a fold, reject tampered proofs
 and premature private shares, replay the public record, run actual worker code
 over HTTP, and check timeout/replay/origin/identity boundaries.
 

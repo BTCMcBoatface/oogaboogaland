@@ -66,7 +66,7 @@ export function createPokerServer(options = {}) {
       const url = new URL(req.url, [...origins][0]);
       if (req.method === "GET" && url.pathname === "/") { res.writeHead(200, { ...headers, "Content-Type": "text/html; charset=utf-8" }); res.end(page()); return; }
       if (req.method === "GET" && url.pathname === "/poker/worker.js") { res.writeHead(200, { ...headers, "Content-Type": "text/javascript; charset=utf-8", "Content-Security-Policy": "default-src 'none'; script-src 'self'; connect-src 'self'" }); res.end(worker); return; }
-      if (req.method === "GET" && url.pathname === "/poker/api/health") { send(res, 200, { protocol: C.DOMAIN, tables: 10, seats: 12, experimental: true, payments: false }); return; }
+      if (req.method === "GET" && url.pathname === "/poker/api/health") { send(res, 200, { protocol: C.DOMAIN, tables: 10, seats: 9, experimental: true, payments: false }); return; }
       if (req.method === "POST" && !origins.has(req.headers.origin)) { send(res, 403, { error: "Origin required" }); return; }
       if (req.method === "POST" && url.pathname === "/poker/api/session") {
         if (sessions.size >= 256) { send(res, 429, { error: "Room is full" }); return; }

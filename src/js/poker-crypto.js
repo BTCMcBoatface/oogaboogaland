@@ -129,7 +129,7 @@
   };
   const cardNumber = p => { cards(); const n = cardLookup.get(encode(p)); if (n === undefined) throw new Error("Decryption did not yield a card"); return n; };
   const aggregate = keys => {
-    if (!Array.isArray(keys) || keys.length < 2 || keys.length > 12 || new Set(keys).size !== keys.length) throw new Error("Invalid key roster");
+    if (!Array.isArray(keys) || keys.length < 2 || keys.length > 9 || new Set(keys).size !== keys.length) throw new Error("Invalid key roster");
     let p = O; for (const key of keys) p = add(p, pub(key)); if (!p[2]) throw new Error("Aggregate key is zero"); return encode(p);
   };
   const initialDeck = key => { const y = pub(key); return cards().map(p => wire([G, add(p, y)])); };

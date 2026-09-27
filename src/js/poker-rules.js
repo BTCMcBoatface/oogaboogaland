@@ -3,7 +3,7 @@
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  const SEATS = 12, BUY_IN = 1000, SMALL = 5, BIG = 10;
+  const SEATS = 9, BUY_IN = 1000, SMALL = 5, BIG = 10;
   const LABELS = ["High card", "Pair", "Two pair", "Three of a kind", "Straight", "Flush", "Full house", "Four of a kind", "Straight flush"];
   const word = new Uint32Array(1);
   const randomInt = (bound) => {

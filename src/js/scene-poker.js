@@ -109,7 +109,7 @@
   };
   const addBots = (table, count) => {
     const s = table.snapshot(); let added = 0;
-    for (let i = 0; i < 12 && added < count; i++) if (!s.seats[i]) { table.join(`bot-${selected}-${i}`, `Bot ${i + 1}`, true, i); added++; }
+    for (let i = 0; i < BL.pokerRules.SEATS && added < count; i++) if (!s.seats[i]) { table.join(`bot-${selected}-${i}`, `Bot ${i + 1}`, true, i); added++; }
   };
   const action = (name, value, expectedVersion) => {
     let table = activeTable();

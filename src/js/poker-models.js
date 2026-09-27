@@ -3,8 +3,8 @@
   "use strict";
   const BL = window.BL, M = BL.models, S = BL.scene;
   const TABLES = Array.from({ length: 10 }, (_, i) => ({ x: i % 2 ? 11 : -11, z: 24 - Math.floor(i / 2) * 12 }));
-  const SEATS = Array.from({ length: 12 }, (_, i) => {
-    const a = -Math.PI / 2 + 0.55 + i * (Math.PI * 2 - 1.1) / 11;
+  const SEATS = Array.from({ length: 9 }, (_, i) => {
+    const a = -Math.PI / 2 + 0.55 + i * (Math.PI * 2 - 1.1) / 8;
     const x = Math.cos(a) * 6, z = Math.sin(a) * 4.2;
     return { x, z, yaw: Math.atan2(-x, -z) };
   });
