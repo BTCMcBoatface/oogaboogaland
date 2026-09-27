@@ -11,7 +11,7 @@
   "use strict";
   const BL = window.BL = window.BL || {};
   const { hexToRgb, mulberry32 } = BL.math;
-  const { geometry, pushVert, face, box, bevelBox, lathe, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords } = BL.models;
+  const { geometry, pushVert, face, box, bevelBox, lathe, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords, moved, turnedY, turnedZ } = BL.models;
   const blob = (v, { cx, cy, cz, rx, ry, rz, chip = 0, floor = -Infinity, rand, color }) => {
     for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       for (let y = Math.max(floor, Math.floor(cy - ry)); y <= Math.ceil(cy + ry); y++) {
@@ -39,17 +39,7 @@
     }
   };
   // Rolls about z first, then yaws about y, mutating geo.verts in place.
-  const turn = (geo, yaw, roll = 0) => {
-    const p = geo.verts;
-    const cy = Math.cos(yaw), sy = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
-    for (let i = 0; i < p.length; i += 3) {
-      const x = p[i] * cr - p[i + 1] * sr, y = p[i] * sr + p[i + 1] * cr, z = p[i + 2];
-      p[i] = x * cy + z * sy;
-      p[i + 1] = y;
-      p[i + 2] = z * cy - x * sy;
-    }
-    return geo;
-  };
+  const turn = (geo, yaw, roll = 0) => turnedY(turnedZ(geo, roll), yaw);
   const noShadow = (geo) => {
     geo.castShadow = false;
     return geo;
@@ -984,11 +974,6 @@
       const d = pushVert(geo, x - cell / 2, y + cell / 2, z);
       face(geo, [a, b, c, d], hexToRgb(AMMO_BANANA.ink[ch]));
     }
-    return geo;
-  };
-  // Moves a built part by (x, y, z), in place.
-  const moved = (geo, x, y, z) => {
-    for (let i = 0; i < geo.verts.length; i += 3) { geo.verts[i] += x; geo.verts[i + 1] += y; geo.verts[i + 2] += z; }
     return geo;
   };
   // Separate bevelled planks with thin dark gaps between them, chunky bevelled corner posts and rails, a diagonal

@@ -5,7 +5,7 @@
   const { hexToRgb } = BL.math;
   const { createNode, addChild } = BL.scene;
   const { box, bevelBox, lathe, merge } = BL.models;
-  const { kartWheel, yToZ, turn, shift } = BL.raceModels;
+  const { kartWheel, yToZ, turn } = BL.raceModels, { moved } = BL.models;
   const { postSign, puff, limb, flatInto } = BL.hubModels;
   const { mulberry32 } = BL.math;
   const tones = (hex) => { const c = hexToRgb(hex); return [c, c, c, c]; };
@@ -72,7 +72,7 @@
       bevelBox({ w: 2.2, h: 0.1, d: 0.7, color: PLANK, bevel: 0.04, offset: { y: y + 0.1, z: -half + 0.3 } }),
       bevelBox({ w: 0.1, h: 0.9, d: 0.85, color: LEAF, bevel: 0.03, offset: { y: y + 0.58, z: -half + 0.35 } }),
       bevelBox({ w: 0.12, h: 0.3, d: 0.35, color: LEAF_DK, bevel: 0.03, offset: { y: y + 1.05, z: -half + 0.15 } }),
-      shift(turn(bevelBox({ w: 0.1, h: 0.1, d: 0.42, color: BANANA, bevel: 0.03 }), 0, 0, 0.5), 0, y + 1.24, -half + 0.3),
+      moved(turn(bevelBox({ w: 0.1, h: 0.1, d: 0.42, color: BANANA, bevel: 0.03 }), 0, 0, 0.5), 0, y + 1.24, -half + 0.3),
       bevelBox({ w: 0.1, h: 0.4, d: 0.1, color: BONE, bevel: 0.03, offset: { y: 0.2, z: -half + 0.5 } }),
       // The stone engine block the skull sits on.
       bevelBox({ w: 0.52, h: 0.32, d: 0.42, color: "#6b625a", bevel: 0.08, offset: { y: y + 0.42, z: 1.55 } })
@@ -98,7 +98,7 @@
     return merge(
       bevelBox({ w: 0.12, h: 2.4, d: 0.12, color: WOOD_DK, bevel: 0.03, offset: { y: 1.2 } }),
       bevelBox({ w: 0.18, h: 0.06, d: 0.18, color: "#b89760", bevel: 0.02, offset: { y: 2.3 } }),
-      shift(turn(cone, Math.PI / 2), 0.08, 2.3, 0)
+      moved(turn(cone, Math.PI / 2), 0.08, 2.3, 0)
     );
   });
   // Unit-radius hoop in the xz plane; the scene scales each ring's node to its radius.

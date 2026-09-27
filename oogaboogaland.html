@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; script-src 'sha256-Rj5ne2DTz3mSck1j036snWA4FCuOKsq9BgqwScqsPAE='; style-src 'sha256-dD8AVtazyOPkZfKxgDWlpmEf8gXYv6jhVe8qLiDx4zs='; img-src 'self' data:; media-src https://stream.noderunnersradio.com; connect-src https: wss:; base-uri 'none'; form-action 'none'">
+    content="default-src 'none'; script-src 'sha256-fFsI8lruJ/GYhOVRYKngn9+hi4/JmRRBPvprDxm1omg='; style-src 'sha256-dD8AVtazyOPkZfKxgDWlpmEf8gXYv6jhVe8qLiDx4zs='; img-src 'self' data:; media-src https://stream.noderunnersradio.com; connect-src https: wss:; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0a0a0b">
@@ -15044,6 +15044,42 @@ void main() {
     out.faces = geo.faces.map((f) => ({ ...f, i: [...f.i].reverse() }));
     return out;
   };
+  // Moves a freshly built geometry by (x, y, z), in place.
+  const moved = (geo, x, y, z) => {
+    const v = geo.verts;
+    for (let i = 0; i < v.length; i += 3) { v[i] += x; v[i + 1] += y; v[i + 2] += z; }
+    return geo;
+  };
+  // Turns a freshly built geometry about y, the way a node's rotation.y would.
+  const turnedY = (geo, a) => {
+    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
+    for (let i = 0; i < v.length; i += 3) {
+      const x = v[i], z = v[i + 2];
+      v[i] = x * c + z * s;
+      v[i + 2] = -x * s + z * c;
+    }
+    return geo;
+  };
+  // Turns a freshly built geometry about z: a positive angle rolls +x toward +y.
+  const turnedZ = (geo, a) => {
+    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
+    for (let i = 0; i < v.length; i += 3) {
+      const x = v[i], y = v[i + 1];
+      v[i] = x * c - y * s;
+      v[i + 1] = x * s + y * c;
+    }
+    return geo;
+  };
+  // Tips a freshly built geometry about x: a positive angle leans its top toward +z.
+  const turnedX = (geo, a) => {
+    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
+    for (let i = 0; i < v.length; i += 3) {
+      const y = v[i + 1], z = v[i + 2];
+      v[i + 1] = y * c - z * s;
+      v[i + 2] = y * s + z * c;
+    }
+    return geo;
+  };
   // Resting club angles: x tilts the head forward, z rolls it; carry is the working hang.
   const CLUB_REST = { x: 0.95, z: 0 };
   // The shared body every contributor gets. A character file (src/characters/<handle>.js)
@@ -15752,7 +15788,7 @@ void main() {
       item.buildNode = () => createNode({ geometry: swagGeo(item.id, item.build) });
     }
   }
-  BL.models = { geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, tube, ring, polyline, merge, forward, cached, variants, noShadow, makeVox, voxelGeometry, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
+  BL.models = { geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, tube, ring, polyline, merge, forward, moved, turnedX, turnedY, turnedZ, cached, variants, noShadow, makeVox, voxelGeometry, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
 })();
 
 // ---- js/convex.js ----
@@ -18745,7 +18781,7 @@ void main() {
   "use strict";
   const BL = window.BL = window.BL || {};
   const { hexToRgb, mulberry32 } = BL.math;
-  const { geometry, pushVert, face, box, bevelBox, lathe, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords } = BL.models;
+  const { geometry, pushVert, face, box, bevelBox, lathe, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords, moved, turnedY, turnedZ } = BL.models;
   const blob = (v, { cx, cy, cz, rx, ry, rz, chip = 0, floor = -Infinity, rand, color }) => {
     for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       for (let y = Math.max(floor, Math.floor(cy - ry)); y <= Math.ceil(cy + ry); y++) {
@@ -18773,17 +18809,7 @@ void main() {
     }
   };
   // Rolls about z first, then yaws about y, mutating geo.verts in place.
-  const turn = (geo, yaw, roll = 0) => {
-    const p = geo.verts;
-    const cy = Math.cos(yaw), sy = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
-    for (let i = 0; i < p.length; i += 3) {
-      const x = p[i] * cr - p[i + 1] * sr, y = p[i] * sr + p[i + 1] * cr, z = p[i + 2];
-      p[i] = x * cy + z * sy;
-      p[i + 1] = y;
-      p[i + 2] = z * cy - x * sy;
-    }
-    return geo;
-  };
+  const turn = (geo, yaw, roll = 0) => turnedY(turnedZ(geo, roll), yaw);
   const noShadow = (geo) => {
     geo.castShadow = false;
     return geo;
@@ -19718,11 +19744,6 @@ void main() {
       const d = pushVert(geo, x - cell / 2, y + cell / 2, z);
       face(geo, [a, b, c, d], hexToRgb(AMMO_BANANA.ink[ch]));
     }
-    return geo;
-  };
-  // Moves a built part by (x, y, z), in place.
-  const moved = (geo, x, y, z) => {
-    for (let i = 0; i < geo.verts.length; i += 3) { geo.verts[i] += x; geo.verts[i + 1] += y; geo.verts[i + 2] += z; }
     return geo;
   };
   // Separate bevelled planks with thin dark gaps between them, chunky bevelled corner posts and rails, a diagonal
@@ -21025,7 +21046,7 @@ void main() {
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  BL.jumbotronData = {"meta":{"generated_at":"2026-09-27T01:11:56.319Z","org":"OogaBoogaX","schema_version":3},"totals":{"contributors":50,"commits":1308,"prs":475,"reviews":56,"issues":28,"comments":391},"leaderboards":{"commits":[{"login":"portlandhodl","count":396},{"login":"w-s-bitcoin","count":378},{"login":"MrHodlX","count":121},{"login":"timechainb","count":82},{"login":"2140data","count":57},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":31},{"login":"pdubl22","count":23},{"login":"YellowBrokeIt","count":20},{"login":"Hero-Gamer","count":17},{"login":"rules-without-rulers","count":16},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"drneski","count":11},{"login":"J25dunn","count":10},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"knorrium","count":7},{"login":"Jdelg718","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"SaniExp","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":101},{"login":"portlandhodl","count":85},{"login":"w-s-bitcoin","count":67},{"login":"timechainb","count":33},{"login":"2140data","count":29},{"login":"ottoz0r","count":19},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"rules-without-rulers","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"tmmmemcee","count":6},{"login":"Jdelg718","count":5},{"login":"drneski","count":5},{"login":"knorrium","count":5},{"login":"RandyMcMillan","count":4},{"login":"SaniExp","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"YellowBrokeIt","count":3},{"login":"dani69654","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":27},{"login":"J25dunn","count":14},{"login":"w-s-bitcoin","count":9},{"login":"portlandhodl","count":5},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"portlandhodl","count":88},{"login":"MrHodlX","count":82},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":48},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"rules-without-rulers","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"Jdelg718","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"YellowBrokeIt","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"drneski","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":15},{"login":"rules-without-rulers","count":8},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"repos":[{"name":"entropylab","totals":{"contributors":46,"commits":1030,"prs":392,"reviews":50,"issues":20,"comments":381},"weekly":[{"week":"2026-W35","commits":333,"prs":134,"reviews":2,"issues":1,"comments":69},{"week":"2026-W36","commits":399,"prs":136,"reviews":16,"issues":0,"comments":130},{"week":"2026-W37","commits":82,"prs":36,"reviews":18,"issues":2,"comments":76},{"week":"2026-W38","commits":132,"prs":51,"reviews":5,"issues":2,"comments":39},{"week":"2026-W39","commits":84,"prs":35,"reviews":9,"issues":15,"comments":67}],"last_activity_at":"2026-09-27T00:43:08Z","leaderboards":{"commits":[{"login":"portlandhodl","count":396},{"login":"w-s-bitcoin","count":218},{"login":"MrHodlX","count":116},{"login":"timechainb","count":82},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":24},{"login":"pdubl22","count":23},{"login":"Hero-Gamer","count":17},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"J25dunn","count":10},{"login":"2140data","count":9},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"Jdelg718","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"SaniExp","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"rules-without-rulers","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":98},{"login":"portlandhodl","count":85},{"login":"w-s-bitcoin","count":37},{"login":"timechainb","count":33},{"login":"ottoz0r","count":18},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"2140data","count":10},{"login":"Jdelg718","count":5},{"login":"RandyMcMillan","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"SaniExp","count":3},{"login":"dani69654","count":3},{"login":"tmmmemcee","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"rules-without-rulers","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":27},{"login":"J25dunn","count":14},{"login":"portlandhodl","count":5},{"login":"w-s-bitcoin","count":3},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"portlandhodl","count":88},{"login":"MrHodlX","count":82},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":46},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Jdelg718","count":2},{"login":"rules-without-rulers","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":15},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-25T20:27:53Z"},{"login":"timechainb","last_seen_at":"2026-09-25T20:24:03Z"},{"login":"portlandhodl","last_seen_at":"2026-09-26T19:03:17Z"},{"login":"MrHodlX","last_seen_at":"2026-09-27T00:43:08Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T00:52:02Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-02T02:19:20Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"SaniExp","last_seen_at":"2026-09-02T16:47:02Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"2140data","last_seen_at":"2026-08-31T04:54:04Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-12T17:11:11Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-17T00:58:54Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"}]},{"name":"oogaboogaland","totals":{"contributors":11,"commits":259,"prs":77,"reviews":6,"issues":8,"comments":10},"weekly":[{"week":"2026-W37","commits":45,"prs":19,"reviews":0,"issues":0,"comments":1},{"week":"2026-W38","commits":80,"prs":30,"reviews":3,"issues":0,"comments":0},{"week":"2026-W39","commits":134,"prs":28,"reviews":3,"issues":8,"comments":9}],"last_activity_at":"2026-09-26T23:02:08Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":147},{"login":"2140data","count":48},{"login":"YellowBrokeIt","count":20},{"login":"rules-without-rulers","count":14},{"login":"drneski","count":11},{"login":"knorrium","count":7},{"login":"MrHodlX","count":5},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ottoz0r","count":1}],"prs":[{"login":"w-s-bitcoin","count":24},{"login":"2140data","count":19},{"login":"rules-without-rulers","count":11},{"login":"drneski","count":5},{"login":"knorrium","count":5},{"login":"MrHodlX","count":3},{"login":"YellowBrokeIt","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ottoz0r","count":1}],"reviews":[{"login":"w-s-bitcoin","count":6}],"comments":[{"login":"rules-without-rulers","count":4},{"login":"Holo-Elfstone","count":2},{"login":"w-s-bitcoin","count":2},{"login":"YellowBrokeIt","count":1},{"login":"drneski","count":1}],"issues":[{"login":"rules-without-rulers","count":8}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-26T23:02:08Z"},{"login":"MrHodlX","last_seen_at":"2026-09-20T21:37:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"2140data","last_seen_at":"2026-09-25T23:49:17Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-26T16:25:17Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"drneski","last_seen_at":"2026-09-26T20:17:05Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"}]},{"name":"bedrock","totals":{"contributors":2,"commits":19,"prs":6,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W36","commits":16,"prs":6,"reviews":0,"issues":0,"comments":0},{"week":"2026-W37","commits":3,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-07T05:21:02Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":13},{"login":"ottoz0r","count":6}],"prs":[{"login":"w-s-bitcoin","count":6}],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-07T05:21:02Z"},{"login":"ottoz0r","last_seen_at":"2026-09-04T21:29:31Z"}]}],"recent":[{"login":"MrHodlX","repo":"entropylab","type":"merge","occurred_at":"2026-09-27T00:43:08Z"},{"login":"MrHodlX","repo":"entropylab","type":"pr","occurred_at":"2026-09-26T23:46:12Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-26T23:45:49Z"},{"login":"w-s-bitcoin","repo":"oogaboogaland","type":"merge","occurred_at":"2026-09-26T23:02:08Z"},{"login":"w-s-bitcoin","repo":"oogaboogaland","type":"commit","occurred_at":"2026-09-26T23:01:20Z"},{"login":"drneski","repo":"oogaboogaland","type":"commit","occurred_at":"2026-09-26T20:17:05Z"},{"login":"MrHodlX","repo":"entropylab","type":"issue","occurred_at":"2026-09-26T19:47:58Z"},{"login":"Jakob-997","repo":"entropylab","type":"comment","occurred_at":"2026-09-26T19:08:38Z"},{"login":"portlandhodl","repo":"entropylab","type":"merge","occurred_at":"2026-09-26T19:03:17Z"},{"login":"drneski","repo":"oogaboogaland","type":"commit","occurred_at":"2026-09-26T17:32:32Z"},{"login":"MrHodlX","repo":"entropylab","type":"issue","occurred_at":"2026-09-26T17:31:26Z"},{"login":"rules-without-rulers","repo":"oogaboogaland","type":"issue","occurred_at":"2026-09-26T16:25:17Z"}],"contributors":[{"login":"portlandhodl","last_seen_at":"2026-09-26T19:03:17Z"},{"login":"w-s-bitcoin","last_seen_at":"2026-09-26T23:02:08Z"},{"login":"MrHodlX","last_seen_at":"2026-09-27T00:43:08Z"},{"login":"timechainb","last_seen_at":"2026-09-25T20:24:03Z"},{"login":"2140data","last_seen_at":"2026-09-25T23:49:17Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T12:31:24Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-26T16:25:17Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"drneski","last_seen_at":"2026-09-26T20:17:05Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"}]};
+  BL.jumbotronData = {"meta":{"generated_at":"2026-09-25T16:20:00.403Z","org":"OogaBoogaX","schema_version":3},"totals":{"contributors":49,"commits":1258,"prs":458,"reviews":56,"issues":17,"comments":358},"leaderboards":{"commits":[{"login":"portlandhodl","count":394},{"login":"w-s-bitcoin","count":360},{"login":"MrHodlX","count":111},{"login":"timechainb","count":78},{"login":"2140data","count":48},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":31},{"login":"pdubl22","count":23},{"login":"YellowBrokeIt","count":20},{"login":"Hero-Gamer","count":17},{"login":"rules-without-rulers","count":16},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"J25dunn","count":10},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"knorrium","count":7},{"login":"Jdelg718","count":5},{"login":"drneski","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":94},{"login":"portlandhodl","count":84},{"login":"w-s-bitcoin","count":65},{"login":"timechainb","count":31},{"login":"2140data","count":26},{"login":"ottoz0r","count":19},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"rules-without-rulers","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"tmmmemcee","count":6},{"login":"Jdelg718","count":5},{"login":"knorrium","count":5},{"login":"RandyMcMillan","count":4},{"login":"drneski","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"SaniExp","count":3},{"login":"YellowBrokeIt","count":3},{"login":"dani69654","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":27},{"login":"J25dunn","count":14},{"login":"w-s-bitcoin","count":9},{"login":"portlandhodl","count":5},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"portlandhodl","count":87},{"login":"Hero-Gamer","count":53},{"login":"MrHodlX","count":52},{"login":"w-s-bitcoin","count":48},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"rules-without-rulers","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"Jdelg718","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"YellowBrokeIt","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"drneski","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}]},"repos":[{"name":"entropylab","totals":{"contributors":45,"commits":1013,"prs":382,"reviews":50,"issues":11,"comments":348},"weekly":[{"week":"2026-W35","commits":333,"prs":134,"reviews":2,"issues":1,"comments":69},{"week":"2026-W36","commits":399,"prs":136,"reviews":16,"issues":0,"comments":130},{"week":"2026-W37","commits":82,"prs":36,"reviews":18,"issues":2,"comments":76},{"week":"2026-W38","commits":132,"prs":51,"reviews":5,"issues":2,"comments":39},{"week":"2026-W39","commits":67,"prs":25,"reviews":9,"issues":6,"comments":34}],"last_activity_at":"2026-09-25T15:58:08Z","leaderboards":{"commits":[{"login":"portlandhodl","count":394},{"login":"w-s-bitcoin","count":217},{"login":"MrHodlX","count":106},{"login":"timechainb","count":78},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":24},{"login":"pdubl22","count":23},{"login":"Hero-Gamer","count":17},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"J25dunn","count":10},{"login":"2140data","count":9},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"Jdelg718","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"SaniExp","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"rules-without-rulers","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":91},{"login":"portlandhodl","count":84},{"login":"w-s-bitcoin","count":37},{"login":"timechainb","count":31},{"login":"ottoz0r","count":18},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"2140data","count":10},{"login":"Jdelg718","count":5},{"login":"RandyMcMillan","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"SaniExp","count":3},{"login":"dani69654","count":3},{"login":"tmmmemcee","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"rules-without-rulers","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":27},{"login":"J25dunn","count":14},{"login":"portlandhodl","count":5},{"login":"w-s-bitcoin","count":3},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"portlandhodl","count":87},{"login":"Hero-Gamer","count":53},{"login":"MrHodlX","count":52},{"login":"w-s-bitcoin","count":46},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Jdelg718","count":2},{"login":"rules-without-rulers","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-24T00:46:08Z"},{"login":"timechainb","last_seen_at":"2026-09-25T05:14:34Z"},{"login":"portlandhodl","last_seen_at":"2026-09-25T13:58:09Z"},{"login":"MrHodlX","last_seen_at":"2026-09-25T15:58:08Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T00:52:02Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-02T02:19:20Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"SaniExp","last_seen_at":"2026-09-02T16:47:02Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"2140data","last_seen_at":"2026-08-31T04:54:04Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-12T17:11:11Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-17T00:58:54Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-24T17:28:36Z"}]},{"name":"oogaboogaland","totals":{"contributors":10,"commits":226,"prs":70,"reviews":6,"issues":6,"comments":10},"weekly":[{"week":"2026-W37","commits":45,"prs":19,"reviews":0,"issues":0,"comments":1},{"week":"2026-W38","commits":80,"prs":30,"reviews":3,"issues":0,"comments":0},{"week":"2026-W39","commits":101,"prs":21,"reviews":3,"issues":6,"comments":9}],"last_activity_at":"2026-09-25T04:34:22Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":130},{"login":"2140data","count":39},{"login":"YellowBrokeIt","count":20},{"login":"rules-without-rulers","count":14},{"login":"knorrium","count":7},{"login":"MrHodlX","count":5},{"login":"drneski","count":5},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"ottoz0r","count":1}],"prs":[{"login":"w-s-bitcoin","count":22},{"login":"2140data","count":16},{"login":"rules-without-rulers","count":11},{"login":"knorrium","count":5},{"login":"drneski","count":4},{"login":"MrHodlX","count":3},{"login":"YellowBrokeIt","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"ottoz0r","count":1}],"reviews":[{"login":"w-s-bitcoin","count":6}],"comments":[{"login":"rules-without-rulers","count":4},{"login":"Holo-Elfstone","count":2},{"login":"w-s-bitcoin","count":2},{"login":"YellowBrokeIt","count":1},{"login":"drneski","count":1}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-25T04:03:38Z"},{"login":"MrHodlX","last_seen_at":"2026-09-20T21:37:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"2140data","last_seen_at":"2026-09-23T13:42:44Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-25T04:14:15Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"drneski","last_seen_at":"2026-09-25T04:34:22Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"}]},{"name":"bedrock","totals":{"contributors":2,"commits":19,"prs":6,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W36","commits":16,"prs":6,"reviews":0,"issues":0,"comments":0},{"week":"2026-W37","commits":3,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-07T05:21:02Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":13},{"login":"ottoz0r","count":6}],"prs":[{"login":"w-s-bitcoin","count":6}],"reviews":[],"comments":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-07T05:21:02Z"},{"login":"ottoz0r","last_seen_at":"2026-09-04T21:29:31Z"}]}],"recent":[{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-25T15:58:08Z"},{"login":"MrHodlX","repo":"entropylab","type":"merge","occurred_at":"2026-09-25T15:43:25Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-25T15:36:49Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-25T15:22:00Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-25T15:20:00Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-25T15:14:08Z"},{"login":"MrHodlX","repo":"entropylab","type":"merge","occurred_at":"2026-09-25T15:03:01Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-25T14:55:38Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-25T14:38:15Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-25T14:22:03Z"},{"login":"MrHodlX","repo":"entropylab","type":"pr","occurred_at":"2026-09-25T14:17:05Z"},{"login":"portlandhodl","repo":"entropylab","type":"comment","occurred_at":"2026-09-25T13:58:09Z"}],"contributors":[{"login":"portlandhodl","last_seen_at":"2026-09-25T13:58:09Z"},{"login":"w-s-bitcoin","last_seen_at":"2026-09-25T04:03:38Z"},{"login":"MrHodlX","last_seen_at":"2026-09-25T15:58:08Z"},{"login":"timechainb","last_seen_at":"2026-09-25T05:14:34Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"2140data","last_seen_at":"2026-09-23T13:42:44Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T12:31:24Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-25T04:14:15Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"drneski","last_seen_at":"2026-09-25T04:34:22Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"SaniExp","last_seen_at":"2026-09-02T16:47:02Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-24T17:28:36Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"}]};
 })();
 
 // ---- js/jumbotron.js ----
@@ -43572,7 +43593,7 @@ void main() {
   const BL = window.BL = window.BL || {};
   const { hexToRgb, mulberry32 } = BL.math;
   const { createNode, addChild } = BL.scene;
-  const { box, bevelBox, lathe, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo } = BL.models;
+  const { box, bevelBox, lathe, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, moved, turnedX, turnedY, turnedZ } = BL.models;
   const { puff, limb, padNormals, flatInto } = BL.hubModels;
   // Cartoon builders on the hub's kit: `soft()` starts a smooth geometry that bevelled parts join through
   // `flatInto`, `tones(hex)` is one colour in the four bands `puff` takes, and `lump` a rounded stone.
@@ -43609,33 +43630,8 @@ void main() {
     }
     return geo;
   };
-  const shift = (geo, dx, dy, dz) => {
-    const p = geo.verts;
-    for (let i = 0; i < p.length; i += 3) {
-      p[i] += dx;
-      p[i + 1] += dy;
-      p[i + 2] += dz;
-    }
-    return geo;
-  };
-  const turn = (geo, yaw, roll = 0, pitch = 0) => {
-    const p = geo.verts;
-    const cy = Math.cos(yaw), sy = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll), cp = Math.cos(pitch), sp = Math.sin(pitch);
-    for (let i = 0; i < p.length; i += 3) {
-      let x = p[i], y = p[i + 1], z = p[i + 2];
-      let y1 = y * cp - z * sp, z1 = y * sp + z * cp;
-      y = y1;
-      z = z1;
-      const x2 = x * cr - y * sr;
-      y1 = x * sr + y * cr;
-      x = x2;
-      y = y1;
-      p[i] = x * cy + z * sy;
-      p[i + 1] = y;
-      p[i + 2] = z * cy - x * sy;
-    }
-    return geo;
-  };
+  // Pitch about x, then roll about z, then yaw about y.
+  const turn = (geo, yaw, roll = 0, pitch = 0) => turnedY(turnedZ(turnedX(geo, pitch), roll), yaw);
   const noShadow = (geo) => {
     geo.castShadow = false;
     return geo;
@@ -43788,7 +43784,7 @@ void main() {
     const parts = [];
     for (const side of [-1, 1]) {
       for (let y = 0; y < GANTRY.height; y += 0.5) parts.push(turn(bevelBox({ w: 0.92 + (rand() - 0.5) * 0.14, h: 0.5, d: 0.92 + (rand() - 0.5) * 0.14, color: stone(), bevel: 0.08, offset: { y: y + 0.25 } }), (rand() - 0.5) * 0.25));
-      for (let k = parts.length - GANTRY.height * 2; k < parts.length; k++) shift(parts[k], side * GANTRY.span / 2, 0, 0);
+      for (let k = parts.length - GANTRY.height * 2; k < parts.length; k++) moved(parts[k], side * GANTRY.span / 2, 0, 0);
       parts.push(bevelBox({ w: 1.3, h: 0.3, d: 1.3, color: "#57504a", bevel: 0.07, offset: { x: side * GANTRY.span / 2, y: GANTRY.height + 0.15 } }));
       for (const y of [GANTRY.height + 0.42, GANTRY.height + 0.68]) parts.push(bevelBox({ w: 0.6, h: 0.08, d: 0.6, color: ROPE, bevel: 0.025, offset: { x: side * (GANTRY.span / 2 - 0.2), y } }));
     }
@@ -43921,9 +43917,9 @@ void main() {
     const h = 3.6 + rand() * 1.8, parts = [box({ w: 0.36, h: h * 0.4, d: 0.36, color: "#4e361f", offset: { y: h * 0.2 } })];
     for (let t = 0; t < 4; t++) {
       const y = h * (0.24 + t * 0.19), r = 1.7 - t * 0.35;
-      parts.push(shift(turn(lathe({ profile: [[r, 0], [r * 0.55, h * 0.1], [r * 0.15, h * 0.22], [0, h * 0.25]], segments: 8, color: (k) => k < 0.4 ? "#2f6b3a" : k < 0.7 ? "#3a7a44" : "#3f8248" }), t * 0.4), 0, y, 0));
-      parts.push(shift(turn(lathe({ profile: [[r * 0.85, h * 0.04], [r * 0.4, h * 0.14], [0, h * 0.2]], segments: 8, color: (k) => k < 0.5 ? "#3f8248" : "#4d9455" }), t * 0.4 + 0.4), 0.15, y + 0.05, -0.1));
-      parts.push(shift(turn(lathe({ profile: [[r * 0.6, h * 0.1], [r * 0.15, h * 0.22], [0, h * 0.255]], segments: 8, color: "#eef3f7" }), t * 0.4), 0, y + 0.02, 0));
+      parts.push(moved(turn(lathe({ profile: [[r, 0], [r * 0.55, h * 0.1], [r * 0.15, h * 0.22], [0, h * 0.25]], segments: 8, color: (k) => k < 0.4 ? "#2f6b3a" : k < 0.7 ? "#3a7a44" : "#3f8248" }), t * 0.4), 0, y, 0));
+      parts.push(moved(turn(lathe({ profile: [[r * 0.85, h * 0.04], [r * 0.4, h * 0.14], [0, h * 0.2]], segments: 8, color: (k) => k < 0.5 ? "#3f8248" : "#4d9455" }), t * 0.4 + 0.4), 0.15, y + 0.05, -0.1));
+      parts.push(moved(turn(lathe({ profile: [[r * 0.6, h * 0.1], [r * 0.15, h * 0.22], [0, h * 0.255]], segments: 8, color: "#eef3f7" }), t * 0.4), 0, y + 0.02, 0));
     }
     return merge(...parts);
   });
@@ -43932,15 +43928,15 @@ void main() {
     const h = 1.6 + i * 0.7;
     return merge(
       turn(lathe({ profile: [[0.36, 0], [0.42, h * 0.3], [0.18, h * 0.8], [0, h]], segments: 6, color: colors[0], emissive: 0.75 }), i * 0.9),
-      shift(turn(lathe({ profile: [[0.2, 0], [0.24, h * 0.2], [0.1, h * 0.5], [0, h * 0.62]], segments: 5, color: colors[1], emissive: 0.85 }), i * 1.3, 0, 0.35), 0.4, 0, 0.2),
-      shift(turn(lathe({ profile: [[0.16, 0], [0.2, h * 0.15], [0.08, h * 0.4], [0, h * 0.5]], segments: 5, color: colors[0], emissive: 0.75 }), i * 2.1, 0, -0.4), -0.35, 0, -0.25)
+      moved(turn(lathe({ profile: [[0.2, 0], [0.24, h * 0.2], [0.1, h * 0.5], [0, h * 0.62]], segments: 5, color: colors[1], emissive: 0.85 }), i * 1.3, 0, 0.35), 0.4, 0, 0.2),
+      moved(turn(lathe({ profile: [[0.16, 0], [0.2, h * 0.15], [0.08, h * 0.4], [0, h * 0.5]], segments: 5, color: colors[0], emissive: 0.75 }), i * 2.1, 0, -0.4), -0.35, 0, -0.25)
     );
   });
   const iceSpike = variants((i) => {
     const h = 1.2 + i * 0.6;
     return merge(
       turn(lathe({ profile: [[0.5, 0], [0.34, h * 0.4], [0.1, h * 0.85], [0, h]], segments: 5, color: (t) => t < 0.5 ? "#cfe6f5" : "#eef7fb" }), i * 0.8),
-      shift(turn(lathe({ profile: [[0.3, 0], [0.18, h * 0.3], [0, h * 0.55]], segments: 5, color: "#dbeef8" }), i * 1.7), 0.4, 0, 0.3)
+      moved(turn(lathe({ profile: [[0.3, 0], [0.18, h * 0.3], [0, h * 0.55]], segments: 5, color: "#dbeef8" }), i * 1.7), 0.4, 0, 0.3)
     );
   });
   const snowRock = variants((i) => stoneHeap(900 + i, 0.75 + i * 0.3, "#6f7c87", "#586470", "#eef3f7", 0.24));
@@ -43948,7 +43944,7 @@ void main() {
     const h = 2 + i * 1.3;
     return merge(
       turn(lathe({ profile: [[0.6, 0.2], [0.48, -h * 0.35], [0.2, -h * 0.75], [0, -h]], segments: 6, color: (t) => t < 0.5 ? "#3a3330" : "#4a413a" }), i * 0.9),
-      shift(turn(lathe({ profile: [[0.3, 0.2], [0.22, -h * 0.25], [0, -h * 0.55]], segments: 5, color: "#2b2724" }), i * 1.6), 0.45, 0, 0.3)
+      moved(turn(lathe({ profile: [[0.3, 0.2], [0.22, -h * 0.25], [0, -h * 0.55]], segments: 5, color: "#2b2724" }), i * 1.6), 0.45, 0, 0.3)
     );
   });
   const rainDrop = cached(() => noShadow(box({ w: 0.025, h: 0.7, d: 0.025, color: "#c9d6e2", emissive: 0.35 })));
@@ -43967,7 +43963,7 @@ void main() {
     bevelBox({ w: 0.32, h: 0.3, d: 0.32, color: "#e04a3a", bevel: 0.06, offset: { y: 1.5 } })
   ));
 
-  BL.raceModels = { KART, GANTRY, gantryLampY, DINO_HIDES, kart, kartWheel, dino, gantry, gantryLamp, boostFlame, stalactite, rainDrop, snowFlake, boostPad, itemCrate, rockShot, peel, boulder, snowball, spectator, banner, torchStand, torchFlame, palm, lagoonRock, lavaRock, obsidianSpike, bones, pine, crystal, iceSpike, snowRock, planks, buoy, post, turn, shift, yToX, yToZ };
+  BL.raceModels = { KART, GANTRY, gantryLampY, DINO_HIDES, kart, kartWheel, dino, gantry, gantryLamp, boostFlame, stalactite, rainDrop, snowFlake, boostPad, itemCrate, rockShot, peel, boulder, snowball, spectator, banner, torchStand, torchFlame, palm, lagoonRock, lavaRock, obsidianSpike, bones, pine, crystal, iceSpike, snowRock, planks, buoy, post, turn, yToX, yToZ };
 })();
 
 // ---- js/drop-models.js ----
@@ -43978,7 +43974,7 @@ void main() {
   const { hexToRgb } = BL.math;
   const { createNode, addChild } = BL.scene;
   const { box, bevelBox, lathe, merge } = BL.models;
-  const { kartWheel, yToZ, turn, shift } = BL.raceModels;
+  const { kartWheel, yToZ, turn } = BL.raceModels, { moved } = BL.models;
   const { postSign, puff, limb, flatInto } = BL.hubModels;
   const { mulberry32 } = BL.math;
   const tones = (hex) => { const c = hexToRgb(hex); return [c, c, c, c]; };
@@ -44045,7 +44041,7 @@ void main() {
       bevelBox({ w: 2.2, h: 0.1, d: 0.7, color: PLANK, bevel: 0.04, offset: { y: y + 0.1, z: -half + 0.3 } }),
       bevelBox({ w: 0.1, h: 0.9, d: 0.85, color: LEAF, bevel: 0.03, offset: { y: y + 0.58, z: -half + 0.35 } }),
       bevelBox({ w: 0.12, h: 0.3, d: 0.35, color: LEAF_DK, bevel: 0.03, offset: { y: y + 1.05, z: -half + 0.15 } }),
-      shift(turn(bevelBox({ w: 0.1, h: 0.1, d: 0.42, color: BANANA, bevel: 0.03 }), 0, 0, 0.5), 0, y + 1.24, -half + 0.3),
+      moved(turn(bevelBox({ w: 0.1, h: 0.1, d: 0.42, color: BANANA, bevel: 0.03 }), 0, 0, 0.5), 0, y + 1.24, -half + 0.3),
       bevelBox({ w: 0.1, h: 0.4, d: 0.1, color: BONE, bevel: 0.03, offset: { y: 0.2, z: -half + 0.5 } }),
       // The stone engine block the skull sits on.
       bevelBox({ w: 0.52, h: 0.32, d: 0.42, color: "#6b625a", bevel: 0.08, offset: { y: y + 0.42, z: 1.55 } })
@@ -44071,7 +44067,7 @@ void main() {
     return merge(
       bevelBox({ w: 0.12, h: 2.4, d: 0.12, color: WOOD_DK, bevel: 0.03, offset: { y: 1.2 } }),
       bevelBox({ w: 0.18, h: 0.06, d: 0.18, color: "#b89760", bevel: 0.02, offset: { y: 2.3 } }),
-      shift(turn(cone, Math.PI / 2), 0.08, 2.3, 0)
+      moved(turn(cone, Math.PI / 2), 0.08, 2.3, 0)
     );
   });
   // Unit-radius hoop in the xz plane; the scene scales each ring's node to its radius.
@@ -44579,7 +44575,7 @@ void main() {
   const { hexToRgb, mulberry32 } = BL.math;
   const { createNode, addChild } = BL.scene;
   const { box, bevelBox, lathe, ring, merge, cached, noShadow, makeVox, voxelGeometry, pushVert, face } = BL.models;
-  const { turn, shift } = BL.raceModels;
+  const { turn } = BL.raceModels, { moved } = BL.models;
   const { postSign, limb, padNormals, flatInto, puff: hubPuff } = BL.hubModels;
   const { rocketParts, rocket } = BL;
   const keyed = (build) => {
@@ -44612,12 +44608,12 @@ void main() {
   // A stick from radius r0 at y0 to radius r1 at y1, at angle a round the axis.
   const stick = (r0, y0, r1, y1, a, width, color) => {
     const len = Math.hypot(r1 - r0, y1 - y0);
-    return turn(shift(turn(box({ w: width, h: len, d: width, color }), 0, Math.atan2(r0 - r1, y1 - y0)), (r0 + r1) / 2, (y0 + y1) / 2, 0), -a);
+    return turn(moved(turn(box({ w: width, h: len, d: width, color }), 0, Math.atan2(r0 - r1, y1 - y0)), (r0 + r1) / 2, (y0 + y1) / 2, 0), -a);
   };
   // A thin box lying along a line in the yz plane, for rails and ropes.
   const beam = (x, y0, z0, y1, z1, w, h, color) => {
     const len = Math.hypot(y1 - y0, z1 - z0);
-    return shift(turn(box({ w, h, d: len, color }), 0, 0, -Math.atan2(y1 - y0, z1 - z0)), x, (y0 + y1) / 2, (z0 + z1) / 2);
+    return moved(turn(box({ w, h, d: len, color }), 0, 0, -Math.atan2(y1 - y0, z1 - z0)), x, (y0 + y1) / 2, (z0 + z1) / 2);
   };
   const hoops = (r, ys) => ys.map((y) => ring({ r, thickness: 0.035, y, segments: 10, color: "#2d241c" }));
 
@@ -44643,18 +44639,18 @@ void main() {
       ...Array.from({ length: 12 }, (_, i) => stick(p.r + 0.04, 0.04, 0.12, p.h + 0.22, i / 12 * Math.PI * 2 + 0.13, 0.085, i % 2 ? WOOD : PLANK)),
       ring({ r: p.r - 0.02, thickness: 0.05, y: 0.34, segments: 12, color: ROPE }),
       ring({ r: 0.6, thickness: 0.045, y: 1.06, segments: 12, color: ROPE }),
-      shift(turn(box({ w: 0.42, h: 0.5, d: 0.26, color: LEAF }), 0, 0, -0.45), 0, 1.02, -0.62),
-      shift(turn(box({ w: 0.46, h: 0.08, d: 0.3, color: ROPE }), 0, 0, -0.45), 0, 1.02, -0.62)
+      moved(turn(box({ w: 0.42, h: 0.5, d: 0.26, color: LEAF }), 0, 0, -0.45), 0, 1.02, -0.62),
+      moved(turn(box({ w: 0.46, h: 0.08, d: 0.3, color: ROPE }), 0, 0, -0.45), 0, 1.02, -0.62)
     ),
     gourdpod: (p) => roundMerge(
       roundLatheBy({ profile: [[0, 0], [0.62, 0], [p.r, 0.24], [0.83, 0.6], [0.58, 0.95], [0.42, 1.18], [0.37, 1.34], [0.32, 1.34]], segments: 12, color: (t, s) => t > 0.8 ? "#8a6a2c" : s % 2 ? "#d9a441" : "#c98a2e" }),
-      ...[-1, 1].map((side) => shift(turn(box({ w: 0.09, h: 0.55, d: 0.09, color: WOOD_DK }), 0, side * 0.35), side * 0.42, 1.45, 0)),
-      shift(turn(box({ w: 0.4, h: 0.44, d: 0.24, color: LEAF }), 0, 0, -0.4), 0, 0.82, -0.66),
+      ...[-1, 1].map((side) => moved(turn(box({ w: 0.09, h: 0.55, d: 0.09, color: WOOD_DK }), 0, side * 0.35), side * 0.42, 1.45, 0)),
+      moved(turn(box({ w: 0.4, h: 0.44, d: 0.24, color: LEAF }), 0, 0, -0.4), 0, 0.82, -0.66),
       ring({ r: 0.8, thickness: 0.04, y: 0.5, segments: 12, color: ROPE })
     ),
     leafshield: (p) => roundMerge(
       roundLathe({ profile: [[0, 0.05], [p.r - 0.05, 0.05], [p.r - 0.05, p.h], [0, p.h]], segments: 14, color: LEAF_DK }),
-      ...Array.from({ length: 10 }, (_, i) => turn(shift(box({ w: 0.34, h: 0.05, d: p.r + 0.08, color: i % 2 ? LEAF : "#5f9c45" }), 0, 0.03, (p.r + 0.08) / 2), i / 10 * Math.PI * 2))
+      ...Array.from({ length: 10 }, (_, i) => turn(moved(box({ w: 0.34, h: 0.05, d: p.r + 0.08, color: i % 2 ? LEAF : "#5f9c45" }), 0, 0.03, (p.r + 0.08) / 2), i / 10 * Math.PI * 2))
     ),
     mudshield: (p) => roundMerge(
       roundLatheBy({ profile: [[0, 0], [0.88, 0], [p.r, 0.12], [0.97, 0.26], [0.2, p.h], [0, p.h]], segments: 14, color: (t, s) => (s * 7) % 5 === 0 ? MUD_DK : MUD }),
@@ -44679,7 +44675,7 @@ void main() {
     bigbarrel: (p) => roundMerge(
       roundLatheBy({ profile: [[0, 0], [0.84, 0], [0.97, 0.45], [p.r, 1.25], [0.97, 2.05], [0.84, p.h], [0, p.h]], segments: 14, color: (t, s) => s % 2 ? WOOD : PLANK }),
       ...hoops(0.99, [0.45, 1.0, 1.5, 2.05]),
-      shift(turn(box({ w: 0.62, h: 0.16, d: 0.04, color: BANANA, emissive: 0.1 }), 0, 0.5), 0, 1.25, 1.0)
+      moved(turn(box({ w: 0.62, h: 0.16, d: 0.04, color: BANANA, emissive: 0.1 }), 0, 0.5), 0, 1.25, 1.0)
     ),
     pot: (p) => roundMerge(
       roundLatheBy({ profile: [[0, 0.02], [0.62, 0], [p.r, 0.12], [0.5, 0.36], [0.55, 0.6], [0.64, 0.8], [0.6, p.h], [0, p.h]], segments: 12, color: (t) => t > 0.4 && t < 0.6 ? CLAY_DK : CLAY }),
@@ -44695,7 +44691,7 @@ void main() {
       ...[0.55, 0.78].map((y) => ring({ r: 0.36 + (y - 0.5) * 0.4, thickness: 0.035, y, segments: 10, color: ROPE }))
     ),
     bamboo: (p) => roundMerge(
-      ...[0, 2.09, 4.19].map((a) => shift(roundLatheBy({ profile: [[0, 0], [0.24, 0], [0.24, 0.18], [0.25, 0.2], [0.24, 0.22], [0.24, 0.9], [0.26, 0.92], [0.24, 0.95], [0.24, 1.7], [0.26, 1.72], [0.24, 1.75], [0.24, p.h], [0, p.h]], segments: 8, color: (t) => t < 0.1 ? "#2b261e" : t % 0.25 < 0.04 ? "#6f8a2f" : "#9bb84a" }), Math.cos(a) * 0.25, 0, Math.sin(a) * 0.25)),
+      ...[0, 2.09, 4.19].map((a) => moved(roundLatheBy({ profile: [[0, 0], [0.24, 0], [0.24, 0.18], [0.25, 0.2], [0.24, 0.22], [0.24, 0.9], [0.26, 0.92], [0.24, 0.95], [0.24, 1.7], [0.26, 1.72], [0.24, 1.75], [0.24, p.h], [0, p.h]], segments: 8, color: (t) => t < 0.1 ? "#2b261e" : t % 0.25 < 0.04 ? "#6f8a2f" : "#9bb84a" }), Math.cos(a) * 0.25, 0, Math.sin(a) * 0.25)),
       ...[0.5, 1.4, 2.3].map((y) => ring({ r: 0.5, thickness: 0.04, y, segments: 10, color: LEAF_DK }))
     ),
     vine: (p) => roundMerge(
@@ -44734,7 +44730,7 @@ void main() {
   const tether = cached(() => noShadow(box({ w: 0.05, h: 0.05, d: 1, color: "#f3efe4", emissive: 0.2, offset: { z: 0.5 } })));
   const spaceRock = cached(() => roundMerge(
     roundLatheBy({ profile: [[0, -1], [0.7, -0.85], [1.05, -0.3], [0.95, 0.35], [0.6, 0.85], [0, 1]], segments: 9, color: (t, s) => (s * 5 + Math.floor(t * 7)) % 4 === 0 ? "#4a4541" : "#6b625a" }),
-    ...[[0.3, 0.9, 0.1, 0.5], [-0.5, 0.75, 0.2, -0.3], [0.1, 0.8, -0.55, 0.9]].map(([x, y, z, a]) => shift(turn(box({ w: 0.2, h: 0.55, d: 0.2, color: "#7fe0ff", emissive: 1 }), a, 0.3), x, y, z))
+    ...[[0.3, 0.9, 0.1, 0.5], [-0.5, 0.75, 0.2, -0.3], [0.1, 0.8, -0.55, 0.9]].map(([x, y, z, a]) => moved(turn(box({ w: 0.2, h: 0.55, d: 0.2, color: "#7fe0ff", emissive: 1 }), a, 0.3), x, y, z))
   ));
   const readingLight = cached(() => noShadow(box({ w: 0.12, h: 0.12, d: 0.12, color: "#7fe0ff", emissive: 1 })));
   const measureStick = cached(() => merge(
@@ -45045,7 +45041,7 @@ void main() {
   const BL = window.BL = window.BL || {};
   const { models, math } = BL;
   const { createNode, addChild } = BL.scene;
-  const { cached, box, bevelBox, lathe, merge, polyline, makeVox, voxelGeometry, noShadow, pushVert, face } = models;
+  const { cached, box, bevelBox, lathe, merge, polyline, makeVox, voxelGeometry, noShadow, pushVert, face, turnedY } = models;
   const { mulberry32, lerp, hexToRgb } = math;
   const { puff, leafy, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, rock } = BL.hubModels;
 
@@ -45618,15 +45614,7 @@ void main() {
     return merge(...geos);
   };
   // Turns a part about y so its +x points along angle a (x to cos a, z to sin a), in place.
-  const aim = (geo, a) => {
-    const c = Math.cos(a), s = Math.sin(a), v = geo.verts;
-    for (let i = 0; i < v.length; i += 3) {
-      const x = v[i], z = v[i + 2];
-      v[i] = x * c - z * s;
-      v[i + 2] = x * s + z * c;
-    }
-    return geo;
-  };
+  const aim = (geo, a) => turnedY(geo, -a);
   // Drawn in the cartoon way: the kerb a ring of rounded stones shouldered together under moss cushions, the
   // treads bevelled slabs turned to the shaft's centre on chunky newels, and the torches bevelled posts.
   const KERB = [STONE_DK, STONE, "#7c7b74"].map(mono);
@@ -63572,7 +63560,7 @@ void main() {
   "use strict";
   const BL = window.BL = window.BL || {};
   const { models, math } = BL;
-  const { cached, box, bevelBox, lathe, tube, merge, noShadow, geometry, pushVert, face, makeVox, voxelGeometry } = models;
+  const { cached, box, bevelBox, lathe, tube, merge, noShadow, geometry, pushVert, face, makeVox, voxelGeometry, moved, turnedX, turnedY, turnedZ } = models;
   const { mulberry32, hexToRgb } = math;
   const TAU = Math.PI * 2;
 
@@ -63712,41 +63700,6 @@ void main() {
     add(hi);
     add(lo);
     for (let i = 0; i < n; i++) add([lo[i], lo[(i + 1) % n], hi[(i + 1) % n], hi[i]]);
-    return geo;
-  };
-  const moved = (geo, x, y, z) => {
-    const v = geo.verts;
-    for (let i = 0; i < v.length; i += 3) { v[i] += x; v[i + 1] += y; v[i + 2] += z; }
-    return geo;
-  };
-  // Turns a freshly built geometry about y, the way a node's rotation.y would.
-  const turnedY = (geo, a) => {
-    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
-    for (let i = 0; i < v.length; i += 3) {
-      const x = v[i], z = v[i + 2];
-      v[i] = x * c + z * s;
-      v[i + 2] = -x * s + z * c;
-    }
-    return geo;
-  };
-  // Turns a freshly built geometry about z, for the voussoirs of an arch.
-  const turnedZ = (geo, a) => {
-    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
-    for (let i = 0; i < v.length; i += 3) {
-      const x = v[i], y = v[i + 1];
-      v[i] = x * c - y * s;
-      v[i + 1] = x * s + y * c;
-    }
-    return geo;
-  };
-  // Tips a freshly built geometry about x: a positive angle leans its top toward +z.
-  const turnedX = (geo, a) => {
-    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
-    for (let i = 0; i < v.length; i += 3) {
-      const y = v[i + 1], z = v[i + 2];
-      v[i + 1] = y * c - z * s;
-      v[i + 2] = y * s + z * c;
-    }
     return geo;
   };
   // A lathe laid on its side along +z, for pipes, lenses and wheels.
@@ -65443,14 +65396,9 @@ void main() {
   const goldPile = cached(() => {
     const rand = mulberry32(88), round = [turn([[1.2, 0], [0.95, 0.32], [0.55, 0.68], [0, 0.82]], 18, "#d9a52a", 0.4)], flat = [];
     const coin = () => turn([[0.16, -0.025], [0.16, 0.025], [0.13, 0.03], [0, 0.03]], 12, rand() < 0.3 ? "#ffe07a" : GOLD, 0.6);
-    const tilt = (geo, a) => {
-      const v = geo.verts, c = Math.cos(a), sn = Math.sin(a);
-      for (let i = 0; i < v.length; i += 3) { const y = v[i + 1], z = v[i + 2]; v[i + 1] = y * c - z * sn; v[i + 2] = y * sn + z * c; }
-      return geo;
-    };
     for (let i = 0; i < 80; i++) {
       const r = Math.sqrt(rand()) * 1.15, a = rand() * TAU, y = Math.max(0.03, 0.82 * (1 - (r / 1.2) ** 1.6));
-      round.push(moved(turnedY(tilt(coin(), (rand() - 0.5) * 1.2), rand() * TAU), Math.cos(a) * r, y, Math.sin(a) * r));
+      round.push(moved(turnedY(turnedX(coin(), (rand() - 0.5) * 1.2), rand() * TAU), Math.cos(a) * r, y, Math.sin(a) * r));
     }
     for (let i = 0; i < 7; i++) {
       const a = i / 7 * TAU + 0.3, r = 1.3, n = 3 + Math.floor(rand() * 5);
@@ -66484,7 +66432,7 @@ void main() {
     const summary = r.summary ? `Foundry hour: ${r.summary.count} fwd, ${Math.round(r.summary.ratio * 100)}% ok` : "(Routing & Forwarding)";
     setBoard(s.switchLabel, "SWITCHBOARD", summary, false);
     const shown = s.placeOf.size, total = r.channels ?? snap.channelCount;
-    setBoard(s.galleryLabel, "MORE CHANNELS", `${Math.max(0, total - 4)} lines, ${Math.max(0, total - shown)} not shown`, true);
+    setBoard(s.galleryLabel, "MORE CHANNELS", `${Math.max(0, total - 4)} lines, ${Math.max(0, total - shown)} not shown`, false);
     // The core names what it is: a demo node on simulated events, until a real node publishes.
     setBoard(s.coreLabel, "NODE CORE", r.node === "stopped" ? "(Node Stopped)" : r.contract === BL.factoryFeed.DEMO ? "(Demo Node, Simulated)" : "(Your LN Node)", true, { height: 1.6 });
   };
@@ -72746,7 +72694,7 @@ void main() {
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  const { box, bevelBox, lathe, ring, merge, cached, variants, noShadow } = BL.models;
+  const { box, bevelBox, lathe, ring, merge, cached, variants, noShadow, moved, turnedX, turnedY } = BL.models;
   // The mine's props take the island's cartoon chamfer: every box a bevelled one, except what glows (screens,
   // lights, marks) and anything under 3 cm, which a chamfer would eat. A bevelled box keeps the plain box's outer
   // faces, so whatever sits flush on one still does.
@@ -72758,26 +72706,8 @@ void main() {
   const TIMBER = "#6b4a2b", TIMBER_DARK = "#4a331e", METAL = "#4a4f55", METAL_DARK = "#33373c";
   const GREEN = "#6de08a", AMBER = "#f0a83c", COPPER = "#8a5a2b", OIL = "#2f6f8a", BANANA = "#f5c542";
 
-  // Moves a built geometry in place, for parts that are turned before they are merged.
-  const shift = (geo, x, y, z) => {
-    const p = geo.verts;
-    for (let i = 0; i < p.length; i += 3) {
-      p[i] += x;
-      p[i + 1] += y;
-      p[i + 2] += z;
-    }
-    return geo;
-  };
-  const turn = (geo, yaw, pitch = 0) => {
-    const p = geo.verts, cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-    for (let i = 0; i < p.length; i += 3) {
-      const x = p[i], y = p[i + 1] * cp - p[i + 2] * sp, z = p[i + 1] * sp + p[i + 2] * cp;
-      p[i] = x * cy + z * sy;
-      p[i + 1] = y;
-      p[i + 2] = z * cy - x * sy;
-    }
-    return geo;
-  };
+  // Pitch about x, then yaw about y.
+  const turn = (geo, yaw, pitch = 0) => turnedY(turnedX(geo, pitch), yaw);
 
   // Chambers run down -z from the mouth at +z. Each dig opens the next one through the far wall of the
   // last; a tunnel is a gap in that wall `TUNNEL.w` wide.
@@ -72978,7 +72908,7 @@ void main() {
       parts.push(bevelBox({ w: 0.36, h: 0.08, d: 0.36, color: METAL_DARK, bevel: 0.02, offset: { x: side * px, y: 0.3 } }));
       parts.push(bevelBox({ w: 0.36, h: 0.1, d: 0.36, color: TIMBER_ROPE, bevel: 0.03, offset: { x: side * px, y: post - 0.2 } }));
       // The knee: a beam 0.9 long leaning 45 degrees in toward the middle, from the post to the cap's underside.
-      parts.push(shift(turn(bevelBox({ w: 0.18, h: 0.9, d: 0.18, color: TIMBER_DARK, bevel: 0.04 }), side * HALF_PI, -Math.PI / 4), side * (px - 0.16 - 0.32), post - 0.33, 0));
+      parts.push(moved(turn(bevelBox({ w: 0.18, h: 0.9, d: 0.18, color: TIMBER_DARK, bevel: 0.04 }), side * HALF_PI, -Math.PI / 4), side * (px - 0.16 - 0.32), post - 0.33, 0));
     }
     parts.push(bevelBox({ w: capW, h: 0.34, d: 0.38, color: TIMBER_DARK, bevel: 0.07, offset: { y: top } }));
     return merge(...parts);
@@ -73158,7 +73088,7 @@ void main() {
       const x = -0.42 + i * 0.168;
       parts.push(bx({ w: 0.05, h: 0.3, d: 0.42, color: i % 2 ? "#2b2f36" : "#323740", offset: { x, y: 0.21 } }));
       parts.push(bx({ w: 0.055, h: 0.03, d: 0.03, color: i % 2 ? GREEN : AMBER, emissive: 1, offset: { x, y: 0.34, z: 0.2 } }));
-      parts.push(shift(turn(ring({ r: 0.09, thickness: 0.02, segments: 8, color: "#15171b" }), HALF_PI, HALF_PI), x + 0.03, 0.2, 0));
+      parts.push(moved(turn(ring({ r: 0.09, thickness: 0.02, segments: 8, color: "#15171b" }), HALF_PI, HALF_PI), x + 0.03, 0.2, 0));
     }
     parts.push(bx({ w: 0.9, h: 0.03, d: 0.03, color: "#1a1a1a", offset: { y: 0.05, z: -0.22 } }));
     return merge(...parts);
@@ -73185,7 +73115,7 @@ void main() {
     ];
     if (look.band) parts.push(bx({ w: 0.74, h: 0.03, d: 0.52, color: look.band, emissive: 0.35, offset: { y: 0.1 } }));
     // Two fan grilles at the back and a row of heatsink fins on top.
-    for (const x of [-0.18, 0.18]) parts.push(shift(turn(ring({ r: 0.085, thickness: 0.018, segments: 8, color: "#101114" }), 0, HALF_PI), x, 0, -0.255));
+    for (const x of [-0.18, 0.18]) parts.push(moved(turn(ring({ r: 0.085, thickness: 0.018, segments: 8, color: "#101114" }), 0, HALF_PI), x, 0, -0.255));
     for (let f = 0; f < 5; f++) parts.push(bx({ w: 0.02, h: 0.03, d: 0.4, color: look.face, offset: { x: -0.24 + f * 0.12, y: 0.125 } }));
     return merge(...parts);
   });
@@ -73238,14 +73168,14 @@ void main() {
       const a = i / 8 * Math.PI * 2;
       wheel.push(bx({ w: 0.46, h: 0.08, d: 0.34, color: "#7d5730", offset: { x: Math.cos(a) * 0.76, y: Math.sin(a) * 0.76 } }));
     }
-    return merge(shift(turn(merge(...wheel), 0, HALF_PI), 0, 1.15, 0),
+    return merge(moved(turn(merge(...wheel), 0, HALF_PI), 0, 1.15, 0),
       bx({ w: 1.4, h: 0.3, d: 0.5, color: "#3a3631", offset: { y: 0.15 } }),
       bx({ w: 1.1, h: 0.04, d: 0.36, color: OIL, emissive: 0.35, offset: { y: 0.31 } }),
       bx({ w: 0.12, h: 1.2, d: 0.12, color: TIMBER_DARK, offset: { x: -0.6, y: 0.6 } }),
       bx({ w: 0.12, h: 1.2, d: 0.12, color: TIMBER_DARK, offset: { x: 0.6, y: 0.6 } }));
   });
   const sunLeaves = cached(() => merge(
-    shift(turn(merge(
+    moved(turn(merge(
       bx({ w: 1.5, h: 0.05, d: 1.0, color: "#22402c", emissive: 0.15 }),
       ...[-0.5, 0, 0.5].map((x) => bx({ w: 0.02, h: 0.06, d: 0.98, color: "#6de08a", emissive: 0.4, offset: { x } }))
     ), 0, -0.5), 0, 1.2, 0),
@@ -73259,7 +73189,7 @@ void main() {
   // A crystal bank: a crate of charge crystals wired to the circuit.
   const crystalBank = cached(() => merge(
     bx({ w: 1.2, h: 0.7, d: 0.8, color: TIMBER, offset: { y: 0.35 } }),
-    ...[-0.35, 0, 0.35].map((x) => shift(lathe({ profile: [[0, 0], [0.12, 0.1], [0.08, 0.42], [0, 0.52]], segments: 6, color: "#7fe0ff", emissive: 0.8 }), x, 0.68, 0)),
+    ...[-0.35, 0, 0.35].map((x) => moved(lathe({ profile: [[0, 0], [0.12, 0.1], [0.08, 0.42], [0, 0.52]], segments: 6, color: "#7fe0ff", emissive: 0.8 }), x, 0.68, 0)),
     bx({ w: 0.1, h: 0.1, d: 0.6, color: COPPER, offset: { x: 0.65, y: 0.3 } })
   ));
   const POWER_BUILDERS = [waterWheel, sunLeaves, steamVent, crystalBank];
@@ -73294,14 +73224,14 @@ void main() {
   const fanWall = cached(() => merge(
     bx({ w: 1.15, h: 2.2, d: 0.45, color: "#3b4046", offset: { y: 1.1 } }),
     bx({ w: 1.0, h: 1.0, d: 0.04, color: "#15171b", offset: { y: 1.2, z: 0.23 } }),
-    shift(turn(ring({ r: 0.5, thickness: 0.05, segments: 16, color: METAL }), 0, HALF_PI), 0, 1.2, 0.26),
+    moved(turn(ring({ r: 0.5, thickness: 0.05, segments: 16, color: METAL }), 0, HALF_PI), 0, 1.2, 0.26),
     bx({ w: 0.12, h: 0.08, d: 0.02, color: GREEN, emissive: 1, offset: { x: 0.42, y: 2.05, z: 0.235 } })
   ));
   const boxFan = cached(() => merge(
     lathe({ profile: [[0, 0], [0.24, 0], [0.24, 0.04], [0, 0.06]], segments: 10, color: "#33373c" }),
     bx({ w: 0.05, h: 0.8, d: 0.05, color: METAL, offset: { y: 0.44 } }),
-    shift(turn(ring({ r: 0.33, thickness: 0.04, segments: 14, color: "#8a9099" }), 0, HALF_PI), 0, 1.0, 0),
-    shift(turn(ring({ r: 0.33, thickness: 0.02, segments: 14, color: "#8a9099" }), 0, HALF_PI), 0, 1.0, 0.1),
+    moved(turn(ring({ r: 0.33, thickness: 0.04, segments: 14, color: "#8a9099" }), 0, HALF_PI), 0, 1.0, 0),
+    moved(turn(ring({ r: 0.33, thickness: 0.02, segments: 14, color: "#8a9099" }), 0, HALF_PI), 0, 1.0, 0.1),
     bx({ w: 0.12, h: 0.14, d: 0.14, color: "#33373c", offset: { y: 1.0, z: -0.08 } })
   ));
   // Where each fan's blades sit in its own frame, and how big they are against fanBlade.
@@ -73319,11 +73249,11 @@ void main() {
     bx({ w: 0.7, h: 0.08, d: 0.45, color: TIMBER_DARK, offset: { y: 0.04 } }),
     bx({ w: 0.06, h: 0.7, d: 0.06, color: TIMBER, offset: { x: -0.32, y: 0.39, z: -0.19 } }),
     bx({ w: 0.06, h: 0.7, d: 0.06, color: TIMBER, offset: { x: 0.32, y: 0.39, z: -0.19 } }),
-    shift(lathe({ profile: [[0, 0], [0.14, 0.12], [0.1, 0.44], [0, 0.56]], segments: 6, color: "#7fe0ff", emissive: 0.8 }), -0.15, 0.08, 0),
-    shift(lathe({ profile: [[0, 0], [0.12, 0.1], [0.08, 0.36], [0, 0.46]], segments: 6, color: "#b58cff", emissive: 0.7 }), 0.1, 0.08, 0.05),
-    shift(lathe({ profile: [[0, 0], [0.1, 0.08], [0.07, 0.3], [0, 0.4]], segments: 6, color: "#7fe0ff", emissive: 0.8 }), 0.2, 0.08, -0.1)
+    moved(lathe({ profile: [[0, 0], [0.14, 0.12], [0.1, 0.44], [0, 0.56]], segments: 6, color: "#7fe0ff", emissive: 0.8 }), -0.15, 0.08, 0),
+    moved(lathe({ profile: [[0, 0], [0.12, 0.1], [0.08, 0.36], [0, 0.46]], segments: 6, color: "#b58cff", emissive: 0.7 }), 0.1, 0.08, 0.05),
+    moved(lathe({ profile: [[0, 0], [0.1, 0.08], [0.07, 0.3], [0, 0.4]], segments: 6, color: "#7fe0ff", emissive: 0.8 }), 0.2, 0.08, -0.1)
   ));
-  const fanHub = () => shift(turn(ring({ r: 0.12, thickness: 0.05, segments: 10, color: METAL_DARK }), 0, HALF_PI), 0, 0, 0.02);
+  const fanHub = () => moved(turn(ring({ r: 0.12, thickness: 0.05, segments: 10, color: METAL_DARK }), 0, HALF_PI), 0, 0, 0.02);
   const fanBlade = cached(() => {
     const parts = [fanHub()];
     for (let i = 0; i < 5; i++) {
@@ -73336,7 +73266,7 @@ void main() {
   // real fan at twenty turns a second strobes backwards on a sixty-frame screen, so the scene swaps
   // to this above a few turns a second, the way films and games do.
   const fanBlur = cached(() => {
-    const parts = [fanHub(), shift(turn(lathe({ profile: [[0.14, -0.012], [0.62, -0.012], [0.62, 0.012], [0.14, 0.012], [0.14, -0.012]], segments: 16, color: "#474c53" }), 0, HALF_PI), 0, 0, -0.005)];
+    const parts = [fanHub(), moved(turn(lathe({ profile: [[0.14, -0.012], [0.62, -0.012], [0.62, 0.012], [0.14, 0.012], [0.14, -0.012]], segments: 16, color: "#474c53" }), 0, HALF_PI), 0, 0, -0.005)];
     // Three streaks, none alike, so the disc has no symmetry to alias: turned fast it still reads as
     // turning forward instead of standing still or running backwards.
     [[0.38, 0.4, "#9aa1ab"], [0.26, 0.3, "#7b818a"], [0.18, 0.48, "#5f656d"]].forEach(([w, r, color], i) => {
@@ -73417,7 +73347,7 @@ void main() {
     () => merge(bx({ w: 0.44, h: 0.4, d: 0.2, color: "#d8892b", offset: { y: 0.24 } }), bx({ w: 0.2, h: 0.12, d: 0.22, color: "#b36f1f", offset: { y: 0.5 } }), bx({ w: 0.14, h: 0.14, d: 0.02, color: BANANA, emissive: 0.3, offset: { y: 0.26, z: 0.11 } })),
     () => merge(bx({ w: 0.3, h: 0.42, d: 0.06, color: "#8a8178", offset: { x: -0.1, y: 0.21 } }), bx({ w: 0.3, h: 0.36, d: 0.06, color: "#9a9188", offset: { x: 0.12, y: 0.18, z: 0.06 } })),
     () => merge(bx({ w: 0.5, h: 0.5, d: 0.08, color: METAL_DARK, offset: { y: 0.25 } }), ring({ r: 0.18, thickness: 0.03, y: 0.25, segments: 10, color: METAL })),
-    () => merge(...[-0.16, 0, 0.16].map((x) => shift(lathe({ profile: [[0.1, 0], [0.1, 0.08], [0.07, 0.14], [0, 0.16]], segments: 7, color: AMBER }), x, 0, 0))),
+    () => merge(...[-0.16, 0, 0.16].map((x) => moved(lathe({ profile: [[0.1, 0], [0.1, 0.08], [0.07, 0.14], [0, 0.16]], segments: 7, color: AMBER }), x, 0, 0))),
     () => merge(bx({ w: 0.42, h: 0.16, d: 0.3, color: "#8fa6b8", offset: { y: 0.08 } }), bx({ w: 0.3, h: 0.06, d: 0.2, color: "#dfeef7", emissive: 0.25, offset: { y: 0.19 } })),
     () => merge(bx({ w: 0.36, h: 0.32, d: 0.3, color: "#4a4f55", offset: { y: 0.16 } }), bx({ w: 0.2, h: 0.14, d: 0.02, color: "#7fe0ff", emissive: 0.9, offset: { y: 0.17, z: 0.16 } }), bx({ w: 0.38, h: 0.03, d: 0.32, color: METAL_DARK, offset: { y: 0.33 } })),
     () => merge(bx({ w: 0.05, h: 0.5, d: 0.05, color: TIMBER_DARK, offset: { y: 0.25 } }), bx({ w: 0.16, h: 0.16, d: 0.04, color: "#e0d6c8", offset: { y: 0.5 } }), bx({ w: 0.08, h: 0.2, d: 0.03, color: "#c8262b", offset: { x: 0.1, y: 0.34 } }), bx({ w: 0.08, h: 0.2, d: 0.03, color: "#2458a6", offset: { x: -0.1, y: 0.34 } })),
@@ -73458,8 +73388,8 @@ void main() {
     // The lantern off the first timber, the pickaxe against the wall, and a heap of ore by the mouth.
     parts.push(bx({ w: 0.04, h: 0.4, d: 0.04, color: "#2b2521", offset: { x: -1.5, y: 2.55, z: -1.1 } }));
     parts.push(bx({ w: 0.2, h: 0.24, d: 0.2, color: "#ffd27a", emissive: 1, offset: { x: -1.5, y: 2.25, z: -1.1 } }));
-    parts.push(shift(turn(bx({ w: 0.06, h: 1.1, d: 0.06, color: TIMBER }), 0, 0.3), -2.1, 0.55, -2.3));
-    parts.push(shift(turn(bx({ w: 0.5, h: 0.08, d: 0.06, color: METAL }), 0, 0.3), -2.1, 1.08, -2.14));
+    parts.push(moved(turn(bx({ w: 0.06, h: 1.1, d: 0.06, color: TIMBER }), 0, 0.3), -2.1, 0.55, -2.3));
+    parts.push(moved(turn(bx({ w: 0.5, h: 0.08, d: 0.06, color: METAL }), 0, 0.3), -2.1, 1.08, -2.14));
     for (let i = 0; i < 7; i++) {
       const a = i * 0.9, r = 0.18 + (i % 3) * 0.12;
       parts.push(bx({ w: 0.18, h: 0.16 + (i % 2) * 0.1, d: 0.16, color: i % 3 ? STONE_LIGHT : "#7fe0ff", emissive: i % 3 ? 0 : 0.8, offset: { x: 1.6 + Math.cos(a) * r, y: 0.08, z: 1.1 + Math.sin(a) * r } }));
@@ -73469,7 +73399,7 @@ void main() {
   const hubCart = cached(() => merge(
     bx({ w: 1.1, h: 0.62, d: 1.3, color: "#4a4f55", offset: { y: 0.55 } }),
     bx({ w: 1.16, h: 0.06, d: 1.36, color: METAL_DARK, offset: { y: 0.88 } }),
-    ...[[-0.42, -0.45], [0.42, -0.45], [-0.42, 0.45], [0.42, 0.45]].map(([x, z]) => shift(turn(ring({ r: 0.16, thickness: 0.05, segments: 10, color: "#2b2d31" }), HALF_PI, HALF_PI), x, 0.2, z)),
+    ...[[-0.42, -0.45], [0.42, -0.45], [-0.42, 0.45], [0.42, 0.45]].map(([x, z]) => moved(turn(ring({ r: 0.16, thickness: 0.05, segments: 10, color: "#2b2d31" }), HALF_PI, HALF_PI), x, 0.2, z)),
     // Ore heaped over the rim, some of it glowing.
     ...[[-0.25, -0.3, "#7fe0ff", 0.7], [0.2, -0.2, STONE_LIGHT, 0], [-0.1, 0.2, "#b58cff", 0.7], [0.3, 0.3, STONE, 0], [0, 0, "#f5c542", 0.7]].map(([x, z, color, emissive]) =>
       bx({ w: 0.36, h: 0.28, d: 0.36, color, emissive, offset: { x, y: 0.98, z } }))
@@ -73483,7 +73413,7 @@ void main() {
   // A charge crystal, the panic power the trader sells by the bag.
   const crystal = cached(() => merge(
     lathe({ profile: [[0, 0], [0.14, 0.12], [0.1, 0.44], [0, 0.56]], segments: 6, color: "#7fe0ff", emissive: 0.8 }),
-    shift(lathe({ profile: [[0, 0], [0.09, 0.08], [0.06, 0.3], [0, 0.38]], segments: 6, color: "#b58cff", emissive: 0.7 }), 0.18, 0, 0.05)
+    moved(lathe({ profile: [[0, 0], [0.09, 0.08], [0.06, 0.3], [0, 0.38]], segments: 6, color: "#b58cff", emissive: 0.7 }), 0.18, 0, 0.05)
   ));
 
   // A Fire Stopper: a red canister on a wall bracket, its hose looped to the nozzle, facing +z.

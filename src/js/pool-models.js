@@ -32,7 +32,7 @@
   const BL = window.BL = window.BL || {};
   const { models, math } = BL;
   const { createNode, addChild } = BL.scene;
-  const { cached, box, bevelBox, lathe, merge, polyline, makeVox, voxelGeometry, noShadow, pushVert, face } = models;
+  const { cached, box, bevelBox, lathe, merge, polyline, makeVox, voxelGeometry, noShadow, pushVert, face, turnedY } = models;
   const { mulberry32, lerp, hexToRgb } = math;
   const { puff, leafy, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, rock } = BL.hubModels;
 
@@ -605,15 +605,7 @@
     return merge(...geos);
   };
   // Turns a part about y so its +x points along angle a (x to cos a, z to sin a), in place.
-  const aim = (geo, a) => {
-    const c = Math.cos(a), s = Math.sin(a), v = geo.verts;
-    for (let i = 0; i < v.length; i += 3) {
-      const x = v[i], z = v[i + 2];
-      v[i] = x * c - z * s;
-      v[i + 2] = x * s + z * c;
-    }
-    return geo;
-  };
+  const aim = (geo, a) => turnedY(geo, -a);
   // Drawn in the cartoon way: the kerb a ring of rounded stones shouldered together under moss cushions, the
   // treads bevelled slabs turned to the shaft's centre on chunky newels, and the torches bevelled posts.
   const KERB = [STONE_DK, STONE, "#7c7b74"].map(mono);
