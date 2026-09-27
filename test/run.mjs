@@ -2323,12 +2323,13 @@ const orbitFlow = async (b) => {
 const SCENES = ["hub", "lab", "race", "drop", "orbit", "mine", "pool", "dsb", "factory", "bifrost", "poker", "arcade", "skee", "hoops", "shy", "claw", "hockey", "billiards", "darts", "pinball", "ride", "invaders", "snake", "pong", "stampede", "flap", "breaker", "dash", "stacker"];
 const LANES = Number(process.env.LANES) || 8;
 const ARGS = process.argv.slice(2);
-for (const a of ARGS) if (!SCENES.includes(a) && !["unit", "perf", "full"].includes(a)) throw new Error(`Unknown argument "${a}" (unit | perf | full | ${SCENES.join(" | ")})`);
+for (const a of ARGS) if (!SCENES.includes(a) && !["unit", "perf", "full", "poker-protocol"].includes(a)) throw new Error(`Unknown argument "${a}" (unit | perf | full | poker-protocol | ${SCENES.join(" | ")})`);
 const ONLY = process.env.ONLY || ""; // Optional substring within the requested scenes; defaults are unchanged.
 const FULL = ARGS.includes("full");
 const PICKED = FULL ? SCENES : SCENES.filter((s) => ARGS.includes(s));
 const PERF = FULL || ARGS.includes("perf");
-const UNIT = !(ARGS.length === 1 && ARGS[0] === "perf");
+const UNIT = !(ARGS.length === 1 && ["perf", "poker-protocol"].includes(ARGS[0]));
+const PROTOCOL = FULL || ARGS.includes("poker-protocol");
 // What keeps the cruft out: every step says why it exists, or the run does not start.
 const WHY = /^(regression|playthrough|rule|contract): \S/;
 const SCENE_BUDGET_S = 25;
@@ -6969,7 +6970,7 @@ scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ nam
   record("dsb compatibility: built CSP preserves exactly the weather and DSB network permissions", await b.evaluate(`(() => {
     const policy = document.querySelector('meta[http-equiv="Content-Security-Policy"]').content;
     const sources = name => policy.split(";").map(s => s.trim().split(/\\s+/)).find(s => s[0] === name).slice(1).sort().join("|");
-    return sources("connect-src") === ["https:", "wss:"].sort().join("|") && sources("media-src") === "https://stream.noderunnersradio.com" && !policy.includes("unsafe-");
+    return sources("connect-src") === ["'self'", "https:", "wss:"].sort().join("|") && sources("worker-src") === "'self'" && sources("media-src") === "https://stream.noderunnersradio.com" && !policy.includes("unsafe-");
   })()`));
   record("dsb registry: c10 stays sealed and DSB is internally addressable without a cave", await b.evaluate(`(BL.caves.slots.find(s => s.id === "c10").status === "dark" && BL.caves.slots.find(s => s.id === "c10").scene === null) && !BL.caves.slots.some(s => s.scene === "dsb") && !!BL.scenes.dsb`));
   record("dsb compatibility: hub keeps the Agent module without spawning a standalone gorilla", await b.evaluate(`__ooga.scene === "hub" && !__ooga.agent && !!BL.agent && !!BL.characters.get("rules-without-rulers") && Object.hasOwn(__ooga, "agent") && Object.hasOwn(__ooga, "dsb") && !__ooga.dsb`));
@@ -7872,6 +7873,187 @@ const pokerChecks = (BL) => {
     } finally { for (const t of room.tables) t.agent.dispose(); }
   }
 };
+const pokerProtocolChecks = async () => {
+  const { loadProtocol, source: protocolSource } = await import("../server/poker/load.mjs");
+  const { createECDH, randomBytes } = await import("node:crypto");
+  const { createPokerServer } = await import("../server/poker/server.mjs");
+  const { Worker } = await import("node:worker_threads");
+  const BL = loadProtocol(), C = BL.pokerCrypto, M = BL.pokerMatch, E = C.math;
+  const clone = value => JSON.parse(JSON.stringify(value));
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  const rejects = async fn => { try { await fn(); return false; } catch { return true; } };
+  try {
+    const scalars = [1n, 2n, 3n, E.N - 1n, ...Array.from({ length: 12 }, () => BigInt("0x" + randomBytes(32).toString("hex")) % (E.N - 1n) + 1n)];
+    for (const n of scalars) {
+      const native = createECDH("prime256v1"); native.setPrivateKey(Buffer.from(n.toString(16).padStart(64, "0"), "hex"));
+      const p = E.mul(E.G, n); check(E.encode(p) === native.getPublicKey("hex", "uncompressed"), "P-256 disagrees with native OpenSSL");
+      check(E.same(p, E.decode(E.encode(p))) && E.same(E.add(p, E.sub(E.O, p)), E.O), "Group inverse or encoding failed");
+      const peer = createECDH("prime256v1"); peer.generateKeys();
+      const shared = E.encode(E.mul(E.decode(peer.getPublicKey("hex", "uncompressed")), n)).slice(2, 66);
+      check(shared === native.computeSecret(peer.getPublicKey()).toString("hex"), "ECDH disagrees with native OpenSSL");
+    }
+    check(E.same(E.mul(E.G, E.N), E.O), "Wrong group order");
+    for (const bad of ["00", "04" + "0".repeat(128), "04" + "f".repeat(128), "02" + "0".repeat(64), {}, ""]) check(await rejects(() => E.decode(bad, true)), "Invalid public point accepted");
+    const p = C.player(), signature = await p.sign("test", { n: 1 });
+    check(await C.signatureValid(p.publicKey, "test", { n: 1 }, signature) && !await C.signatureValid(p.publicKey, "test", { n: 2 }, signature) && !await C.signatureValid(p.publicKey, "other", { n: 1 }, signature), "Signature domain binding failed");
+    p.dispose(); check(await rejects(() => p.sign("test", {})), "Disposed key still signs");
+    record("poker protocol: curve arithmetic matches native P-256 and rejects invalid points and signatures", true);
+  } catch (e) { record("poker protocol: curve arithmetic matches native P-256 and rejects invalid points and signatures", false, e.stack); return; }
+  try {
+    let count = 0;
+    const exercise = async p => {
+      const out = await E.walkNetwork(p.map((_, i) => i), E.route(p), async (pair, swap) => swap ? [pair[1], pair[0]] : pair);
+      check(p.every((destination, i) => out[destination] === i), "Permutation was not routed"); count++;
+    };
+    const perms = function* (a, start = 0) { if (start === a.length) { yield a.slice(); return; } for (let i = start; i < a.length; i++) { [a[start], a[i]] = [a[i], a[start]]; yield* perms(a, start + 1); [a[start], a[i]] = [a[i], a[start]]; } };
+    for (let n = 1; n <= 6; n++) for (const p of perms(Array.from({ length: n }, (_, i) => i))) await exercise(p);
+    for (let i = 0; i < 64; i++) await exercise(BL.pokerRules.shuffledDeck());
+    check(await rejects(() => E.route([0, 0])) && count > 900, "Malformed permutation accepted");
+    record("poker protocol: switch routing realizes arbitrary permutations including odd subnetworks", true, `${count} routes`);
+  } catch (e) { record("poker protocol: switch routing realizes arbitrary permutations including odd subnetworks", false, e.stack); return; }
+  let completedRecord;
+  try {
+    const started = performance.now(), identities = Array.from({ length: 12 }, () => C.player()), handKeys = identities.map(() => C.player());
+    const stacks = [1000, 90, 160, 240, 320, 400, 480, 560, 640, 720, 800, 880], total = stacks.reduce((a, b) => a + b);
+    const initial = { game: { seats: identities.map((p, i) => ({ id: p.publicKey, name: "Player " + (i + 1), stack: stacks[i] })), dealer: -1, hand: 0, version: 0 }, counters: [], epoch: 0 };
+    const match = M.create(0, initial);
+    const request = async (i, op, data) => {
+      const state = match.state(), value = { table: 0, signer: identities[i].publicKey, seq: (state.counters.find(([id]) => id === identities[i].publicKey)?.[1] || 0) + 1, op,
+        data: { ...(state.context && op !== "start" ? { hand: state.context.nonce, epoch: state.context.epoch } : {}), ...data } };
+      return { ...value, signature: await identities[i].sign("command", value) };
+    };
+    const send = async (i, op, data) => { const req = await request(i, op, data); await match.submit(req); return req; };
+    await send(0, "start", { nonce: C.nonce() });
+    for (let i = 0; i < 12; i++) await send(i, "key", { key: handKeys[i].publicKey, proof: await handKeys[i].sign("hand-key", [match.state().context, identities[i].publicKey]) });
+    for (let i = 0; i < 12; i++) {
+      const s = match.state(), context = await match.shuffleContext(identities[i].publicKey);
+      const shuffle = await C.shuffle(s.deck, s.aggregate, context);
+      if (!i) {
+        const before = match.state().root, broken = clone(shuffle); broken.gates[0].out[0] = broken.gates[0].out[1];
+        check(await rejects(async () => match.submit(await request(i, "shuffle", { shuffle: broken }))) && match.state().root === before, "Forged shuffle mutated the hand");
+        check(await rejects(() => C.verifyShuffle(s.deck, s.aggregate, ["wrong hand"], shuffle)), "Shuffle proof replayed in another hand");
+        check(await rejects(() => C.verifyShuffle(s.deck, s.aggregate, context, { gates: shuffle.gates.slice(1) })), "Truncated proof accepted");
+      }
+      await send(i, "shuffle", { shuffle });
+    }
+    check(match.phase === "ack", "Deck was dealt before agreement");
+    for (let i = 0; i < 12; i++) await send(i, "ack", { root: match.state().ackRoot });
+    const holeState = match.state(), ownPosition = holeState.plan.holes[0].positions[0], need = holeState.requested[0].indices;
+    const forbidden = need.map(i => [i, []]); forbidden[0] = [ownPosition, await handKeys[0].share(holeState.deck[ownPosition], match.shareContext(identities[0].publicKey, ownPosition))];
+    const before = holeState.root;
+    check(await rejects(async () => match.submit(await request(0, "shares", { shares: forbidden }))) && match.state().root === before, "Private owner share was accepted before showdown");
+    let folded = -1, duplicateChecked = false;
+    for (let moves = 0; match.active && moves < 120; moves++) {
+      const s = match.state();
+      if (["hole", "board", "showdown"].includes(s.phase)) {
+        const requested = s.requested.find(r => r.indices.some(i => !s.shares.find(([id]) => id === r.id)?.[1].some(([j]) => j === i)));
+        check(!!requested, "No participant can advance dealing");
+        const i = identities.findIndex(p => p.publicKey === requested.id), known = new Map(s.shares.find(([id]) => id === requested.id)?.[1] || []), shares = [];
+        for (const index of requested.indices.filter(index => !known.has(index))) shares.push([index, await handKeys[i].share(s.deck[index], match.shareContext(requested.id, index))]);
+        if (shares.length) {
+          const [position, proof] = shares[0];
+          check(!await C.shareValid(handKeys[i].publicKey, s.deck[position], ["wrong card context"], proof), "Share accepted under the wrong context");
+        }
+        await send(i, "shares", { shares });
+      } else if (s.phase === "betting") {
+        if (folded < 0) {
+          const allCards = [];
+          for (let i = 0; i < 12; i++) {
+            const mine = s.plan.holes[i];
+            for (const position of mine.positions) {
+              const other = s.shares.filter(([id]) => id !== mine.id).map(([, entries]) => new Map(entries).get(position));
+              check(other.length === 11 && other.every(Boolean), "Missing private dealing share");
+              const card = handKeys[i].open(s.deck[position], other); allCards.push(card);
+              check(!new Map(s.shares.find(([id]) => id === mine.id)?.[1] || []).has(position), "Owner share leaked during private dealing");
+            }
+          }
+          check(new Set(allCards).size === 24 && s.state.seats.every(p => p.cards.every(c => c === null)), "Private hands are not unique and hidden");
+          folded = s.state.turn;
+          await send(folded, "act", { action: "fold", amount: null, version: s.state.version });
+        } else {
+          const i = s.state.turn, legal = match.state(identities[i].publicKey).state.legal;
+          const req = await send(i, "act", { action: legal.canRaise ? "raise" : legal.check ? "check" : "call", amount: legal.canRaise ? legal.max : null, version: s.state.version });
+          if (!duplicateChecked) { const after = match.state().root; await match.submit(req); check(match.state().root === after, "A repeated command spent chips twice"); const altered = clone(req); altered.data.amount = 1; check(await rejects(() => match.submit(altered)), "Altered replay accepted"); duplicateChecked = true; }
+        }
+      } else throw new Error("Unexpected phase " + s.phase);
+    }
+    const final = match.state(); completedRecord = match.export();
+    check(final.phase === "complete" && final.state.result.pots.length > 3 && final.state.seats.reduce((n, p) => n + p.stack, 0) === total, "Twelve-player side pots did not conserve chips");
+    check(final.state.seats[folded].cards.every(c => c === null), "Folded cards became public");
+    for (const position of final.plan.holes[folded].positions) check(!new Map(final.shares.find(([id]) => id === identities[folded].publicKey)[1]).has(position), "Folded owner's share entered the record");
+    const replayed = await M.replay(completedRecord);
+    check(C.canonical(replayed.state().state.result) === C.canonical(final.state.result) && replayed.state().root === final.root, "Independent replay disagrees with the payout");
+    const changed = clone(completedRecord); changed.events[0].request.data.nonce = C.nonce(); check(await rejects(() => M.replay(changed)), "Changed transcript accepted");
+    const sealed = BL.pokerRules.createSealed(initial.game); sealed.start(); sealed.act(sealed.snapshot().seats[sealed.snapshot().turn].id, "raise", 100); sealed.abort();
+    check(sealed.snapshot().seats.every((p, i) => p.stack === stacks[i]) && sealed.snapshot().pot === 0, "Canceled commitments were not refunded exactly");
+    for (const key of [...identities, ...handKeys]) key.dispose();
+    record("poker protocol: twelve-player private deal, hostile proofs, side pots, replay and folded-card privacy", true, `${Math.round((performance.now() - started) / 1000)}s; ${JSON.stringify(completedRecord).length} byte public record`);
+  } catch (e) { record("poker protocol: twelve-player private deal, hostile proofs, side pots, replay and folded-card privacy", false, e.stack); return; }
+  // playthrough: two actual worker clients join the HTTP service, jointly shuffle,
+  // play to settlement and export a record. This is Node, not a browser assertion.
+  const origins = new Set(), service = createPokerServer({ origins });
+  const workers = [], states = [], failures = [];
+  try {
+    await new Promise(resolve => service.server.listen(0, "127.0.0.1", resolve));
+    const origin = `http://127.0.0.1:${service.server.address().port}`; origins.add(origin);
+    const workerSource = "self.window = self;\n" + protocolSource + "\n" + readFileSync(join(root, "src/js/poker-worker.js"), "utf8");
+    const wrapper = `const { parentPort, workerData } = require('node:worker_threads'); const vm = require('node:vm'); const { webcrypto } = require('node:crypto');
+      const ctx = { crypto: webcrypto, TextEncoder, setTimeout, clearTimeout, AbortController, URLSearchParams, postMessage: m => parentPort.postMessage(m),
+        fetch: (path, options = {}) => fetch(new URL(path, workerData.origin), { ...options, headers: { Origin: workerData.origin, ...options.headers } }) };
+      ctx.self = ctx; vm.runInNewContext(workerData.source, ctx); parentPort.on('message', data => ctx.onmessage({ data }));`;
+    const waitFor = async (predicate, max = 180000) => { const start = Date.now(); while (!predicate()) { if (failures.length) throw new Error(failures.join("; ")); if (Date.now() - start > max) throw new Error("Worker playthrough timed out: " + states.map(s => s?.fairness.phase).join(",")); await new Promise(r => setTimeout(r, 40)); } };
+    for (let i = 0; i < 2; i++) {
+      const w = new Worker(wrapper, { eval: true, workerData: { origin, source: workerSource } }); workers.push(w);
+      w.on("error", e => failures.push(e.message));
+      w.on("message", m => { if (m.type === "state") states[i] = m.packet; if (m.type === "fatal") failures.push(m.message); });
+      w.postMessage({ type: "connect", table: 0 });
+    }
+    await waitFor(() => states.filter(Boolean).length === 2);
+    workers[0].postMessage({ type: "action", name: "join", value: { name: "First" } });
+    workers[1].postMessage({ type: "action", name: "join", value: { name: "Second" } });
+    await waitFor(() => states.every(s => s.tables[0].state.seats.filter(Boolean).length === 2));
+    workers[0].postMessage({ type: "action", name: "start" });
+    await waitFor(() => states.every(s => s.fairness.phase === "betting"));
+    for (let rounds = 0; rounds < 40 && !states.every(s => s.fairness.phase === "complete"); rounds++) {
+      const seat = states[0].tables[0].state.turn, actingId = states[0].tables[0].state.seats[seat]?.id, i = states.findIndex(s => s.identity === actingId);
+      if (i >= 0 && states[i].tables[0].state.legal) {
+        const version = states[i].tables[0].state.version;
+        workers[i].postMessage({ type: "action", name: "call", expectedVersion: version });
+        await waitFor(() => states.every(s => s.tables[0].state.version !== version));
+      }
+      await waitFor(() => states.every(s => ["betting", "complete"].includes(s.fairness.phase)));
+    }
+    check(states.every(s => s.fairness.phase === "complete" && s.tables[0].state.seats.filter(Boolean).reduce((n, p) => n + p.stack, 0) === 2000), "HTTP clients did not finish the same hand");
+    check(states[0].fairness.root === states[1].fairness.root, "Clients disagreed about the hand fingerprint");
+    const denied = await fetch(origin + "/poker/api/command", { method: "POST", headers: { Origin: "https://unrelated.invalid", "Content-Type": "application/json" }, body: "{}" });
+    check(denied.status === 403, "Cross-origin mutation was accepted");
+    const unauth = await fetch(origin + "/poker/api/state?table=0"); check(unauth.status === 401, "Unauthenticated session data exposed");
+    record("poker protocol: real HTTP worker clients complete a hand and enforce connection boundaries", true);
+  } catch (e) { record("poker protocol: real HTTP worker clients complete a hand and enforce connection boundaries", false, e.stack); }
+  finally { for (const w of workers) await w.terminate(); service.server.closeAllConnections(); await new Promise(resolve => service.server.close(resolve)); }
+  try {
+    let time = 0; const origins = new Set(), service = createPokerServer({ origins, clock: () => time });
+    const identities = [C.player(), C.player()], tokens = [];
+    try {
+      await new Promise(resolve => service.server.listen(0, "127.0.0.1", resolve)); const origin = `http://127.0.0.1:${service.server.address().port}`; origins.add(origin);
+      const post = (path, body, token) => fetch(origin + path, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: JSON.stringify(body) });
+      for (const identity of identities) { const nonce = C.nonce(), r = await post("/poker/api/session", { publicKey: identity.publicKey, nonce, signature: await identity.sign("connect", nonce) }); tokens.push((await r.json()).token); }
+      const request = async (i, seq, op, data) => { const value = { table: 0, signer: identities[i].publicKey, seq, op, data }; return { ...value, signature: await identities[i].sign("command", value) }; };
+      for (let i = 0; i < 2; i++) check((await post("/poker/api/command", await request(i, 1, "join", { name: "Timeout" }), tokens[i])).ok, "Join failed");
+      const start = await request(0, 2, "start", { nonce: C.nonce() }); check((await post("/poker/api/command", start, tokens[0])).ok, "Start failed");
+      time = 80000; check((await post("/poker/api/command", start, tokens[0])).ok, "Idempotent retry failed");
+      time = 90001; await service.sweep();
+      const state = service.tables[0].state(); check(state.phase === "idle" && state.state.seats.every(s => !s), "Missing key contributors were not evicted after refund");
+      const response = await fetch(origin + `/poker/api/state?table=0&hand=${start.data.nonce}&from=0`, { headers: { Authorization: "Bearer " + tokens[0] } });
+      const canceled = (await response.json()).previous, replay = await M.replay(canceled);
+      check(replay.phase === "aborted" && replay.state().state.seats.filter(Boolean).every(s => s.stack === 1000), "Cancellation record lost the exact refunds");
+      const cooldown = await post("/poker/api/command", await request(0, 3, "start", { nonce: C.nonce() }), tokens[0]); check(!cooldown.ok, "Timed-out participant immediately restarted");
+      const spoof = await post("/poker/api/command", await request(1, 2, "refill", {}), tokens[0]); check(!spoof.ok, "A connection impersonated another signer");
+    } finally { service.server.closeAllConnections(); await new Promise(resolve => service.server.close(resolve)); for (const p of identities) p.dispose(); }
+    record("poker protocol: timeouts refund chips, repeated requests cannot stall, and signers cannot be impersonated", true);
+  } catch (e) { record("poker protocol: timeouts refund chips, repeated requests cannot stall, and signers cannot be impersonated", false, e.stack); }
+};
+
 const unitChecks = async () => {
   const canvasStub = () => ({
     width: 0, height: 0,
@@ -8567,6 +8749,7 @@ if (!PICKED.length && !PERF) console.log(`Global tier only. Name scenes to test 
 await runTasks();
 // The shim installs browser globals in this process, so it runs after the browser lanes finish with Chrome.
 if (UNIT) await unitChecks();
+if (PROTOCOL) await pokerProtocolChecks();
 
 // The ledger is the memory a session does not have: every failing check, how many runs in a row it has
 // failed, since when, and its last detail; a pass clears it. Two failed runs in a row is a STOP.

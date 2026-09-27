@@ -5,11 +5,12 @@ Implemented against OogaBoogaX/oogaboogaland `rock`, inspected source snapshot
 
 ## Status
 
-This is an implemented, built local demo, **not a verified release or a live
-multiplayer service**. The current cave-theme revision passes the normal
-single-file build, JavaScript syntax checks and **119/119 Node checks**, including
-bet-size presets, short-all-in limits, public blind metadata, 300 complete
-twelve-player hands and repeated theme switches with stable scene objects.
+This build includes local practice and an **experimental encrypted-deck
+multiplayer service**, private dealing, signed public hand records and an
+independent verifier. It is not an audited or production-certified release.
+The existing ten-table floor and five cave themes remain. Read
+[poker-protocol.md](poker-protocol.md) for the protocol, service commands,
+security assumptions and hosting requirements.
 
 Browser playthrough, fallback rendering, touch layout, audio, automatic hand
 progression, the theme picker and visual appearance, scene round trips, and the
@@ -20,6 +21,17 @@ stopping; the handoff includes the unchanged failure ledger. No browser test was
 retried for this revision. This document does not authorize another retry.
 
 ## Play
+
+For shared play, run `npm run poker:serve` and open
+`http://127.0.0.1:8787/?scene=poker&pokerLive=1` in separate tabs. Take seats and
+press **Deal hand**. Every participant contributes an encrypted shuffle.
+Verification runs in a background worker. A missing contribution or action
+cancels the hand after 90 seconds without progress, refunds committed chips,
+and releases missing players' seats. Stay connected after folding; stand
+between hands before exiting. No keys are sent to the server for recovery.
+There are no live-mode bots or automatic deals.
+
+The following controls describe local practice:
 
 Build with `npm run build`, then open `oogaboogaland.html`, or run
 `npm run serve` and open `http://127.0.0.1:8080/?scene=poker`.
@@ -150,7 +162,7 @@ geometry, particles or allocations were introduced by theme switching.
 - No Spark, wallet, payment processing, cash conversion, or outside-settlement
   feature was added. This is a product scope statement, not a legal assessment.
 
-## Shuffle and privacy
+## Local practice shuffle and privacy
 
 Each hand uses a fresh Fisher-Yates shuffle driven by `crypto.getRandomValues`.
 Bounded integers reject the modulo-bias tail. If secure randomness is absent,
@@ -165,7 +177,7 @@ The browser can replace code, ask for another viewer's snapshot, or change its
 local state. Do not call this demo cheat-proof or provably fair. Simulation and
 statistical tests cannot prove a particular hand was honestly shuffled.
 
-## Future backend boundary
+## Local and shared table boundaries
 
 `BL.pokerRules.create()` provides the local table implementation:
 
@@ -179,31 +191,40 @@ statistical tests cannot prove a particular hand was honestly shuffled.
 | `snapshot(viewerId)` | Copied public state plus that viewer's cards and legal action. |
 | `version`, `playing` | Change counter and active-hand status. |
 
-The scene currently owns ten instances under `world.poker`. Do not put these
-instances on a shared client bus and call that authoritative multiplayer. When
-the team's backend exists, move table mutation and entropy to that service;
-bind the player identity to the authenticated connection, serialize actions with
-hand/version and idempotency checks, and send each connection only its authorized
-snapshot. Never accept a client-selected `viewerId` for a remote snapshot.
-Shared seat reservations, presence, action deadlines, disconnect policy, storage,
-rate limits and proximity voice are future backend work, not shipped here.
+Local practice owns ten instances under `world.poker`. Shared mode connects to
+`server/poker/server.mjs` and uses `createSealed()` on the server and each client
+verifier. Rules deal encrypted-deck positions. Plaintext enters the server only
+through authorized community/showdown openings. Each browser decrypts its own
+hole cards locally. Clients cannot select a remote snapshot viewer ID.
 
-Independent fairness verification also needs a separately reviewed protocol.
-A simple server seed revealed after a hand lets people reconstruct folded cards,
-so this build deliberately does not implement that misleading shortcut. Decide
-the anti-bias, selective-abort and folded-card privacy requirements before
-choosing a commitment or distributed-shuffle protocol.
+The service includes seat reservations, signed commands, per-table queues,
+version/idempotency checks, deadlines, refunds and basic request limits.
+Persistent accounts/storage, shared walking positions, proximity voice,
+deployment and production hardening remain integration work. Upstream was also
+inspected at `05a7b72fadd756d5c750ec368320bbd013d9d9bf`; its additional routing
+and geometry helpers do not include a shared poker backend.
+
+The new protocol uses proofs without publishing whole-deck seeds or private
+keys. Folded-card privacy depends on the assumptions in the protocol document.
+Independent review remains required. Refunds do not eliminate selective-abort
+bias or collusion.
 
 ## Files and validation handoff
 
-New modules: `poker-rules.js`, `poker-cards.js`, `poker-themes.js`,
-`poker-models.js`, `poker-hud.js`, `scene-poker.js`.
-Integration edits: `src/index.html`, `src/style.css`, `src/js/scene-hub.js`.
+Floor modules: `poker-rules.js`, `poker-cards.js`, `poker-themes.js`,
+`poker-models.js`, `poker-hud.js`, `scene-poker.js`. Shared-play additions:
+`poker-crypto.js`, `poker-match.js`, `poker-worker.js`, `poker-live.js` and
+`server/poker/`. Integration edits: `src/index.html`, `src/style.css`,
+`src/js/scene-hub.js`, `package.json`.
 Checks live in the existing `test/run.mjs`; no test framework or dependency was
 added. The repository's browser driver and shared renderers were not modified.
 
-Passed for this revision: normal build, `node --check` on the modified
-JavaScript and **119/119 Node checks**. These cover hand ranking, payouts, odd
+The combined run passed **124/124 Node checks**: the 119 existing checks and
+five protocol checks, including a twelve-party encrypted hand, side pots,
+folded-card privacy, native P-256 interoperability, tampering/replay rejection,
+independent record replay and real worker clients over HTTP. The final focused
+protocol run also passed **5/5 checks** after disconnect cleanup, including
+release of abandoned seats and retention of cancellation/refund records. The build and syntax checks also passed. Existing checks cover payouts, odd
 chips, secure-entropy failure, rejection sampling, turn/seat validation, snapshot
 isolation, heads-up order, 300 twelve-player settlements, spectator collision
 lanes, pot presets including the call, short-all-in caps, closed raise rights,

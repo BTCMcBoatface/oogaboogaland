@@ -7285,3 +7285,12 @@ body[data-poker-table-view="true"] #act { visibility: hidden; }
 #poker[data-theme="jungle"] .poker-felt::after { border-style: dashed; border-width: 2px; }
 #poker[data-theme="moonstone"] .poker-felt { background: radial-gradient(ellipse at 50% 10%, #dbd9ff22, transparent 60%), radial-gradient(ellipse at 50% 25%, var(--pk-feltLight), var(--pk-felt) 70%, var(--pk-feltDark)); }
 @media (max-width: 720px) { .poker-theme-inline { gap: 7px; } .poker-theme-inline span { flex-basis: 100%; font-size: 10px; } }
+.poker-live-join { display: grid; gap: 8px; margin: 12px 0; }
+.poker-live-join label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.poker-live-join input { min-width: 0; width: 100%; }
+.poker-live-join small, .poker-fairness p { color: var(--pk-muted); font-size: 11px; line-height: 1.6; }
+.poker-fairness { border-top: 1px solid var(--pk-line); padding-top: 12px; margin-top: 12px; }
+.poker-fairness summary { color: var(--pk-accent); cursor: pointer; }
+.poker-fairness label { display: grid; gap: 6px; margin-top: 10px; }
+.poker-fairness input { max-width: 100%; }
+.poker-proof-root { overflow-wrap: anywhere; font-family: monospace; }

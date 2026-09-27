@@ -1,5 +1,5 @@
-// Local, play-chip Hold'em. State and the deck stay behind the snapshot boundary.
-// The future multiplayer server must own this module; a browser cannot enforce trust.
+// Play-chip Hold'em. Local practice uses a private shuffled deck. The sealed
+// variant deals public encrypted-deck positions and never receives a whole deck.
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
@@ -73,10 +73,21 @@
     }
     return { awards, pots };
   };
-  const create = () => {
+  const create = (sealed = false, initial = null) => {
     const seats = new Array(SEATS).fill(null);
     let deck = [], cursor = 0, board = [], phase = "waiting", turn = -1, dealer = -1;
     let currentBet = 0, lastRaise = BIG, hand = 0, version = 0, lastPot = 0, result = null, history = [], smallBlind = -1, bigBlind = -1;
+    let known = new Map(), before = null, beforeDealer = -1;
+    if (initial) {
+      if (!sealed || !Array.isArray(initial.seats) || initial.seats.length !== SEATS || !Number.isInteger(initial.dealer) || initial.dealer < -1 || initial.dealer >= SEATS || !Number.isSafeInteger(initial.hand) || initial.hand < 0 || !Number.isSafeInteger(initial.version) || initial.version < 0) throw new Error("Invalid table checkpoint");
+      const ids = new Set();
+      initial.seats.forEach((s, i) => {
+        if (!s) return;
+        if (typeof s.id !== "string" || !s.id || ids.has(s.id) || typeof s.name !== "string" || s.name.length > 32 || !Number.isSafeInteger(s.stack) || s.stack < 0 || s.stack > 1000000000) throw new Error("Invalid checkpoint seat");
+        ids.add(s.id); seats[i] = { id: s.id, name: s.name, bot: false, stack: s.stack, cards: [], inHand: false, folded: false, roundBet: 0, totalBet: 0, acted: false, lastActedBet: 0, lastAction: "" };
+      });
+      dealer = initial.dealer; hand = initial.hand; version = initial.version;
+    }
     const playing = () => phase !== "waiting" && phase !== "showdown";
     const log = text => { history.push(text); if (history.length > 12) history.shift(); version++; };
     const pot = () => seats.reduce((n, s) => n + (s ? s.totalBet : 0), 0);
@@ -87,11 +98,12 @@
     const contenders = () => seats.filter(s => s && s.inHand && !s.folded);
     const pay = (s, amount) => { const paid = Math.min(s.stack, amount); s.stack -= paid; s.roundBet += paid; s.totalBet += paid; };
     const finish = () => {
+      if (sealed && contenders().length > 1 && (board.some(c => !known.has(c)) || contenders().some(s => s.cards.some(c => !known.has(c))))) { phase = "reveal"; turn = -1; version++; return; }
       lastPot = pot();
       if (contenders().length === 1) {
         const winner = seats.indexOf(contenders()[0]), awards = new Array(SEATS).fill(0); awards[winner] = lastPot;
         result = { awards, pots: [{ amount: lastPot, winners: [winner], refund: false }], revealed: false };
-      } else result = { ...settle(seats, board, dealer), revealed: true };
+      } else result = { ...settle(sealed ? seats.map(s => s && ({ ...s, cards: s.cards.map(c => known.get(c)) })) : seats, sealed ? board.map(c => known.get(c)) : board, dealer), revealed: true };
       result.names = seats.map(s => s?.name || null);
       result.awards.forEach((amount, i) => { if (seats[i]) seats[i].stack += amount; });
       for (const s of seats) if (s) { s.roundBet = s.totalBet = 0; }
@@ -115,11 +127,11 @@
       // side pot (notably when the big blind is all in for less than its blind).
       if (funded.length === 1) currentBet = Math.min(currentBet, Math.max(...contenders().filter(s => s !== funded[0]).map(s => s.roundBet)));
       if (!funded.length || funded.length === 1 && funded[0].roundBet >= currentBet) {
-        while (playing()) street();
+        while (playing() && phase !== "reveal") street();
         return;
       }
       turn = next(from, s => s.inHand && !s.folded && s.stack > 0 && (!s.acted || s.roundBet < currentBet));
-      if (turn < 0) { street(); if (playing()) advance(dealer); }
+      if (turn < 0) { street(); if (playing() && phase !== "reveal") advance(dealer); }
     };
     const join = (id, name, bot = false, index = -1) => {
       if (playing()) throw new Error("Take a seat between hands");
@@ -144,7 +156,8 @@
     const start = () => {
       if (playing()) throw new Error("A hand is already running");
       if (seats.filter(s => s && s.stack > 0).length < 2) throw new Error("At least two funded players are needed");
-      const fresh = shuffledDeck(); // Fail before mutating any hand or balance.
+      const fresh = sealed ? Array.from({ length: 52 }, (_, i) => i) : shuffledDeck(); // Fail before mutating any hand or balance.
+      before = seats.map(s => s?.stack ?? null); beforeDealer = dealer; known = new Map();
       deck = fresh; cursor = 0; board = []; result = null; lastPot = 0; hand++; phase = "preflop";
       currentBet = BIG; lastRaise = BIG;
       for (const s of seats) if (s) { s.cards = []; s.inHand = s.stack > 0; s.folded = false; s.roundBet = s.totalBet = 0; s.acted = false; s.lastActedBet = 0; s.lastAction = ""; }
@@ -182,13 +195,36 @@
       s.acted = true; s.lastActedBet = currentBet; advance(from);
     };
     const snapshot = (viewer = null) => ({
-      phase, turn, dealer, smallBlind, bigBlind, currentBet, hand, version, pot: pot(), lastPot, board: board.slice(), history: history.slice(),
+      phase, turn, dealer, smallBlind, bigBlind, currentBet, hand, version, pot: pot(), lastPot, board: sealed ? board.map(c => known.get(c) ?? null) : board.slice(), history: history.slice(),
       result: result ? { revealed: result.revealed, names: result.names.slice(), awards: result.awards.slice(), pots: result.pots.map(p => ({ ...p, winners: p.winners.slice() })) } : null,
       seats: seats.map(s => s ? { id: s.id, name: s.name, bot: s.bot, stack: s.stack, inHand: s.inHand, folded: s.folded, roundBet: s.roundBet, totalBet: s.totalBet, lastAction: s.lastAction,
-        cards: s.id === viewer || phase === "showdown" && result?.revealed && s.inHand && !s.folded ? s.cards.slice() : s.cards.map(() => null) } : null),
+        cards: s.id === viewer || phase === "showdown" && result?.revealed && s.inHand && !s.folded ? s.cards.map(c => sealed ? known.get(c) ?? null : c) : s.cards.map(() => null) } : null),
       legal: legal(viewer)
     });
-    return { join, leave, refill, start, act, snapshot, get version() { return version; }, get playing() { return playing(); } };
+    const api = { join, leave, refill, start, act, snapshot, get version() { return version; }, get playing() { return playing(); } };
+    if (sealed) Object.assign(api, {
+      checkpoint: () => ({ seats: seats.map(s => s && ({ id: s.id, name: s.name, stack: s.stack })), dealer, hand, version }),
+      plan: () => ({ holes: seats.map(s => s?.inHand ? { id: s.id, positions: s.cards.slice(), folded: s.folded } : null), board: board.slice(), reveal: phase === "reveal" }),
+      open: entries => {
+        const allowed = new Set(board); if (phase === "reveal") for (const s of contenders()) for (const c of s.cards) allowed.add(c);
+        const copy = new Map(known);
+        for (const entry of entries) {
+          if (!Array.isArray(entry) || entry.length !== 2) throw new Error("Invalid opening");
+          const [position, card] = entry;
+          if (!allowed.has(position) || !Number.isInteger(card) || card < 0 || card > 51 || copy.has(position) && copy.get(position) !== card) throw new Error("Unauthorized card opening");
+          copy.set(position, card);
+        }
+        if (new Set(copy.values()).size !== copy.size) throw new Error("Duplicate card opening");
+        known = copy; version++;
+      },
+      resolve: () => { if (phase !== "reveal") throw new Error("Not at showdown"); finish(); },
+      abort: () => {
+        if (!playing() || !before) throw new Error("No hand to refund");
+        seats.forEach((s, i) => { if (s) { s.stack = before[i]; s.roundBet = s.totalBet = 0; s.cards = []; s.inHand = false; s.folded = false; s.lastAction = ""; } });
+        dealer = beforeDealer; phase = "waiting"; turn = -1; deck = []; board = []; known.clear(); result = null; lastPot = 0; smallBlind = bigBlind = -1; log("Hand canceled · all play chips refunded");
+      }
+    });
+    return api;
   };
   // Bot receives precisely the same filtered view as a human, never the table's deck.
   const botAction = (table, id) => {
@@ -199,5 +235,5 @@
     else if (l.call && !strong && roll < (l.call > own.stack / 3 ? 65 : 18)) table.act(id, "fold");
     else table.act(id, l.check ? "check" : "call");
   };
-  BL.pokerRules = { SEATS, BUY_IN, SMALL, BIG, randomInt, shuffledDeck, evaluate, settle, create, botAction, cardName };
+  BL.pokerRules = { SEATS, BUY_IN, SMALL, BIG, randomInt, shuffledDeck, evaluate, settle, create: () => create(), createSealed: initial => create(true, initial), botAction, cardName };
 })();

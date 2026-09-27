@@ -3,7 +3,8 @@
   const BL = window.BL, R = BL.pokerRules;
   const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
   const chips = n => number.format(n);
-  const streetName = { waiting: "Waiting for players", preflop: "Pre-flop", flop: "Flop", turn: "Turn", river: "River", showdown: "Hand complete" };
+  const streetName = { waiting: "Waiting for players", preflop: "Pre-flop", flop: "Flop", turn: "Turn", river: "River", reveal: "Opening showdown", showdown: "Hand complete" };
+  const fairName = { keys: "Preparing private keys", shuffle: "Shuffling & checking proofs", ack: "Agreeing on the deck", hole: "Dealing private cards", board: "Opening community cards", showdown: "Checking showdown", betting: "Shuffle checked · hand in play", complete: "Completed hand record checked", aborted: "Hand canceled · chips refunded", idle: "Waiting for a shared hand", failed: "Verification stopped · actions disabled" };
   // Pot sizing includes the call before calculating the raise, and returns a
   // street TOTAL. The rules remain the authority for short all-ins and reopening.
   const betAmount = (s, preset) => {
@@ -40,6 +41,7 @@
     const auto = el.querySelector('[data-poker-option="auto"]'), sound = el.querySelector('[data-poker-option="sound"]');
     const history = Array.from({ length: 10 }, () => []), recorded = new Int32Array(10);
     let snapshot = null, lastIndex = -1, lastHand = -1, turnKey = "", focused = false, paused = false, audio = null, lastClock = "", lastHistory = "";
+    let live = null;
     const make = (tag, className, parent) => { const n = document.createElement(tag); if (className) n.className = className; if (parent) parent.appendChild(n); return n; };
     for (const theme of BL.pokerThemes.themes) {
       for (const picker of themeSelects) { const option = make("option", "", picker); option.value = theme.id; option.textContent = theme.name; }
@@ -110,7 +112,12 @@
     };
     const onInput = e => { if (e.target === slider) setAmount(slider.value); };
     const onChange = e => {
-      if (e.target.matches("[data-poker-theme-select]")) action("theme", e.target.value);
+      if (e.target === by("audit-file")) {
+        const file = e.target.files?.[0]; e.target.value = "";
+        if (!file) return;
+        if (file.size > 12 * 1024 * 1024) { noticeText("This record is too large."); return; }
+        file.text().then(text => action("verify-file", JSON.parse(text))).catch(() => noticeText("That file is not a valid hand record."));
+      } else if (e.target.matches("[data-poker-theme-select]")) action("theme", e.target.value);
       else if (e.target === amount) setAmount(amount.value);
       else if (e.target === auto) action("auto", auto.checked);
       else if (e.target === sound && sound.checked) {
@@ -132,10 +139,10 @@
     const update = (index, snapshots, viewer, pendingStand, isPaused, autoDeal) => {
       const previous = snapshot, switched = index !== lastIndex;
       const s = snapshot = snapshots[index], ownIndex = s.seats.findIndex(p => p?.id === viewer), own = s.seats[ownIndex], legal = s.legal;
-      paused = isPaused; const idle = s.phase === "waiting" || s.phase === "showdown", fresh = switched || s.hand !== lastHand;
+      paused = isPaused; const idle = (s.phase === "waiting" || s.phase === "showdown") && (!live || ["idle", "complete", "aborted"].includes(s.fairPhase)), fresh = switched || s.hand !== lastHand;
       snapshots.forEach((table, i) => {
         const row = rows[i], occupied = table.seats.filter(Boolean).length;
-        row.info.textContent = `${occupied} / 12 seats`; row.state.textContent = table.phase === "waiting" ? "Open a game" : table.phase === "showdown" ? "Between hands" : `${streetName[table.phase]} · Watch`;
+        row.info.textContent = `${occupied} / 12 seats`; row.state.textContent = live && !["idle", "complete", "aborted", "betting"].includes(table.fairPhase) ? fairName[table.fairPhase] || "Connecting" : table.phase === "waiting" ? "Open a game" : table.phase === "showdown" ? "Between hands" : `${streetName[table.phase]} · Watch`;
         row.b.classList.toggle("selected", i === index); row.b.disabled = !!viewer && i !== index;
         row.b.setAttribute("aria-label", `Table ${i + 1}, ${occupied} of 12 seats, ${row.state.textContent}`);
         if (table.result && table.hand !== recorded[i]) {
@@ -152,7 +159,7 @@
       cards(board, community, true, fresh); cards(hand, own?.cards || [], false, fresh);
       by("street").textContent = streetName[s.phase];
       by("balance").textContent = own ? `${chips(own.stack)} banana chips` : "Spectating · private cards stay hidden";
-      by("hand-name").textContent = own?.cards.length === 2 && own.cards.every(Number.isInteger) && s.board.length >= 3 ? `${own.folded ? "Folded · " : ""}${R.evaluate(own.cards.concat(s.board)).name}` : own ? "Your private cards" : "Take a seat to play";
+      by("hand-name").textContent = own?.cards.length === 2 && own.cards.every(Number.isInteger) && s.board.length >= 3 && s.board.every(Number.isInteger) ? `${own.folded ? "Folded · " : ""}${R.evaluate(own.cards.concat(s.board)).name}` : own ? "Your private cards" : "Take a seat to play";
       for (let i = 0; i < 12; i++) {
         const p = s.seats[i], node = seats[i], winner = !!p?.inHand && !!s.result?.pots.some(pot => !pot.refund && pot.winners.includes(i));
         node.wrapper.dataset.position = position(i, ownIndex);
@@ -173,11 +180,11 @@
       }
       by("join").hidden = !!viewer; by("join").disabled = !idle || s.seats.every(Boolean) || paused;
       by("bots").disabled = !idle || s.seats.every(Boolean) || paused;
-      by("start").disabled = !idle || s.seats.filter(p => p && p.stack > 0).length < 2 || paused;
+      by("start").disabled = !idle || s.seats.filter(p => p && p.stack > 0).length < 2 || paused || !!live && !own;
       by("start").textContent = s.hand ? "Deal next hand" : "Deal hand";
       by("refill").hidden = !own || !idle || own.stack >= R.BUY_IN; by("refill").disabled = paused;
-      by("stand").hidden = !viewer; by("stand").disabled = pendingStand;
-      by("stand").textContent = pendingStand ? "Leaving after hand" : "Stand / walk";
+      by("stand").hidden = !viewer; by("stand").disabled = pendingStand || !!live && !idle;
+      by("stand").textContent = live ? idle ? "Stand" : "Stand between hands" : pendingStand ? "Leaving after hand" : "Stand / walk";
       by("setup").hidden = !idle;
       controls.hidden = !legal || pendingStand || paused;
       const key = legal ? `${index}:${s.hand}:${s.phase}:${s.version}` : "";
@@ -191,7 +198,7 @@
         if (!legal.canRaise) { raiseButton.textContent = "Raise unavailable"; amount.value = slider.value = String(legal.max); }
       }
       const turnText = paused ? "Demo paused · resume when ready" : pendingStand ? "Walking · your remaining turns check or fold" : legal ? `Your turn · ${legal.check ? "check for free or bet" : chips(legal.call) + " to call"}` : idle ? own?.stack === 0 ? "Out of chips? Your refill is free." : s.result ? "Hand complete" : "Take a seat, add bots, deal a hand" : own?.folded ? "You folded · watching the hand" : own?.inHand && !own.stack ? "You’re all in · waiting for the result" : `${s.seats[s.turn]?.name || "Dealer"} to act`;
-      by("turn").textContent = turnText; by("turn").classList.toggle("is-yours", !!legal && !paused);
+      by("turn").textContent = live && !["idle", "complete", "betting"].includes(s.fairPhase) ? fairName[s.fairPhase] : live && idle && !s.result ? "Take a seat. Any seated player can deal." : turnText; by("turn").classList.toggle("is-yours", !!legal && !paused);
       by("result").hidden = !s.result; by("result").textContent = resultText(s);
       by("log").textContent = s.history.join("\n");
       const historyKey = `${index}:${recorded[index]}`;
@@ -203,7 +210,7 @@
       }
       auto.checked = autoDeal;
       by("pause").textContent = paused ? "Resume demo" : "Pause demo"; by("pause").setAttribute("aria-pressed", String(paused));
-      noticeText(pendingStand ? "You can walk now. Your seat releases after the hand; all-in chips stay eligible." : "Local practice · computer opponents · free chips with no cash value");
+      noticeText(live ? "Live play · experimental verifiable shuffle · free banana chips" : pendingStand ? "You can walk now. Your seat releases after the hand; all-in chips stay eligible." : "Local practice · computer opponents · free chips with no cash value");
       if (focused && !paused && !switched && previous) {
         if (s.result && !previous.result) cue("win");
         else if (legal && !previous.legal) cue("turn");
@@ -215,7 +222,20 @@
       const text = paused ? "All local tables are paused." : enabled && snapshot?.result ? `Next hand in ${seconds}s` : "";
       if (text !== lastClock) { by("countdown").textContent = text; lastClock = text; }
     };
-    return { update, countdown, setFocused, setTheme, notice: noticeText, get focused() { return focused; }, dispose() {
+    const setLive = value => {
+      live = value; by("fairness").hidden = !live;
+      by("connect").hidden = !!live; by("practice").hidden = !live;
+      by("live-label").textContent = live ? "Shared tables · experimental protocol" : "Shared tables use an experimental verifiable shuffle.";
+      by("bots").hidden = by("pause").hidden = !!live; auto.parentElement.hidden = !!live;
+      el.querySelector('[data-poker-action="quick"]').hidden = !!live;
+      if (live) {
+        by("countdown").textContent = "";
+        by("fair-status").textContent = `${fairName[live.phase] || "Connecting"}${live.total ? ` · ${live.checked}/${live.total} shuffles checked` : ""}`;
+        by("proof-root").textContent = live.root ? "Record fingerprint: " + live.root : "";
+        by("verify").disabled = by("export").disabled = !live.exportable;
+      }
+    };
+    return { update, countdown, setFocused, setTheme, setLive, notice: noticeText, get focused() { return focused; }, dispose() {
       el.removeEventListener("click", onClick); el.removeEventListener("input", onInput); el.removeEventListener("change", onChange);
       by("tables").replaceChildren(); seatRoot.replaceChildren(); board.replaceChildren(); hand.replaceChildren(); by("history").replaceChildren();
       by("theme-choices").replaceChildren(); for (const picker of themeSelects) picker.replaceChildren();
