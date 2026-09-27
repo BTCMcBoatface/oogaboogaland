@@ -358,7 +358,7 @@
   const CLANKER_CAVITY = { floor: 0, ceiling: 0, caveIndex: 0 };
   const JETPACK_HUD_STATE = { owned: false, equipped: false, fuel: 1, blocked: false };
   let enteringTween = null, factoryDeparting = false, bifrostDeparting = false;
-  let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null;
+  let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null, unsubscribeAccount = null, ownOogaClaimed = false;
   let weather = null, unsubscribeMempool = null, unsubscribeChain = null, mempoolIsland = null, timechainIsland = null, bifrostIsle = null;
   // The two boards across the hole from the vine bridge, one reading the chain and one reading the
   // weather. Each holds its canvas, its panel node and the reading it last drew, so a snapshot saying
@@ -6335,6 +6335,43 @@
       updateMeter();
     }
   };
+  // Whether this visitor may take an Ooga: the rules live in `net.mayDrive`; working means the Ooga's
+  // real activity, not a scene override (a return from DSB marks its Ooga working to wake it).
+  const mayDriveOoga = (cave) => cave.contributor ? BL.net.mayDrive(cave.traits.name, contributors.stateFor(cave.contributor) === "working") : null;
+  const RELEASE_WORDS = { "owner-here": "Its owner arrived and took their Ooga back", taken: "Someone else is already driving that Ooga", "not-yours": "Contributors drive only their own Ooga" };
+  // The account or the room changed: an Ooga driven here that is no longer this visitor's to drive is let go.
+  const onAccountChange = () => {
+    claimOwnOoga();
+    const driven = crew.player, released = BL.net.state.released;
+    if (!driven) return;
+    let refusal = BL.net.mayDrive(driven.traits.name, false);
+    if (!refusal && released && released.name === driven.traits.name) refusal = RELEASE_WORDS[released.reason] || "That Ooga is not yours to drive";
+    BL.net.state.released = null;
+    if (!refusal) return;
+    pilot.release(true);
+    hud.toast(refusal);
+  };
+  // A signed-in contributor drives their own Ooga: once a visit, as soon as the account is known, unless
+  // the visitor already drives another. Letting go keeps it let go until the next visit.
+  const claimOwnOoga = () => {
+    const me = BL.net.state.me;
+    if (ownOogaClaimed || !me) return;
+    const character = BL.net.ownCharacter();
+    const cave = character && crew.cavemen.get(character.handle);
+    if (!cave || pilot.player) {
+      ownOogaClaimed = true;
+      return;
+    }
+    // Another tab of this account drives it: its remote copy has sent this one away.
+    if (crew.stateOf(cave) === "away") return;
+    ownOogaClaimed = true;
+    if (!contributors.debugState && crew.stateOf(cave) !== "working") {
+      cave.override = "working";
+      crew.refreshStates(true);
+    }
+    pilot.possess(cave);
+    if (crew.player === cave) hud.toast(`Welcome back, ${BL.characters.displayOf(character.handle)}: this Ooga is yours`);
+  };
   // The room sees the Ooga this visitor drives, by name, and where its feet are; none when free roaming.
   const shareDrivenOoga = () => {
     const driven = crew.player;
@@ -7882,7 +7919,7 @@
     hooks = {};
     input = interactMod.create({ canvas: ctx.canvas, renderer, camera, hooks });
     presets = { pile: PILE_VIEW, gate: GATE_VIEW };
-    pilot = pilotMod.create({ renderer, canvas: ctx.canvas, camera, hud, presets, landing: "pile", pitch: [PITCH_MIN, PITCH_MAX], dist: [DIST_MIN, DIST_MAX], follow: FOLLOW, fly: FLY, clampTarget, clampCamera, observeOrbit: position => clampCamera(position, 0), ceilingAt, birdsEyeMin: BIRDS_EYE_MIN, birdsEyeCeiling, releaseView: releaseCameraView, enterFreeView: enterFreeCameraView, coarse: COARSE, onFreeAction: freeAction, jetpackStatus: jetpackHudStatus, close: { ...CLOSE_VIEW, maxStep: STEP_MAX, groundAt: playerSupportAt, visualGroundAt: visualSupportAt, sleepEyeFloorAt, cloudAt, zone: () => playerCaveIndex } });
+    pilot = pilotMod.create({ renderer, canvas: ctx.canvas, camera, hud, presets, landing: "pile", pitch: [PITCH_MIN, PITCH_MAX], dist: [DIST_MIN, DIST_MAX], follow: FOLLOW, fly: FLY, clampTarget, clampCamera, observeOrbit: position => clampCamera(position, 0), ceilingAt, birdsEyeMin: BIRDS_EYE_MIN, birdsEyeCeiling, releaseView: releaseCameraView, enterFreeView: enterFreeCameraView, coarse: COARSE, onFreeAction: freeAction, jetpackStatus: jetpackHudStatus, mayPossess: mayDriveOoga, close: { ...CLOSE_VIEW, maxStep: STEP_MAX, groundAt: playerSupportAt, visualGroundAt: visualSupportAt, sleepEyeFloorAt, cloudAt, zone: () => playerCaveIndex } });
     chalkboard = BL.chalkboard.create({ renderer,
       onOpen: () => { pilot.setActive(false); pilot.controls.reset(); input.reset(); hud.tooltip.hide(); },
       onClose: () => { pilot.setActive(true); pilot.controls.reset(); input.reset(); } });
@@ -8455,6 +8492,9 @@
       if (returningCharacter && ctx.from === "factory") crew.selectWeapon(cave.weapon.selectedSlot, cave);
       if (initialCharacter) crew.configureWeapon(cave, preloadedWeapon, preloadedAmmo);
     }
+    ownOogaClaimed = false;
+    claimOwnOoga();
+    unsubscribeAccount = BL.net.subscribe(onAccountChange);
     const initialFirstPerson = ctx.from === null && preloadedFirstPerson && !initialGorilla;
     if (initialFirstPerson) pilot.enterClose(true);
     if (returningCharacter) navigate(ctx.from === "factory" || ctx.from === "bifrost" || ctx.from === "arcade" ? ctx.from : "pile");
@@ -8757,6 +8797,8 @@
     window.clearInterval(stateTimer);
     unsubscribeActivity();
     unsubscribeActivity = null;
+    unsubscribeAccount();
+    unsubscribeAccount = null;
     unsubscribeMempool();
     unsubscribeMempool = null;
     unsubscribeChain();
