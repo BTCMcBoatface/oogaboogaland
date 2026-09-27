@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const { scene, models, donations, glRenderer, canvasRenderer, game: gameMod, pile: pileMod, scenes } = window.BL;
+  const { scene, models, donations, glRenderer, canvasRenderer, game: gameMod, pile: pileMod, router: routerMod, scenes } = window.BL;
   // The optional build-time Oogatron snapshot loads before the director.
   // Activity uses each contributor's timestamp, never the snapshot build time.
   if (window.BL.jumbotronData) window.BL.contributors.applySnapshot(window.BL.jumbotronData);
@@ -133,14 +133,16 @@
     worldClock.dateTime = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
     worldClock.setAttribute("aria-label", `${Number.isFinite(clockTime) || clockDaylen > 0 ? "Ooga Booga time" : "Local time"} ${text}`);
   };
-  const go = (id) => {
+  const go = (id, place = null) => {
     const next = scenes[id];
     if (!next) throw new Error(`Unknown scene "${id}"`);
-    if (transition) return;
-    transition = { next, out: true, t: 0 };
+    if (transition) return false;
+    transition = { next, place, out: true, t: 0 };
+    return true;
   };
+  const router = routerMod.create(scenes, window.BL.routes, go);
   const agentPlay = BL.agent.createPlay();
-  const ctx = { renderer, canvas: sceneCanvas, overlay: overlayCanvas, game, world, go, lootEnabled: LOOT_ENABLED, testBananas: TEST_BANANAS, agentPlay, from: null };
+  const ctx = { renderer, canvas: sceneCanvas, overlay: overlayCanvas, game, world, go, lootEnabled: LOOT_ENABLED, testBananas: TEST_BANANAS, agentPlay, from: null, place: null };
   const sceneSections = [...document.querySelectorAll("[data-scene]")];
   // The title cards of the games that have no phase of their own for one: shown on every arrival,
   // closed by their button, Enter, Space or Escape, and nothing else reaches the scene while one shows.
@@ -148,8 +150,9 @@
   const coarse = window.matchMedia("(pointer: coarse)").matches;
   if (coarse) for (const n of document.querySelectorAll("[data-intro] [data-coarse]")) n.textContent = n.dataset.coarse;
   const openIntro = () => intros.find((el) => !el.hidden) || null;
-  const enter = (next) => {
+  const enter = (next, place = null) => {
     ctx.from = active ? active.id : null;
+    ctx.place = place;
     for (const el of sceneSections) el.hidden = el.classList.contains("hub-presets") || el.dataset.scene !== next.id;
     for (const el of intros) el.hidden = el.dataset.intro !== next.id;
     // The page styles by scene too: the games hide the island's sheet, see style.css.
@@ -157,6 +160,7 @@
     next.enter(ctx);
     active = next;
     sceneTime = 0;
+    router.arrive(next.id, place, ctx.from === null);
   };
   const live = new Set();
   const visit = (node) => {
@@ -169,7 +173,7 @@
     active.liveGeometry(live);
     return live;
   };
-  const swap = (next) => {
+  const swap = (next, place) => {
     const leaving = active;
     agentPlay.stop(true);
     const left = leaving.leave();
@@ -177,7 +181,7 @@
     if (DEBUG && left.targets) throw new Error(`${leaving.id}.leave left ${left.targets} input targets`);
     clearTweens();
     if (DEBUG && tweenCount()) throw new Error(`${tweenCount()} tweens survived clearTweens`);
-    enter(next);
+    enter(next, place);
     renderer.releaseUnused(liveGeometry());
     if (DEBUG && renderer.stats.records > live.size) throw new Error(`${next.id}: ${renderer.stats.records} GPU records for ${live.size} live geometries`);
   };
@@ -186,7 +190,7 @@
     if (transition.out) {
       fade = Math.min(1, transition.t / FADE);
       if (fade < 1) return;
-      swap(transition.next);
+      swap(transition.next, transition.place);
       transition.out = false;
       transition.t = 0;
       return;
@@ -444,13 +448,14 @@
   })();
   const housekeepTimer = window.setInterval(housekeep, 6e4);
   // EntropyLab currently lives in its island cave; retain the isolated scene for debug checks only.
-  const requestedScene = params.get("scene") || (WIP !== "1" ? WIP : null);
+  const routed = router.current();
+  const requestedScene = (routed && routed.scene) || params.get("scene") || (WIP !== "1" ? WIP : null);
   const sceneId = requestedScene === "lab" && !DEBUG ? null : requestedScene;
   // Building the first scene holds the main thread with nothing painted yet.
   // Run boot from a task after the first frame so the leaf curtain is on screen, not the previous page.
   const boot = () => {
     const built = performance.now();
-    enter(Object.hasOwn(scenes, sceneId) ? scenes[sceneId] : scenes[Object.keys(scenes)[0]]);
+    enter(Object.hasOwn(scenes, sceneId) ? scenes[sceneId] : scenes[Object.keys(scenes)[0]], routed && routed.place);
     mark("ready");
     tierFromBoot(performance.now() - built);
     raf = window.requestAnimationFrame(frame);
@@ -514,6 +519,7 @@
     unsubscribeBlockFeed();
     unsubscribeBlockHeight();
     feedPanel.close();
+    router.dispose();
     mempool.dispose();
     chain.dispose();
     window.BL.oogatronLive.dispose();
