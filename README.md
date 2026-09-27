@@ -7,7 +7,7 @@ A WebGL2 floating island whose cliff caves are games. Voxel cavemen stand in for
 Open `src/index.html` in a browser, or serve `src/` with any static server.
 
 ```sh
-npm run serve   # build, then serve the built page at http://127.0.0.1:8080/
+npm run serve   # build and stage the site, then serve it at http://127.0.0.1:8080/ (try /oogarally)
 npm run watch   # the same, rebuilding on every change under src/
 ```
 
@@ -43,7 +43,7 @@ The mempool is the weather over the Mempool island: the fee-paying backlog sets 
 
 ## Debug
 
-`?scene=lab`, `race`, `drop`, `orbit`, `mine` or `dsb` opens that scene; `?nosim=1` silences the simulator and every feed; `?canvas2d=1` forces the Canvas 2D fallback; `?debug=1` exposes `window.__ooga`. AGENTS.md lists every flag and fixture.
+Each game and cave has an address to share, with its own preview card: `/oogarally`, `/oogadrop`, `/oogaorbit`, `/oogamine`, `/mempool`, `/dsb`, `/entropylab`, `/lightning` and `/sphere`. They work on the site and under `npm run serve`, and as `oogaboogaland.html#/oogarally` when the file is opened from disk; routes live in `src/js/routes.js`, and `npm run cards` recaptures the cards. `?scene=lab`, `race`, `drop`, `orbit`, `mine` or `dsb` opens that scene; `?nosim=1` silences the simulator and every feed; `?canvas2d=1` forces the Canvas 2D fallback; `?debug=1` exposes `window.__ooga`. AGENTS.md lists every flag and fixture.
 
 ## Test
 

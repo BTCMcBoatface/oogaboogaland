@@ -7453,7 +7453,7 @@
     const initialFirstPerson = ctx.from === null && preloadedFirstPerson;
     if (initialFirstPerson) pilot.enterClose(true);
     if (returningCharacter && !pitReturn) navigate(ctx.from === "factory" ? "factory" : "pile");
-    else if (!crew.sleeping && (preloadedView || initialCharacter || initialFirstPerson)) navigate(preloadedView || "pile");
+    else if (!crew.sleeping && (ctx.place || preloadedView || initialCharacter || initialFirstPerson)) navigate(ctx.place || preloadedView || "pile");
     if (initialCharacter && preloadedJetpack) {
       grantJetpack(pilot.player, preloadedJetpackWear);
     }
