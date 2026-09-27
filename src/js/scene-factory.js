@@ -381,7 +381,7 @@
     const summary = r.summary ? `Foundry hour: ${r.summary.count} fwd, ${Math.round(r.summary.ratio * 100)}% ok` : "(Routing & Forwarding)";
     setBoard(s.switchLabel, "SWITCHBOARD", summary, false);
     const shown = s.placeOf.size, total = r.channels ?? snap.channelCount;
-    setBoard(s.galleryLabel, "MORE CHANNELS", `${Math.max(0, total - 4)} lines, ${Math.max(0, total - shown)} not shown`, true);
+    setBoard(s.galleryLabel, "MORE CHANNELS", `${Math.max(0, total - 4)} lines, ${Math.max(0, total - shown)} not shown`, false);
     // The core names what it is: a demo node on simulated events, until a real node publishes.
     setBoard(s.coreLabel, "NODE CORE", r.node === "stopped" ? "(Node Stopped)" : r.contract === BL.factoryFeed.DEMO ? "(Demo Node, Simulated)" : "(Your LN Node)", true, { height: 1.6 });
   };

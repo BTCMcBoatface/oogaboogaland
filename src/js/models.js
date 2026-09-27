@@ -517,6 +517,42 @@
     out.faces = geo.faces.map((f) => ({ ...f, i: [...f.i].reverse() }));
     return out;
   };
+  // Moves a freshly built geometry by (x, y, z), in place.
+  const moved = (geo, x, y, z) => {
+    const v = geo.verts;
+    for (let i = 0; i < v.length; i += 3) { v[i] += x; v[i + 1] += y; v[i + 2] += z; }
+    return geo;
+  };
+  // Turns a freshly built geometry about y, the way a node's rotation.y would.
+  const turnedY = (geo, a) => {
+    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
+    for (let i = 0; i < v.length; i += 3) {
+      const x = v[i], z = v[i + 2];
+      v[i] = x * c + z * s;
+      v[i + 2] = -x * s + z * c;
+    }
+    return geo;
+  };
+  // Turns a freshly built geometry about z: a positive angle rolls +x toward +y.
+  const turnedZ = (geo, a) => {
+    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
+    for (let i = 0; i < v.length; i += 3) {
+      const x = v[i], y = v[i + 1];
+      v[i] = x * c - y * s;
+      v[i + 1] = x * s + y * c;
+    }
+    return geo;
+  };
+  // Tips a freshly built geometry about x: a positive angle leans its top toward +z.
+  const turnedX = (geo, a) => {
+    const v = geo.verts, c = Math.cos(a), s = Math.sin(a);
+    for (let i = 0; i < v.length; i += 3) {
+      const y = v[i + 1], z = v[i + 2];
+      v[i + 1] = y * c - z * s;
+      v[i + 2] = y * s + z * c;
+    }
+    return geo;
+  };
   // Resting club angles: x tilts the head forward, z rolls it; carry is the working hang.
   const CLUB_REST = { x: 0.95, z: 0 };
   // The shared body every contributor gets. A character file (src/characters/<handle>.js)
@@ -1225,5 +1261,5 @@
       item.buildNode = () => createNode({ geometry: swagGeo(item.id, item.build) });
     }
   }
-  BL.models = { geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, tube, ring, polyline, merge, forward, cached, variants, noShadow, makeVox, voxelGeometry, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
+  BL.models = { geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, tube, ring, polyline, merge, forward, moved, turnedX, turnedY, turnedZ, cached, variants, noShadow, makeVox, voxelGeometry, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
 })();
