@@ -1315,6 +1315,89 @@
         <p id="dsb-tv-welcome">Choose a channel. The island is listening.</p>
       </div>
     </dialog>
+    <div id="poker" data-scene="poker" hidden>
+      <aside class="poker-panel fold-panel fold-right" id="poker-panel" aria-label="Poker floor lobby">
+        <div class="panel-head"><h3>Banana Poker</h3><button class="panel-fold" type="button" data-fold="poker-panel" aria-label="Fold poker lobby">−</button></div>
+        <p class="poker-tagline">THE UNDERGROUND BANANA CLUB</p>
+        <p>Ten stone tables. Twelve seats each.<br>One very well-dressed dealer.</p>
+        <div class="poker-theme-picker">
+          <label>Cave theme <select data-poker-theme-select aria-label="Poker floor theme"></select></label>
+          <div class="poker-theme-choices" data-poker="theme-choices" aria-label="Choose a cave theme"></div>
+          <p data-poker="theme-description"></p>
+        </div>
+        <button class="poker-primary poker-quick" type="button" data-poker-action="quick">Quick Play <small>Free chips · computer opponents</small></button>
+        <div class="poker-lobby-head"><span>NO-LIMIT HOLD’EM</span><span>BLINDS 5 / 10</span></div>
+        <div class="poker-tables" data-poker="tables" aria-label="Ten poker tables"></div>
+        <p class="poker-notice" data-poker="floor-notice" role="status"></p>
+        <p class="poker-help" data-coarse="Walk with the sticks. Tap a table to watch.">WASD to walk · drag to look · click a table to watch</p>
+        <button type="button" data-poker-action="exit">Return through Ooga Portal</button>
+      </aside>
+      <button class="panel-edge" type="button" data-fold="poker-panel">Poker tables</button>
+      <section class="poker-focus" data-poker="focus" hidden aria-label="Poker table">
+        <header class="poker-table-head">
+          <div><p class="poker-kicker" data-poker="theme-name">THE BANANA CLUB</p><h3 data-poker="title" tabindex="-1">Table 01</h3><p data-poker="status"></p></div>
+          <div class="poker-table-tools"><span class="poker-free">FREE PLAY</span><button type="button" data-poker-action="walk">Walk the floor</button><button type="button" data-poker="pause" data-poker-action="pause" aria-pressed="false">Pause demo</button></div>
+        </header>
+        <div class="poker-arena" aria-label="Twelve-seat poker table">
+          <div class="poker-felt" aria-hidden="true"></div>
+          <div class="poker-center">
+            <div class="poker-dealer" aria-label="Suited gorilla dealer">
+              <svg viewBox="0 0 80 80" aria-hidden="true"><path fill="#161f20" d="M6 78V62Q9 49 29 49H51Q71 49 74 62V78Z"/><path fill="#faf0d1" d="M28 49H52L44 78H36Z"/><path fill="#cda75d" d="M35 53L40 57L45 53L43 50H37ZM38 58H42L45 70L40 75L35 70Z"/><path fill="#394542" d="M27 49L15 60L26 62L23 67L36 78ZM53 49L65 60L54 62L57 67L44 78Z"/><path fill="#27332e" d="M17 20L22 10L32 4H48L58 10L63 20V41L53 51H27L17 41Z"/><path fill="#898b73" d="M23 20L32 17L40 21L48 17L57 20V32L60 38L52 46H28L20 38L23 32Z"/><path fill="#18251e" d="M25 23H36V28H25ZM44 23H55V28H44ZM34 31H46L48 36H32ZM30 40H50V42H30Z"/><path fill="#d9bc7b" d="M27 24H30V26H27ZM47 24H50V26H47Z"/></svg>
+              <span>GORILLA DEALER</span>
+            </div>
+            <p class="poker-pot"><span data-poker="pot-label">TOTAL POT</span><strong data-poker="pot">0</strong><small>banana chips</small></p>
+            <div class="poker-board" data-poker="board" aria-label="Community cards"></div>
+            <p class="poker-street" data-poker="street"></p>
+          </div>
+          <div class="poker-seats" aria-label="Player seats"></div>
+        </div>
+        <div class="poker-result" data-poker="result" role="status" hidden></div>
+        <div class="poker-dock">
+          <div class="poker-private"><div class="poker-hand" data-poker="hand" aria-label="Your private cards"></div><p data-poker="balance"></p><small data-poker="hand-name"></small></div>
+          <div class="poker-decision">
+            <p class="poker-turn" data-poker="turn" role="status"></p>
+            <div data-poker="controls" hidden>
+              <div class="poker-sizing">
+                <div class="poker-presets" aria-label="Bet size presets"><button type="button" data-poker-size="min">Min</button><button type="button" data-poker-size="half">½ pot</button><button type="button" data-poker-size="threeQuarter">¾ pot</button><button type="button" data-poker-size="pot">Pot</button><button type="button" data-poker-size="all">All in</button></div>
+                <label class="poker-amount"><span data-poker="range">Raise to</span><input data-poker="amount" type="number" inputmode="numeric" step="1" aria-label="Total bet for this betting round"></label>
+                <input data-poker="slider" type="range" step="1" aria-label="Choose a total bet size">
+              </div>
+              <div class="poker-actions"><button type="button" data-poker-action="fold">Fold</button><button type="button" data-poker="call" data-poker-action="call">Check</button><button class="poker-primary" type="button" data-poker="raise" data-poker-action="raise">Raise to 20</button></div>
+            </div>
+            <div class="poker-buttons" data-poker="setup">
+              <button class="poker-primary" type="button" data-poker="join" data-poker-action="join">Take a seat</button>
+              <button type="button" data-poker="bots" data-poker-action="bots">Add 3 bots</button>
+              <button type="button" data-poker="start" data-poker-action="start">Deal hand</button>
+              <button class="poker-primary" type="button" data-poker="refill" data-poker-action="refill" hidden>Free refill to 1,000</button>
+            </div>
+            <p class="poker-countdown" data-poker="countdown"></p>
+          </div>
+        </div>
+        <footer class="poker-table-footer">
+          <label class="poker-theme-inline">Cave theme <select data-poker-theme-select aria-label="Poker table theme"></select><span data-poker="theme-note">Ivory stone and emerald felt</span></label>
+          <div class="poker-preferences"><label><input type="checkbox" data-poker-option="auto" checked>Auto deal</label><label><input type="checkbox" data-poker-option="sound">Sound</label><button type="button" data-poker="stand" data-poker-action="stand" hidden>Stand / walk</button></div>
+          <p class="poker-notice" data-poker="notice" role="status"></p>
+          <details class="poker-history"><summary>Hand history &amp; action log</summary><p class="poker-log" data-poker="log"></p><ol data-poker="history"></ol></details>
+          <details class="poker-rules"><summary>Rules &amp; shuffle</summary><p>No-limit Texas Hold’em · blinds 5/10 · 1,000 free banana chips · no rake. Raise sizes are your total for this betting round. All-ins create side pots; ties split pots. A sizing preset only fills the input; press Bet or Raise to submit.</p><p>Local practice with computer opponents. Session-only chips have no cash value, purchase, transfer or redemption. They are separate from donation bananas. Auto deal waits five seconds between hands; pause any time. There is no time limit on your turn.</p><p>Cards use Web Crypto and an unbiased Fisher–Yates shuffle. This local demo is not independently verifiable or cheat-proof. Spectators can see community and public showdown cards only.</p></details>
+        </footer>
+      </section>
+      <section class="race-results game-intro" data-intro="poker" hidden aria-label="Welcome to Banana Poker">
+        <p class="game-intro-kicker">The underground banana club</p>
+        <h2 class="game-intro-title"><span data-sign>Banana Poker</span></h2>
+        <svg class="game-intro-coin" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path fill="#d9b545" d="M8 1h4v5h-1v3H9v2H6v2H2v-2h3V9h2V6h1z"/><path fill="#73874d" d="M8 0h2v2H8z"/></svg>
+        <p class="game-intro-goal">Pull up a stone seat. The gorillas will deal.</p>
+        <ul class="game-rules">
+          <li><b>Ten tables</b><small>Twelve player seats at every table.</small></li>
+          <li><b>Free banana chips</b><small>No money, purchases or rake.</small></li>
+          <li><b>Start with two</b><small>Take a seat, add bots, start a hand.</small></li>
+          <li><b>Hold’em</b><small>Two private cards, five community cards.</small></li>
+          <li><b>Walk and watch</b><small data-coarse="Move with the sticks; tap a table to watch.">WASD and drag to explore; click a table to watch.</small></li>
+          <li><b>Local demo</b><small>Computer opponents; shared play comes later.</small></li>
+        </ul>
+        <button type="button" class="game-intro-go" data-action="intro-go">Enter the poker floor</button>
+        <button type="button" data-action="leave">Exit Game</button>
+      </section>
+    </div>
     <dialog class="modal" id="feed" aria-label="Feed the Ooga Boogas">
       <div class="panel-head">
         <h2><span data-sign>Feed the Ooga Boogas</span></h2>
@@ -1566,6 +1649,12 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
   <script src="js/scene-bifrost.js"></script>
   <script src="js/routes.js"></script>
   <script src="js/router.js"></script>
+  <script src="js/poker-rules.js"></script>
+  <script src="js/poker-cards.js"></script>
+  <script src="js/poker-themes.js"></script>
+  <script src="js/poker-models.js"></script>
+  <script src="js/poker-hud.js"></script>
+  <script src="js/scene-poker.js"></script>
   <script src="js/director.js"></script>
 </body>
 

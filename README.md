@@ -35,6 +35,7 @@ Sani's hangout: a walk-in sphere whose six inner walls show live [Timechain Inde
 
 ## Games
 
+- **Banana Poker:** a local play-chip Hold'em demo through the basement Ooga Portal, with ten stone tables, twelve player seats each, suited gorilla dealers, five cave-inspired room themes, and walkable spectators. No payments or live multiplayer. See [implementation and validation status](docs/banana-poker.md).
 - **Ooga Rally:** three laps on one of three tracks. **W** go, **S** brake, **A D** steer, hold **Space** to drift and release to boost, **E** throws your item. Win gold in the Cup to open Mirror.
 - **Ooga Drop:** jump from the plane, fly through eight hoops (**W S** pitch, **A D** roll, **Q E** turn), **Space** pulls the chute, land on the pile.
 - **Ooga Orbit:** build a rocket, launch, reach the Sky Top at 500 up, spacewalk to measure the space rock (**V**), then fall home shield first and chute onto the pad.
