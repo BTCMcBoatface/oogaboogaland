@@ -336,18 +336,20 @@
     let actionHandler = null;
     const DETACHED_PRESETS = ["pile", "lab", "mirror", "underground", "basement"];
     const DETACHED_NAMES = { pile: "Pile", lab: "Lab", mirror: "Mirror", underground: "HQ", basement: "Basement" };
-    let detachedPreset = "pile", detachedNameTimer = 0;
+    let detachedPreset = "pile", detachedNameShown = false;
+    const fadeDetachedName = () => {
+      if (!detachedNameShown) return;
+      detachedNameShown = false;
+      el.modeDestinationName.classList.remove("show");
+    };
     const setDetachedView = (name, announce = false) => {
       if (!DETACHED_NAMES[name]) return;
       detachedPreset = name;
       for (const dot of el.modeDestinationDots) dot.dataset.current = String(dot.dataset.detachedPreset === name);
       if (!announce) return;
-      window.clearTimeout(detachedNameTimer);
       el.modeDestinationName.textContent = DETACHED_NAMES[name];
-      el.modeDestinationName.classList.remove("show");
-      void el.modeDestinationName.offsetWidth;
+      detachedNameShown = true;
       el.modeDestinationName.classList.add("show");
-      detachedNameTimer = window.setTimeout(() => el.modeDestinationName.classList.remove("show"), 1200);
     };
     const nextDetachedView = () => DETACHED_PRESETS[(DETACHED_PRESETS.indexOf(detachedPreset) + 1) % DETACHED_PRESETS.length];
     let gorillaEntry = null, gorillaView = "orbit", gorillaCombat = false;
@@ -356,6 +358,7 @@
       const gorilla = gorillaEntry ? gorillaEntry.gorilla : null;
       if (gorilla) { cave = gorillaEntry.owner; combat = gorillaCombat; view = gorillaView; visible = true; }
       const selected = !!cave, name = selected ? cave.traits.name : "", shown = selected ? cave.traits.display : "";
+      if (selected || !visible) fadeDetachedName();
       const identityChanged = selected !== modeSelected || selected && name !== modeName || !!gorilla !== modeGorilla;
       const stateChanged = combat !== modeCombat || view !== modeView;
       if (el.mode.hidden === visible) el.mode.hidden = !visible;
@@ -967,7 +970,6 @@
     const hint = (text, ms = 4200) => {
       window.clearTimeout(hintTimer);
       window.clearTimeout(hintHideTimer);
-      window.clearTimeout(detachedNameTimer);
       el.hint.textContent = text;
       el.hint.hidden = false;
       el.messageStack.append(el.hint);
@@ -1174,7 +1176,7 @@
       closeRecipe();
       closeBoard();
     };
-    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setDetachedView, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
+    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setDetachedView, fadeDetachedName, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
   };
   BL.hud = { create, renderIcon, signLettering, STATE_LABELS, statusFor };
 })();

@@ -16,8 +16,8 @@
   const JUMP_SAMPLES = 20, MAX_JUMP = 8.5;
   const CLIMB_POINTS = 128, CLIMB_RADIUS = 1.05, CLIMB_HEIGHT = 3.1, CLIMB_STANDOFF = 0.87;
   const CLIMB_SPEED = 2.1, CLIMB_APPROACH_SPEED = 3.15, CLIMB_CREST_SPEED = 2.75, CLIMB_TURN_TIME = 0.42, CLIMB_MOUNT_DISTANCE = 0.75;
-  const JUMP_CHARGE = 0.65, ROLL_SECONDS = 3, SOOT_SECONDS = 10, MOTION_RADIUS = BL.agent.MANAGED_MOTION_RADIUS, MOTION_HEIGHT = BL.agent.MANAGED_MOTION_HEIGHT;
-  const GRAVITY = BL.pilot.WALK.gravity, NORMAL_JUMP = BL.crew.JUMP_SPEED;
+  const ROLL_SECONDS = 3, SOOT_SECONDS = 10, MOTION_RADIUS = BL.agent.MANAGED_MOTION_RADIUS, MOTION_HEIGHT = BL.agent.MANAGED_MOTION_HEIGHT;
+  const GRAVITY = BL.pilot.WALK.gravity, PLAYER_JUMP_SPEED = BL.crew.JUMP_SPEED * Math.sqrt(1.5);
   const STEERING = [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 1.95, -1.95, 2.5, -2.5, Math.PI];
   const REST_TRANSITION_TIMES = [1 / 120, 1 / 60, 1 / 30, 0.06, 0.15, 0.3, 0.6, 1.2];
   const ROOM_CELLS = [[-1.7, -4.92], [1.7, -4.92], [-1.7, -3.38], [1.7, -3.38],
@@ -32,6 +32,7 @@
   const create = (ctx) => {
     const { crew, sites, groundAt, clear } = ctx;
     const footprint = BL.agent.footprint, torso = BL.agent.torso;
+    const pointSupportAt = ctx.pointSupportAt || groundAt;
     const climbSolidAt = ctx.climbSolidAt || ctx.solidAt, climbSurfaceAt = ctx.climbSurfaceAt || ctx.surfaceAt;
     const list = [], byOwner = new Map(), portals = new Array(sites.length).fill(null);
     // Stations are authored once in world space: { x, y, z, heading, kind,
@@ -49,6 +50,7 @@
     const loungeSpots = new Float64Array(320 * 3);
     let loungeCount = 0, roofCount = 0, loungeReady = false;
     const roamPath = new Float64Array(12), roamPoint = { x: 0, y: 0, z: 0, heading: 0 };
+    const climbWallDepths = new Float64Array(CLIMB_POINTS);
     let roamBudget = 1, roamNext = 0, roamTurn = -1, roamSerial = 0;
     let disposed = false, elapsed = 0, player = null;
     let debugShuttle = null, debugShuttleAt = 0, debugShuttleUntil = 0;
@@ -60,6 +62,9 @@
       states: new Uint8Array(WALL_COUNT), attempts: new Uint8Array(WALL_COUNT), points: new Float64Array(WALL_COUNT * 3), headings: new Float64Array(WALL_COUNT),
       costs: new Float64Array(WALL_COUNT), scores: new Float64Array(WALL_COUNT), parents: new Int16Array(WALL_COUNT),
       route: new Int16Array(512) } : null;
+    const clearWallSearch = (e) => {
+      if (wallSearch && wallSearch.owner === e) wallSearch.owner = null;
+    };
     const WALL_POINT = { x: 0, y: 0, z: 0, heading: 0 };
     const alive = (cave) => cave.state === "working" || cave.state === "chilling";
     const releasePortal = (e) => {
@@ -160,9 +165,12 @@
     const landing = (x, y, z) => Number.isFinite(y) && Math.hypot(x, z) < roamRadius && (!ctx.onLand || ctx.onLand(x, z));
     const actorLanding = (e, x, y, z) => (!e.debugMove.active || y > ctx.debugMinY)
       && (landing(x, y, z) || e.debugMove.active && Number.isFinite(y) && Math.abs(support(e, x, z, y, 0.02) - y) < 0.05);
-    const canopyBackoutClear = (e, x, y, z, nx, ny, nz, heading) => {
+    const canopyBackoutClear = (e, x, y, z, nx, ny, nz, heading, toHeading) => {
       const dx = nx - x, dz = nz - z, distance = Math.hypot(dx, dz);
       if (!e.lowCover || distance < 1e-6 || dx * Math.sin(heading) + dz * Math.cos(heading) > -distance * 0.5) return false;
+      // Escaping an existing tree overlap never admits a body step into rock.
+      // Check the actual moving rig before probing a clear retreat endpoint.
+      if (ctx.canopyTerrainClear && !ctx.canopyTerrainClear(e, x, y, z, nx, ny, nz, heading, toHeading)) return false;
       const sx = dx / distance, sz = dz / distance;
       // An arm chain may already overlap the crown or trunk when low-cover
       // mode begins. Prove a clear point directly behind the planted body,
@@ -174,9 +182,14 @@
       }
       return false;
     };
-    const staticClear = (e, x, y, z, nx = x, ny = y, nz = z, fromHeading = e.heading, toHeading = fromHeading) =>
-      clear(x, y, z, nx, ny, nz, e.radius, e.height, e, null, fromHeading, toHeading)
-      || canopyBackoutClear(e, x, y, z, nx, ny, nz, fromHeading);
+    const staticClear = (e, x, y, z, nx = x, ny = y, nz = z, fromHeading = e.heading, toHeading = fromHeading) => {
+      if (clear(x, y, z, nx, ny, nz, e.radius, e.height, e, null, fromHeading, toHeading)) return true;
+      const checked = e.walkPoseChecked;
+      const backout = canopyBackoutClear(e, x, y, z, nx, ny, nz, fromHeading, toHeading);
+      // Retreat endpoint probes must not erase the actual step's rejection.
+      e.walkPoseChecked ||= checked;
+      return backout;
+    };
     // Retained routes double as short-lived space/time reservations. Predict
     // from the actual position, so a late worker never leaves a phantom path
     // behind it. Unplanned, controlled and working actors keep their real spot.
@@ -333,7 +346,7 @@
     };
     const labEnvelope = (e) => {
       if (!e.motion.lab || e.motion.labRunIn || e.climb.active || e.jump.active || e.drive.airborne || e.fire.rolling || e.fire.rollRecover
-        || e.drive.jumpArmed || e.drive.motionRecover || e.pound || e.beat || e.recover || e.motion.smash || e.gorilla.smashActive) return false;
+        || e.drive.motionRecover || e.pound || e.beat || e.recover || e.motion.smash || e.gorilla.smashActive) return false;
       e.biped = true; e.footprintMode = "lab"; e.compact = !!(e.gorilla.labIdleCompact || e.gorilla.labWalkCompact || e.gorilla.labCompact);
       e.radius = Math.max(BL.agent.LAB_RADIUS || 1.1, e.gorilla.bodyRadius + 0.04);
       e.height = Math.max(BL.agent.LAB_HEIGHT || 2.8, e.gorilla.bodyHeight + 0.04);
@@ -1116,6 +1129,17 @@
           || !shape.separates(e, fromX, fromY, fromZ, fromHeading, x, y, z, heading,
             other, p.x, p.y, p.z, other.heading, SPACE)) return false;
       }
+      // A route and its destination must reserve the same human clearance
+      // as occupied() does while walking. Otherwise every replan can choose
+      // the same endpoint beneath a standing Ooga and stop just short of it.
+      for (let i = 0; i < crew.list.length; i++) {
+        const other = crew.list[i];
+        if (!other.root.visible || other.state === "away" || other.state === "sleeping" || other.clankerRide?.entry === e) continue;
+        const p = other.root.position, feet = p.y - other.baseY, height = other.bodyHeight || other.traits.height;
+        if (footprint.circleOverlaps(e, x, y, z, heading, p.x, feet, p.z, 0.38, height, SPACE)
+          && !footprint.circleSeparates(e, fromX, fromY, fromZ, fromHeading, x, y, z, heading,
+            p.x, feet, p.z, 0.38, height, SPACE)) return false;
+      }
       return true;
     };
     const roamLeg = (e, x, y, z, nx, ny, nz, heading, partial, out, fixedHeading = NaN) => {
@@ -1146,6 +1170,10 @@
           // A low tread is not a climbable wall. Try another walking approach
           // instead of retaining a zero-length "wall" route at its edge.
           if (!partial || Math.abs(ny - py) < 1 || !e.debugMove.active && Math.hypot(px - nx, pz - nz) > 7) return false;
+          // A chamber below the requested roof has an enclosing ceiling. Its
+          // back wall is not an approach to the outside cliff: keep searching
+          // around the mouth instead of repeatedly walking under the goal.
+          if (ny > py + 1 && caveAt(px, py, pz) >= 0) return false;
           out.x = px; out.y = py; out.z = pz; out.heading = facing;
           return true;
         }
@@ -1165,14 +1193,19 @@
       e.compact = e.planningRoam = true; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
       const dx = x - p.x, dz = z - p.z, distance = Math.hypot(dx, dz);
       const sx = distance > 0 ? dz / distance : 1, sz = distance > 0 ? -dx / distance : 0;
-      let found = false, best = Infinity, count = 0, wall = false, reverse = false;
+      let found = false, best = Infinity, count = 0, wall = false, reverse = false, departHeading = e.heading;
       // Straight first. The two interior knots produce a short parallel pass
       // around a tree or resting body, without routing via a distant landmark.
-      for (let attempt = 0; attempt < 15; attempt++) {
-        const departure = attempt >= 11 ? -(attempt - 10) * 0.65 : attempt >= 9 ? (attempt - 8) * 0.9 : 0;
-        const offset = attempt && !departure ? Math.ceil(attempt / 2) * 1.35 * (attempt % 2 ? 1 : -1) : 0;
+      for (let attempt = 0; attempt < (e.debugMove.active ? 16 : 15); attempt++) {
+        // A bridge or prop can leave enough room to back out, but not to turn
+        // around. Keep the ordinary swept walking proof for that entire leg.
+        const reverseDirect = attempt === 15;
+        const reverseHeading = Math.atan2(dx, dz) + Math.PI;
+        if (reverseDirect && Math.cos(reverseHeading - e.heading) < 0) continue;
+        const departure = reverseDirect ? 0 : attempt >= 11 ? -(attempt - 10) * 0.65 : attempt >= 9 ? (attempt - 8) * 0.9 : 0;
+        const offset = attempt && !departure && !reverseDirect ? Math.ceil(attempt / 2) * 1.35 * (attempt % 2 ? 1 : -1) : 0;
         let px = p.x, py = p.y, pz = p.z, heading = e.heading, length = 0, valid = true, n = 0;
-        const legs = departure ? 2 : attempt ? 3 : 1;
+        const legs = departure ? 2 : attempt && !reverseDirect ? 3 : 1;
         for (let leg = 0; leg < legs; leg++) {
           const final = leg + 1 === legs, t = final ? 1 : (leg + 1) / 3;
           // At a tight resting place, move forward into the clearing before
@@ -1181,13 +1214,19 @@
           const nz = departure && !final ? p.z + Math.cos(e.heading) * departure : p.z + dz * t + (final ? 0 : sz * offset);
           const ny = final ? y : groundAt(nx, nz, py);
           if (!roamLeg(e, px, py, pz, nx, ny, nz, heading, final, roamPoint,
-            departure < 0 && !final ? e.heading : NaN)) { valid = false; break; }
+            reverseDirect ? reverseHeading : departure < 0 && !final ? e.heading : NaN)) { valid = false; break; }
           length += Math.hypot(roamPoint.x - px, roamPoint.z - pz);
           roamPath[n++] = roamPoint.x; roamPath[n++] = roamPoint.y; roamPath[n++] = roamPoint.z;
           px = roamPoint.x; py = roamPoint.y; pz = roamPoint.z; heading = roamPoint.heading;
         }
-        if (!valid || length >= best || walkingOnly && Math.abs(py - y) > 0.55) continue;
-        if (Math.abs(py - y) <= 0.55) {
+        const partial = Math.abs(py - y) > 0.55;
+        if (partial && y > py + 1 && caveAt(px, py, pz) >= 0) continue;
+        // A short blocked approach is not cheaper than a complete detour.
+        // Among wall approaches credit progress toward the intended endpoint,
+        // otherwise a zero-length obstruction wins every retry.
+        const cost = length + (partial ? Math.hypot(x - px, z - pz) * 2 : 0);
+        if (!valid || walkingOnly && partial || found && (!wall && partial || wall === partial && cost >= best)) continue;
+        if (!partial) {
           const facing = Number.isFinite(endHeading) ? endHeading : heading;
           if (!staticClear(e, px, py, pz, px, py, pz, heading, facing)
             || !roamPeerClear(e, px, py, pz, facing, true, px, py, pz, heading)) continue;
@@ -1200,15 +1239,16 @@
             if (!fits) continue;
           }
         }
-        found = true; best = length; count = n / 3; wall = Math.abs(py - y) > 0.55; reverse = departure < 0;
+        found = true; best = cost; count = n / 3; wall = partial; reverse = departure < 0 || reverseDirect;
+        departHeading = reverseDirect ? reverseHeading : e.heading;
         for (let i = 0; i < n; i++) r.path[i] = roamPath[i];
-        if (!attempt) break;
+        if (!attempt && !partial) break;
       }
       e.compact = compact; e.footprintMode = mode; e.radius = radius; e.height = height; e.planningRoam = false;
       r.plans++;
       if (!found) return false;
-      r.count = count; r.index = 0; r.wall = wall; r.level = p.y; r.waitUntil = 0; r.blocked = 0;
-      r.reverseStart = reverse; r.departHeading = e.heading;
+      r.count = count; r.index = 0; r.wall = wall; r.propDeparture = false; r.level = p.y; r.waitUntil = 0; r.blocked = 0;
+      r.reverseStart = reverse; r.departHeading = departHeading;
       r.targetX = x; r.targetY = y; r.targetZ = z; r.order = ++roamSerial; r.obstacle = null;
       return true;
     };
@@ -1573,19 +1613,20 @@
       }
     };
     const activate = (e, recovering = false) => {
-      if (wallSearch && wallSearch.owner === e) wallSearch.owner = null;
+      clearWallSearch(e);
       const d = e.drive, f = e.fire, m = e.motion;
       e.lowCover = false; e.backoutLeft = 0;
-      d.x = d.z = d.charge = d.vx = d.vy = d.vz = d.motionRecover = 0;
+      d.x = d.z = d.vx = d.vy = d.vz = d.motionRecover = d.jumps = 0;
       d.climbExitHeading = d.climbExitLook = NaN;
-      d.jumpHeld = d.jumpDown = d.jumpArmed = d.airborne = d.resume = d.motionEnvelope = false; d.grounded = true;
+      d.jumpHeld = d.jumpDown = d.jumpPressed = d.airborne = d.resume = d.motionEnvelope = false; d.grounded = true;
       f.burning = f.rolling = f.requested = f.escaping = false; f.retry = f.escapeRetry = 0; f.age = f.heat = f.soot = f.cooldown = f.rollRecover = 0;
       m.charge = m.takeoff = m.landing = m.roll = m.rollAngle = m.climb = m.climbSide = m.mantle = m.groom = m.supportOffset = 0;
-      e.climb.active = e.climb.claimPending = e.climb.crestPending = e.climb.searchPending = false;
+      m.verifyGrip = false;
+      e.climb.active = e.climb.claimPending = e.climb.crestPending = e.climb.searchPending = e.climb.free = false;
       e.climb.debugTraverse = e.climb.debugStuck = false; e.climb.debugRole = -1;
-      e.debugMove.active = e.debugMove.wallPending = false; e.debugMove.status = "";
+      e.debugMove.active = e.debugMove.cancelled = e.debugMove.wallPending = false; e.debugMove.status = "";
       e.climb.traverseStart = e.climb.traverseEnd = 0;
-      e.climb.retry = d.climbAxis = 0; e.roam.count = e.roam.index = 0; e.roam.departPending = false;
+      e.climb.retry = e.climb.handoffDirection = d.climbAxis = d.climbSide = 0; e.roam.count = e.roam.index = 0; e.roam.departPending = e.roam.propDeparture = false;
       e.actionControlled = e.motion.smash = false;
       releaseLab(e); e.motion.lab = false;
       e.mode = e.owner.state; e.site = e.owner.work.plannedSite >= 0 ? e.owner.work.plannedSite : e.owner.work.site;
@@ -1620,7 +1661,7 @@
       if (e === debugShuttle) { debugShuttleAt = elapsed + 4; debugShuttleUntil = 0; }
     };
     for (let i = 0; i < crew.list.length; i++) {
-      const owner = crew.list[i], gorilla = BL.agent.create({ managed: true, groundAt, scale: SCALE, coatClip });
+      const owner = crew.list[i], gorilla = BL.agent.create({ managed: true, groundAt, climbSolidAt, groundPlaneAt: ctx.groundPlaneAt, groundHullAt: ctx.groundHullAt, scale: SCALE, coatClip });
       gorilla.poseManaged(0.6, 0, 0, 0, i * 2.39996323, 0, false, false);
       const entry = {
         owner, cave: owner, tooltipOwner: owner, gorilla, root: gorilla.root, parts: gorilla.parts,
@@ -1642,15 +1683,15 @@
         drag: { cave: null, time: 0 },
         beat: 0, beats: 0, stand: 0, parked: false, parkFor: 0, exitFootprint: false, workCycle: 0, recover: 0, lounge: "", jumps: 0,
         loungePartner: null, loungeHeading: NaN, loungeCycle: 0, loungeRoof: false, loungeDepart: false, groomTime: 0, groomWait: 0,
-        planningRoam: false, planningSeat: false, roam: { path: new Float64Array(12), count: 0, index: 0, wall: false, level: 0, reverseStart: false, departHeading: 0,
+        planningRoam: false, planningSeat: false, walkPoseChecked: false, roam: { path: new Float64Array(12), count: 0, index: 0, wall: false, level: 0, reverseStart: false, departHeading: 0, propDeparture: false,
           targetX: NaN, targetY: NaN, targetZ: NaN, order: 0, waitUntil: 0, blocked: 0, obstacle: null, waitPeer: null, waitX: 0, waitZ: 0,
           plans: 0, arrived: false, pose: "", lastPose: "", transition: 0, nextChoice: 0, failedChoices: 0,
           departPending: false, departAt: 0, departX: 0, departY: 0, departZ: 0, riseAdmitted: false,
           wallFailedX: NaN, wallFailedZ: NaN, wallFailedUntil: 0,
           levelOnlyUntil: 0, planAt: 0, progressTime: 0, progressX: NaN, progressZ: NaN, progressDistance: Infinity, progressTurn: Infinity, progressCursor: -1, progressClaim: 0, backoutX: NaN, backoutZ: NaN, alignTime: 0, failedX: NaN, failedZ: NaN, failedUntil: 0 },
         controlled: false, pendingSite: -1, actionControlled: false,
-        debugMove: { active: false, status: "", reason: "", target: { x: 0, y: 0, z: 0 },
-          goal: { x: 0, y: 0, z: 0 }, candidate: 0, hops: 0, normalized: false,
+        debugMove: { active: false, cancelled: false, status: "", reason: "", target: { x: 0, y: 0, z: 0 },
+          goal: { x: 0, y: 0, z: 0, heading: NaN }, candidate: 0, hops: 0, normalized: false,
           normalizeAt: 0, normalizeScore: Infinity, wallTarget: false, wallPending: false, wallFinal: false,
           normalX: 0, normalY: 1, normalZ: 0, normalHeading: NaN, originX: 0, originY: 0, originZ: 0,
           visited: new Float64Array(32 * 3), visitedCount: 0, visitedNext: 0,
@@ -1661,11 +1702,12 @@
           yieldAlong: 0, yieldChoice: 0, yieldReady: false, yieldTargetX: 0, yieldTargetZ: 0,
           yieldProgressX: 0, yieldProgressZ: 0, yieldProgressAt: 0, yieldPoint: { x: 0, y: 0, z: 0, heading: 0 },
           squeezeUntil: 0, waitOrder: 0, coordinationUntil: 0, path: new Float64Array(16 * 3), pathFacings: new Float64Array(16), pathWaits: new Float64Array(16), plans: 0, readyAt: 0, targetHeading: 0, trafficWait: 0, pathPending: false, pathPartial: false, pathFixed: false, pathHeading: 0, pathCount: 0, pathIndex: 0, pathAt: 0, targetX: NaN, targetY: NaN, targetZ: NaN },
-        drive: { x: 0, z: 0, climbAxis: 0, heading: NaN, climbExitHeading: NaN, climbExitLook: NaN,
-          run: false, jumpHeld: false, jumpDown: false, jumpArmed: false,
-          cancelled: false, charge: 0, vx: 0, vy: 0, vz: 0, airborne: false, passiveFall: false, grounded: true, resume: false, motionRecover: 0, motionEnvelope: false },
-        motion: { charge: 0, poundCharge: 0, takeoff: 0, landing: 0, supportOffset: 0, roll: 0, rollAngle: 0, smash: false, dragging: false,
-          climb: 0, climbBlend: NaN, climbStride: 0, climbDirection: 0, climbSide: 0, mantle: 0, groom: 0, groomSide: 1, groomPhase: 0,
+        drive: { x: 0, z: 0, climbAxis: 0, climbSide: 0, heading: NaN, climbExitHeading: NaN, climbExitLook: NaN,
+          run: false, jumpHeld: false, jumpDown: false, jumpPressed: false, jumps: 0, avoidSide: 0, avoidHeading: 0, avoidTime: 0,
+          cancelled: false, vx: 0, vy: 0, vz: 0, airborne: false, passiveFall: false, grounded: true, resume: false, motionRecover: 0, motionEnvelope: false },
+        motion: { charge: 0, poundCharge: 0, takeoff: 0, landing: 0, supportOffset: 0, walkPhase: NaN, roll: 0, rollAngle: 0, smash: false, dragging: false,
+          climbGripX: NaN, climbGripY: NaN, climbGripZ: NaN, climbGripStride: 0, climbGripDirection: 0, climbGripSide: 0, climbGripRelease: 0,
+          climb: 0, climbBlend: NaN, climbStride: 0, climbDirection: 0, climbSide: 0, verifyGrip: false, mantle: 0, groom: 0, groomSide: 1, groomPhase: 0,
           sitWait: 3, sitTime: 0, sitLook: 0, sitShift: 0, sitLookTarget: 0, sitShiftTarget: 0,
           lab: false, labRunIn: false, labWork: "", labPhase: i * 0.71, labSide: 1, labDt: 1 / 30, labReach: 0, labGripY: 0.53105, labSqueeze: false,
           labDie: false, labRoll: 0, labBench: null },
@@ -1676,8 +1718,8 @@
           searchX: 0, searchY: 0, searchZ: 0, searchHeading: 0, searchDescending: false,
           searchGoalX: 0, searchGoalY: 0, searchGoalZ: 0,
           claimPending: false, crestPending: false, claimOrder: 0, claimFor: -1, claimOwnerOrder: 0, claimProgress: 0, claimProgressAt: 0, claimRetreat: false,
-          returning: false, reversals: 0, holdPose: false,
-          debugRole: -1, debugTraverse: false, debugStuck: false, debugStop: -1, traverseStart: 0, traverseEnd: 0,
+          returning: false, reversals: 0, holdPose: false, free: false, freeExitAt: 0, freeExitCursor: 0, handoffDirection: 0,
+          debugRole: -1, debugTraverse: false, debugStuck: false, debugStop: -1, traverseStart: 0, traverseEnd: 0, lowerClearance: 0, lowerClearanceAscent: false,
           peerCheck: false, peerX: 0, peerY: 0, peerZ: 0, peerHeading: 0,
           points: new Float64Array((ctx.debugMovement ? 512 : CLIMB_POINTS) * 3), lengths: new Float64Array(ctx.debugMovement ? 512 : CLIMB_POINTS),
           headings: new Float64Array(ctx.debugMovement ? 512 : CLIMB_POINTS) },
@@ -1807,7 +1849,7 @@
     // walking body; the upright climb reserves the measured hand/foot envelope.
     const CLIMB_HAND_X = [-0.65, -0.35, -0.15, 0.15, 0.35, 0.65];
     let climbClaimSerial = 0;
-    const climbTransitionPeers = (e, x, y, z, nx, ny, nz, radius, height, actors, riders, toRadius, toHeight) => {
+    const climbTransitionPeers = (e, x, y, z, nx, ny, nz, radius, height, actors, riders, toRadius, toHeight, peers, part, hull) => {
       const c = e.climb;
       if (c.peerCheck) {
         c.peerCheck = false;
@@ -1816,8 +1858,9 @@
           p.x, p.y, p.z, c.peerHeading, e.root.rotation.y, true)) return false;
       }
       return !ctx.climbTransitionClear || ctx.climbTransitionClear(e, x, y, z, nx, ny, nz,
-        radius, height, actors, riders, toRadius, toHeight, !ctx.climbPeersClear);
+        radius, height, actors, riders, toRadius, toHeight, !ctx.climbPeersClear, part, hull);
     };
+    climbTransitionPeers.needsHull = !!(ctx.climbTransitionClear && ctx.climbTransitionClear.needsHull);
     const climbPoseClear = (e, dt, x, y, z, heading, motion, speed = 0) => {
       const c = e.climb, p = e.root.position;
       c.peerX = p.x; c.peerY = p.y; c.peerZ = p.z; c.peerHeading = e.heading;
@@ -1873,7 +1916,7 @@
     };
     const climbClaimOccupied = (e, x, y, z, heading, owner) => {
       const c = owner.climb;
-      if (!c.active) return false;
+      if (!c.active || c.free) return false;
       const planning = owner.planningRoam, height = owner.height;
       // A wall grip has a smaller trunk footprint than its grounded finish.
       // Keep both supported ends free in case a temporary obstacle requires
@@ -1915,8 +1958,27 @@
       return true;
     };
     const plannedTurnMotion = { climb: 1, climbBlend: 1, mantle: 0, climbStride: 0, climbDirection: 0, climbSide: 0 };
+    const plannedMountMotion = { climb: 1, climbBlend: 0, mantle: 0, climbStride: 0, climbDirection: 0, climbSide: 0 };
     const plannedTurnClear = ctx.climbTransitionClear ? (e, x, y, z, nx, ny, nz, radius, height, actors, riders, toRadius, toHeight) =>
       ctx.climbTransitionClear(e, x, y, z, nx, ny, nz, radius, height, false, false, toRadius, toHeight) : null;
+    const climbStartTurnClear = (e, heading) => {
+      const p = e.root.position, turn = Math.atan2(Math.sin(heading - e.heading), Math.cos(heading - e.heading));
+      if (Math.abs(turn) < 0.001) return true;
+      const compact = e.compact, planning = e.planningRoam, mode = e.footprintMode, radius = e.radius, height = e.height;
+      e.compact = e.planningRoam = true; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
+      try {
+        // Admission reserves the same full walking turn as a ground route.
+        // The mount cannot start by snapping from an arbitrary approach yaw
+        // onto the wall bearing, especially when perched on a narrow ledge.
+        if (!staticClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.heading, heading)) return false;
+        const steps = Math.max(1, Math.ceil(Math.abs(turn) / 0.12));
+        for (let i = 1; i <= steps; i++) {
+          const y = support(e, p.x, p.z, p.y, STEP, e.heading + turn * i / steps);
+          if (!Number.isFinite(y) || Math.abs(y - p.y) > 0.05) return false;
+        }
+        return true;
+      } finally { e.compact = compact; e.planningRoam = planning; e.footprintMode = mode; e.radius = radius; e.height = height; }
+    };
     const bottomTurnClear = (e, x, y, z, heading) => {
       // A safe upright footfall can still leave the lowered shoulders inside a
       // diagonal rock corner. Reserve the complete grounded turn before using
@@ -1937,6 +1999,17 @@
           blend = Math.min(1, blend + 0.12);
         }
         if (!clear) return false;
+      }
+      return true;
+    };
+    const mountLiftClear = (e, x, y, z, heading) => {
+      // Find only the room this rig needs to raise its shoulders. A mandatory
+      // long backstep moved even a clear mount away from the player's wall.
+      plannedMountMotion.climbStride = e.motion.climbStride;
+      for (let i = 0; i <= 8; i++) {
+        plannedMountMotion.climbBlend = i / 8;
+        if (!e.gorilla.climbPoseClear(2, x, y, z, heading, plannedMountMotion,
+          ctx.solidAt, plannedTurnClear, e, 0, true)) return false;
       }
       return true;
     };
@@ -1993,6 +2066,13 @@
         && climbClear(e, x, y, z, nx, ny, nz, heading + turn * 0.5, false)
         && climbClear(e, x, y, z, nx, ny, nz, nextHeading, false);
     };
+    const plannedGuideMotion = { climb: 1, climbBlend: 1, mantle: 0, climbStride: 0,
+      climbDirection: 0, climbSide: 0, verifyGrip: true };
+    const climbGuidePoseClear = (e, x, y, z, heading) => {
+      plannedGuideMotion.climbStride = e.motion.climbStride + y - e.root.position.y;
+      return e.gorilla.climbPoseClear(2, x, y, z, heading, plannedGuideMotion,
+        ctx.solidAt, plannedTurnClear, e, 0, true) && e.gorilla.climbContactMask === 3;
+    };
     const projectWallPoint = (e, x, y, z, px, py, pz, heading, side, vertical) => {
       let best = Infinity;
       plannedTurnMotion.climbBlend = 1; plannedTurnMotion.mantle = 0;
@@ -2009,11 +2089,18 @@
           }
         }
         if (!Number.isFinite(wall)) continue;
-        for (let retreat = 0; retreat <= 0.36; retreat += 0.12) {
-          const nx = x + sx * (wall - CLIMB_STANDOFF - retreat), nz = z + sz * (wall - CLIMB_STANDOFF - retreat);
+        const depth = wall - CLIMB_STANDOFF;
+        // Keep the previous contact plane across small recesses instead of
+        // moving in and out with each stone. Project outward at protrusions;
+        // the unchanged edge sweep still owns corners and openings.
+        const steady = clamp((px - x) * sx + (pz - z) * sz, depth - 0.36, depth);
+        for (let trial = -1; trial < 4; trial++) {
+          const offset = trial < 0 ? steady : depth - trial * 0.12;
+          const nx = x + sx * offset, nz = z + sz * offset;
           const score = (nx - x) ** 2 + (nz - z) ** 2 + Math.abs(yaw - heading) * 0.12;
           if (score >= best || !wallGrip(nx, y, nz, yaw)
             || !wallEdgeClear(e, px, py, pz, heading, nx, y, nz, yaw)
+            || trial < 0 && !climbGuidePoseClear(e, nx, y, nz, yaw)
             || !e.gorilla.climbPoseClear(2, nx, y, nz, yaw, plannedTurnMotion, ctx.solidAt, plannedTurnClear, e, 0, true)) continue;
           best = score; WALL_POINT.x = nx; WALL_POINT.y = y; WALL_POINT.z = nz; WALL_POINT.heading = yaw;
         }
@@ -2023,7 +2110,7 @@
     const wallFailure = (e, reason) => {
       e.debugMove.status = "blocked"; e.debugMove.reason = reason; e.debugMove.wallPending = false;
       e.climb.debugStuck = e.climb.holdPose = true; e.speed = 0; e.motion.climbSide = e.motion.climbDirection = 0;
-      if (wallSearch.owner === e) wallSearch.owner = null;
+      clearWallSearch(e);
     };
     const beginWallSearch = (e) => {
       const s = wallSearch, d = e.debugMove, p = e.root.position;
@@ -2129,6 +2216,9 @@
       return (x - ax - dx * t) ** 2 + (z - az - dz * t) ** 2;
     };
     const climbRoutesOverlap = (a, b) => {
+      // A freely traversing player owns its live body contact, not the old
+      // vertical rail it left. Ordinary peer sweeps still protect that body.
+      if (a.free || b.free) return false;
       for (let i = 1; i < a.count; i++) for (let j = 1; j < b.count; j++) {
         const ai = i * 3, bi = j * 3, ap = a.points, bp = b.points;
         if (Math.min(ap[ai - 2], ap[ai + 1]) > Math.max(bp[bi - 2], bp[bi + 1]) + CLIMB_HEIGHT
@@ -2185,8 +2275,9 @@
       }
       if (!climbGroundPeersClear(e)) { c.failure = "landing occupied"; c.claimPending = false; return false; }
       c.claimPending = false; c.claimFor = -1; c.claimRetreat = false;
-      c.mount = 0; c.finish = c.blocked = c.bottomTurn = 0; c.active = true; c.climbs++; c.failure = "";
-      c.returning = c.holdPose = c.debugStuck = false; c.reversals = 0;
+      c.mount = 0; c.finish = c.blocked = c.bottomTurn = c.lowerClearance = 0; c.active = true; c.climbs++; c.failure = "";
+      c.returning = c.holdPose = c.debugStuck = c.lowerClearanceAscent = false; c.reversals = 0;
+      c.free = false; c.freeExitAt = c.freeExitCursor = c.handoffDirection = 0;
       c.debugStop = -1;
       if (e.debugMove.active) {
         const d = e.debugMove;
@@ -2194,10 +2285,11 @@
         d.wallPending = d.wallTarget; d.wallFinal = false;
       }
       c.waitRelease = c.descending && e.controlled && e.drive.climbAxis > 0;
-      c.autoTo = c.descending ? Math.max(0, c.mantleStart - 0.8) : c.requested > 0 ? Math.min(c.length, c.lowerGroundDistance + 0.45) : -1;
+      c.autoTo = c.descending ? Math.max(0, c.mantleStart - 0.8)
+        : e.controlled || c.requested > 0 ? Math.min(c.length, c.lowerGroundDistance + 0.45) : -1;
       c.autoDirection = c.descending ? -1 : 1; c.requested = 0;
-      e.drive.airborne = e.drive.passiveFall = false; e.drive.grounded = false; e.drive.vx = e.drive.vy = e.drive.vz = e.drive.charge = 0;
-      e.drive.jumpArmed = false; e.motion.charge = e.motion.groom = 0;
+      e.drive.airborne = e.drive.passiveFall = false; e.drive.grounded = false; e.drive.vx = e.drive.vy = e.drive.vz = e.drive.jumps = 0;
+      e.drive.jumpPressed = false; e.drive.jumpDown = e.drive.jumpHeld; e.motion.charge = e.motion.groom = 0;
       e.motion.climb = 1; e.motion.climbBlend = 0; e.motion.mantle = 1;
       e.drive.climbExitHeading = e.drive.climbExitLook = NaN;
       e.lounge = ""; if (e.controlled) e.loungePartner = null;
@@ -2206,7 +2298,7 @@
       releasePortal(e);
       return true;
     };
-    const buildClimb = (e, lx, ly, lz, ux, uy, uz, heading, descending, lowerExit = true) => {
+    const buildClimb = (e, lx, ly, lz, ux, uy, uz, heading, descending, lowerExit = true, latePull = false) => {
       const c = e.climb, sx = Math.sin(heading), sz = Math.cos(heading), p = e.root.position;
       c.claimPending = c.crestPending = false;
       c.claimFor = -1; c.claimOwnerOrder = 0;
@@ -2218,6 +2310,8 @@
       // its full-height front-knuckle cylinders here invents a barrier at
       // the very wall the arms are about to tuck toward.
       if (descending ? !e.gorilla.climbPoseClear(0, p.x, p.y, p.z, e.heading, e.motion, ctx.solidAt) : !climbClear(e, p.x, p.y, p.z)) return false;
+      c.failure = "approach turn";
+      if (!descending && !climbStartTurnClear(e, heading)) return false;
       c.failure = "top";
       if (!descending && !climbWalkClear(e, ux, uy, uz, ux, uy, uz, topHeading, false)) return false;
       c.failure = "path"; c.count = 0; c.length = 0; c.index = 0; c.basePrepEnd = 0;
@@ -2227,12 +2321,12 @@
         for (let d = 0.2; d < 3.65; d += 0.2) {
           if (climbSolidAt(lx + sx * d, ly + 0.9, lz + sz * d)) { shortApproach = true; break; }
         }
-        if (shortApproach) {
+        if (shortApproach && !mountLiftClear(e, lx, ly, lz, heading)) {
           // A close start can leave no room to lift the knuckles past a rim.
-          // Back up on all fours first, following the same supported footprint
-          // as walking. The return trip finishes at this open setup footing.
+          // Back up only until the complete lift fits, following the same
+          // supported footprint as walking. Retain that setup for the return.
           const startX = lx, startZ = lz;
-          let y = ly;
+          let y = ly, ready = false;
           for (let i = 1; i <= 8; i++) {
             const x = startX - sx * i * 0.2, z = startZ - sz * i * 0.2;
             const floor = support(e, x, z, y, STEP, heading);
@@ -2240,7 +2334,9 @@
               || !e.gorilla.climbPoseClear(0, x, floor, z, heading, e.motion, ctx.solidAt, ctx.climbTransitionClear, e)
               || !appendClimbPoint(e, x, floor, z, true)) return false;
             lx = x; ly = y = floor; lz = z;
+            if (mountLiftClear(e, lx, ly, lz, heading)) { ready = true; break; }
           }
+          if (!ready) return false;
           c.basePrepEnd = c.length;
         }
       }
@@ -2251,26 +2347,51 @@
       const riseY = uy - Math.min(0.9, (uy - ly) * 0.45);
       const count = Math.ceil((riseY - ly) / 0.3);
       if (count < 2 || count * 2 + 11 > CLIMB_POINTS) return false;
-      let lastX = lx, lastZ = lz;
+      let lastX = lx, lastZ = lz, sampled = -1;
       for (let i = 0; i <= count; i++) {
-        const y = ly + (riseY - ly) * i / count;
-        let wall = Infinity;
-        // Sample the lowest protrusion over the whole upright body, rather
-        // than letting a hand or the forehead disappear into a rock shelf.
-        for (let h = 0; h < 13; h++) for (let side = -1; side <= 1; side++) for (let d = 0.08; d <= reach; d += 0.12) {
-          if (climbSolidAt(lx + sx * d + sz * side * CLIMB_RADIUS, y + 0.04 + h * 0.25,
-            lz + sz * d - sx * side * CLIMB_RADIUS)) {
-            let low = Math.max(0, d - 0.12), high = d;
-            for (let refine = 0; refine < 3; refine++) {
-              const middle = (low + high) * 0.5;
-              if (climbSolidAt(lx + sx * middle + sz * side * CLIMB_RADIUS, y + 0.04 + h * 0.25,
-                lz + sz * middle - sx * side * CLIMB_RADIUS)) high = middle;
-              else low = middle;
+        // Preserve early mount rejection: only sample the short neighborhood
+        // needed by this row, never the whole wall before checking its base.
+        const lookahead = Math.min(count, i > 1 && i < count - 1 ? i + 2 : i);
+        for (let row = sampled + 1; row <= lookahead; row++) {
+          const y = ly + (riseY - ly) * row / count;
+          let wall = Infinity;
+          // Sample the lowest protrusion over the whole upright body, rather
+          // than letting a hand or the forehead disappear into a rock shelf.
+          for (let h = 0; h < 13; h++) for (let side = -1; side <= 1; side++) for (let d = 0.08; d <= reach; d += 0.12) {
+            if (climbSolidAt(lx + sx * d + sz * side * CLIMB_RADIUS, y + 0.04 + h * 0.25,
+              lz + sz * d - sx * side * CLIMB_RADIUS)) {
+              let low = Math.max(0, d - 0.12), high = d;
+              for (let refine = 0; refine < 3; refine++) {
+                const middle = (low + high) * 0.5;
+                if (climbSolidAt(lx + sx * middle + sz * side * CLIMB_RADIUS, y + 0.04 + h * 0.25,
+                  lz + sz * middle - sx * side * CLIMB_RADIUS)) high = middle;
+                else low = middle;
+              }
+              wall = Math.min(wall, low); break;
             }
-            wall = Math.min(wall, low); break;
+          }
+          if (!Number.isFinite(wall) && y < uy - 0.1) return false;
+          climbWallDepths[row] = wall; sampled = row;
+        }
+        const y = ly + (riseY - ly) * i / count, wall = climbWallDepths[i];
+        // A short outward envelope makes small stone relief behave like one
+        // wall. Keep mount/crest endpoints and large ledges on their measured
+        // contour. This is guidance only: real geometry remains the collider.
+        let guide = wall;
+        if (i > 1 && i < count - 1) for (let direction = -1; direction <= 1; direction += 2) {
+          for (let n = 1; n <= 2; n++) {
+            const at = i + direction * n;
+            if (at < 1 || at >= count || !Number.isFinite(climbWallDepths[at])
+              || Math.abs(climbWallDepths[at] - wall) > 0.36) break;
+            guide = Math.min(guide, climbWallDepths[at] + n * (riseY - ly) / count * 0.18);
           }
         }
-        if (!Number.isFinite(wall) && y < uy - 0.1) return false;
+        guide = Math.max(wall - 0.24, guide);
+        if (guide < wall - 0.025) {
+          const gx = lx + sx * (guide - CLIMB_STANDOFF), gz = lz + sz * (guide - CLIMB_STANDOFF);
+          if (wallGrip(gx, y, gz, heading) && climbGuidePoseClear(e, gx, y, gz, heading)
+            && appendClimbPoint(e, gx, y, gz)) { lastX = gx; lastZ = gz; continue; }
+        }
         let x = lastX, z = lastZ;
         if (Number.isFinite(wall)) { x = lx + sx * (wall - CLIMB_STANDOFF); z = lz + sz * (wall - CLIMB_STANDOFF); }
         // Rise beside a ledge first, then pull inward at that height. This
@@ -2310,7 +2431,11 @@
       // the planted hands do not appear to kink around the voxel edge.
       for (let i = 1; i <= 8; i++) {
         const t = i / 8, rise = (uy - riseY) * (2 * t - t * t);
-        if (!appendClimbPoint(e, lastX + pullX * t * t, riseY + rise, lastZ + pullZ * t * t, true)) return false;
+        // A projecting lip can catch the toes during the early inward pull.
+        // The alternate curve keeps that same rise and landing, bringing the
+        // feet inward later; admission still proves every complete pose.
+        const pull = latePull ? t * t * t * t : t * t;
+        if (!appendClimbPoint(e, lastX + pullX * pull, riseY + rise, lastZ + pullZ * pull, true)) return false;
       }
       lastX += pullX; lastZ += pullZ;
       c.mantleRiseEnd = c.length;
@@ -2339,8 +2464,17 @@
       const d = e.debugMove, p = e.root.position, c = e.climb;
       if (failed) rememberDebugPoint(d, true, p.x, p.y, p.z);
       else d.candidate = 0;
+      if (failed && d.normalized && !d.wallTarget && !c.active) {
+        const g = d.goal, heading = Math.atan2(g.x - p.x, g.z - p.z);
+        // A character may occupy the landing during a long trip, or the
+        // final approach may face differently after following a curved ramp.
+        // Resolve nearby footing again only when that endpoint is occupied.
+        if (!roamPeerClear(e, g.x, g.y, g.z, heading, true)) {
+          d.normalized = false; d.normalizeAt = 0; d.normalizeScore = Infinity;
+        }
+      }
       d.originX = p.x; d.originY = p.y; d.originZ = p.z;
-      d.status = "planning"; e.roam.count = e.roam.index = 0; e.roam.wall = false;
+      d.status = "planning"; e.roam.count = e.roam.index = 0; e.roam.wall = e.roam.propDeparture = false;
       e.roam.progressTime = 0; e.roam.progressX = e.roam.progressZ = NaN;
       c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
       c.searchCursor = 0; c.claimOrder = 0; c.claimFor = -1; c.retry = 0;
@@ -2349,10 +2483,16 @@
     const cancelDebugMove = (value) => {
       const e = entryFor(value);
       if (!e || !e.debugMove.active) return false;
-      if (wallSearch && wallSearch.owner === e) wallSearch.owner = null;
+      clearWallSearch(e);
       e.debugMove.active = e.debugMove.wallPending = false; e.debugMove.status = "";
-      e.climb.debugRole = -1; e.climb.debugStuck = false; e.climb.debugStop = -1;
-      e.roam.count = e.roam.index = 0;
+      e.debugMove.cancelled = !e.controlled;
+      // Cancelling the destination must not turn a retained wall grip into an
+      // ordinary stalled walk. Finish this reserved climb to safe footing, or
+      // preserve its blocked debug hold until the next command takes over.
+      e.climb.debugRole = e.climb.active && !e.controlled ? 0 : -1;
+      if (e.climb.debugRole < 0) e.climb.debugStuck = false;
+      e.climb.debugStop = -1;
+      e.roam.count = e.roam.index = 0; e.roam.propDeparture = false;
       if (!e.controlled && !e.climb.active && !e.drive.airborne) resumeEntry(e);
       return true;
     };
@@ -2361,14 +2501,18 @@
       if (!ctx.debugMovement || !e || !e.active || e.controlled
         || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return false;
       const d = e.debugMove, p = e.root.position;
-      if (wallSearch.owner === e) wallSearch.owner = null;
-      d.active = true; d.status = "planning"; d.reason = "";
+      clearWallSearch(e);
+      d.active = true; d.cancelled = false; d.status = "planning"; d.reason = "";
       d.target.x = d.goal.x = x; d.target.y = d.goal.y = y; d.target.z = d.goal.z = z;
+      d.goal.heading = NaN;
       const length = normal ? Math.hypot(normal.x, normal.z) : 0;
       d.normalX = length > 0.01 ? normal.x / length : 0; d.normalZ = length > 0.01 ? normal.z / length : 0;
       d.normalY = normal ? normal.y : 1;
       d.normalHeading = length > 0.35 && Math.abs(d.normalY) < 0.65 ? Math.atan2(-d.normalX, -d.normalZ) : NaN;
-      d.wallTarget = normal ? Number.isFinite(d.normalHeading) : Math.abs(support(e, x, z, y, 0.02) - y) > 0.75;
+      // A destination without a picked normal still names a surface point.
+      // Leading knuckles can rest several treads above that point on stairs;
+      // their footprint height must not turn the tread into a wall command.
+      d.wallTarget = normal ? Number.isFinite(d.normalHeading) : Math.abs(pointSupportAt(x, z, y) - y) > 0.75;
       d.wallPending = d.wallTarget; d.wallFinal = false;
       d.normalized = false; d.normalizeAt = 0; d.normalizeScore = Infinity;
       d.hops = d.candidate = d.visitedCount = d.visitedNext = d.failedCount = d.failedNext = 0;
@@ -2394,22 +2538,35 @@
     // exact clicked point while the retained goal records its nearby footing.
     const normalizeDebugGoal = (e) => {
       const d = e.debugMove, t = d.target, g = d.goal;
+      const p = e.root.position;
       const compact = e.compact, mode = e.footprintMode, radius = e.radius, height = e.height;
       e.compact = e.planningRoam = true; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
-      for (let n = 0; n < 4 && d.normalizeAt < 65; n++, d.normalizeAt++) {
-        const i = d.normalizeAt, distance = i ? Math.ceil(i / 16) * 1.1 : 0;
-        const angle = i * TAU / 16, x = t.x + Math.sin(angle) * distance, z = t.z + Math.cos(angle) * distance;
-        const near = support(e, x, z, t.y, 0.02), top = climbSurfaceAt ? climbSurfaceAt(x, z) : near;
+      const limit = 65;
+      for (let n = 0; n < 4 && d.normalizeAt < limit; n++, d.normalizeAt++) {
+        const i = d.normalizeAt, offset = i ? Math.ceil(i / 16) * 1.1 : 0, angle = i * TAU / 16;
+        const x = t.x + Math.sin(angle) * offset, z = t.z + Math.cos(angle) * offset;
+        const heading = Math.hypot(x - p.x, z - p.z) > 0.01 ? Math.atan2(x - p.x, z - p.z) : e.heading;
+        const distance = Math.hypot(x - t.x, z - t.z);
+        // Clicks name the stone/deck face, while the complete walking body may
+        // rest on the next tread. Resolve its arrival-facing footprint before
+        // searching sideways; retaining the old yaw rejects narrow bridges.
+        const near = support(e, x, z, t.y, STEP, heading);
+        const top = climbSurfaceAt ? support(e, x, z, climbSurfaceAt(x, z), STEP, heading) : near;
         for (let layer = 0; layer < 2; layer++) {
           const y = layer ? near : top, score = distance * distance + (y - t.y) ** 2 * 0.36;
           if (score >= d.normalizeScore || (!d.wallTarget || t.y > e.root.position.y + 0.8) && y < t.y - 0.55 || !actorLanding(e, x, y, z)
-            || !staticClear(e, x, y, z, x, y, z, e.heading, e.heading)) continue;
-          d.normalizeScore = score; g.x = x; g.y = y; g.z = z;
+            || !staticClear(e, x, y, z, x, y, z, heading, heading)
+            || !roamPeerClear(e, x, y, z, heading, true)
+            // A broad support footprint can touch an adjacent ledge while
+            // every actual pad hangs in space. Admit the settled arrival rig
+            // against its real front/rear contacts and complete body shape.
+            || ctx.restFootingClear && !ctx.restFootingClear(e, x, y, z, heading)) continue;
+          d.normalizeScore = score; g.x = x; g.y = y; g.z = z; g.heading = heading;
         }
-        if (d.normalizeScore < 0.04) { d.normalizeAt = 65; break; }
+        if (d.normalizeScore < 0.04) { d.normalizeAt = limit; break; }
       }
       e.compact = compact; e.footprintMode = mode; e.radius = radius; e.height = height; e.planningRoam = false;
-      if (d.normalizeAt < 65) return false;
+      if (d.normalizeAt < limit) return false;
       if (!Number.isFinite(d.normalizeScore)) { d.status = "blocked"; d.reason = "No supported footing near this point"; return false; }
       d.normalized = true; resetDebugRoute(e); return true;
     };
@@ -2428,7 +2585,10 @@
         const x = (local ? d.originX : g.x) + Math.sin(angle) * distance;
         const z = (local ? d.originZ : g.z) + Math.cos(angle) * distance;
         const y = i ? support(e, x, z, local ? d.originY : g.y, STEP) : g.y;
+        // A level waypoint still belongs to the ultimate roof request.
+        // Ending below its enclosing ceiling cannot prepare an outside climb.
         if (!actorLanding(e, x, y, z) || !local && Math.abs(y - g.y) > 0.55
+          || local && g.y > y + 1 && caveAt(x, y, z) >= 0
           || i > 0 && debugPointSeen(d.visited, d.visitedCount, x, y, z, 1.3)) continue;
         const budget = roamBudget; roamBudget = 1; debugRouteBudget--;
         const found = planRoam(e, x, y, z, NaN, "", local);
@@ -2445,8 +2605,29 @@
       }
       if (d.candidate >= 97) { d.status = "blocked"; d.reason = "No clear walking or climbing approach"; e.speed = 0; }
     };
+    const controlledWallReach = (e, heading) => {
+      let reach = 2.6;
+      const projected = Math.cos(heading - e.heading), radius = footprint.radius(e);
+      for (let i = 0; i < footprint.count(e); i++) reach = Math.max(reach, footprint.offset(e, i) * projected + radius + 0.2);
+      return Math.min(4.5, reach);
+    };
+    const controlledWallHeading = (e, heading, descending) => {
+      if (!e.controlled || descending || !climbSolidAt) return heading;
+      const p = e.root.position, sx = Math.sin(heading), sz = Math.cos(heading);
+      let left = NaN, right = NaN;
+      const reach = controlledWallReach(e, heading);
+      for (let d = 0.3; d <= reach && (!Number.isFinite(left) || !Number.isFinite(right)); d += 0.14) {
+        if (!Number.isFinite(left) && climbSolidAt(p.x + sx * d - sz * 0.6, p.y + 0.9, p.z + sz * d + sx * 0.6)) left = d;
+        if (!Number.isFinite(right) && climbSolidAt(p.x + sx * d + sz * 0.6, p.y + 0.9, p.z + sz * d - sx * 0.6)) right = d;
+      }
+      // Face the local wall when approaching a broad side at a slight angle.
+      // Open corners retain the input bearing and the normal route fallbacks.
+      return Number.isFinite(left) && Number.isFinite(right)
+        ? heading + clamp(Math.atan2(left - right, 1.2), -0.55, 0.55) : heading;
+    };
     const climbApproachHeading = (e, heading, descending) => e.debugMove.active && e.debugMove.wallTarget
-      && Number.isFinite(e.debugMove.normalHeading) ? e.debugMove.normalHeading + (descending ? Math.PI : 0) : heading;
+      && Number.isFinite(e.debugMove.normalHeading) ? e.debugMove.normalHeading + (descending ? Math.PI : 0)
+      : controlledWallHeading(e, heading, descending);
     const pendingClimbSearch = (e) => {
       const c = e.climb;
       if (!c.searchPending) return false;
@@ -2456,7 +2637,7 @@
       const dz = requested ? Math.cos(c.requestHeading) : e.controlled ? d.z : e.goalZ - p.z;
       const heading = climbApproachHeading(e, Math.atan2(dx, dz), c.searchDescending);
       if (!e.active || c.active || e.lowCover || !e.controlled && (!alive(e.owner) || !e.debugMove.active && e.mode !== e.owner.state)
-        || e.recover > 0 || e.jump.active || d.airborne || d.jumpArmed || e.pound || e.beat || e.stand || e.parked || e.fire.rolling
+        || e.recover > 0 || e.jump.active || d.airborne || e.pound || e.beat || e.stand || e.parked || e.fire.rolling
         || Math.hypot(dx, dz) <= (e.controlled ? 0.05 : 0.18)
         || Math.hypot(p.x - c.searchX, p.y - c.searchY, p.z - c.searchZ) > 0.35
         || Math.abs(Math.atan2(Math.sin(heading - c.searchHeading), Math.cos(heading - c.searchHeading))) > 0.18
@@ -2489,23 +2670,44 @@
     // wall route in one frame. All bearings and lower-end fallbacks share this
     // cursor and budget; none restarts the first failed candidate on a retry.
     const attemptClimb = (e, lx, ly, lz, ux, uy, uz, heading, descending, lowerExit = true) => {
-      const c = e.climb, index = c.searchIndex++;
-      if (index < c.searchCursor) return false;
-      if (!c.searchBudget || !climbFrameBudget || climbTurn >= 0 && climbTurn !== e.index) {
-        c.searchDeferred = true; c.retry = 0.03; return false;
+      const c = e.climb;
+      for (let curve = 0; curve < (descending ? 1 : 2); curve++) {
+        const index = c.searchIndex++;
+        if (index < c.searchCursor) continue;
+        if (!c.searchBudget || !climbFrameBudget || climbTurn >= 0 && climbTurn !== e.index) {
+          c.searchDeferred = true; c.retry = 0.03; return false;
+        }
+        c.searchBudget--; climbFrameBudget--; climbNext = (e.index + 1) % list.length; c.searchCursor = index + 1;
+        if (!buildClimb(e, lx, ly, lz, ux, uy, uz, heading, descending, lowerExit, !!curve)) {
+          // Both curves share the approach and vertical wall path. Only a
+          // rejected crest can benefit from building the alternate pull.
+          if (!descending && !curve && !c.claimPending && c.failure !== "mantle" && c.failure !== "crest pose") {
+            c.searchIndex++; c.searchCursor = c.searchIndex; break;
+          }
+          continue;
+        }
+        c.searchPending = false;
+        if (climbTurn === e.index) climbTurn = -1;
+        return true;
       }
-      c.searchBudget--; climbFrameBudget--; climbNext = (e.index + 1) % list.length; c.searchCursor = index + 1;
-      if (!buildClimb(e, lx, ly, lz, ux, uy, uz, heading, descending, lowerExit)) return false;
-      c.searchPending = false;
-      if (climbTurn === e.index) climbTurn = -1;
-      return true;
+      return false;
     };
     const tryClimbAlong = (e, heading, descending = false) => {
       if (!climbSolidAt || !climbSurfaceAt || e.climb.active || e.climb.retry > 0 || e.jump.active || e.drive.airborne
-        || e.drive.jumpArmed || e.fire.rolling || e.pound || e.beat || e.recover > 0 || e.parked) return false;
+        || e.fire.rolling || e.pound || e.beat || e.recover > 0 || e.parked) return false;
       const p = e.root.position, sx = Math.sin(heading), sz = Math.cos(heading);
-      e.climb.retry = 0.6; e.climb.failure = "search";
+      e.climb.retry = e.controlled ? 0.12 : 0.6; e.climb.failure = "search";
       if (descending) {
+        // A steep staircase can lose a full body height over a few metres,
+        // while every individual tread remains walkable. Compare neighboring
+        // surface samples, not the highest tread under the whole footprint.
+        let previousY = climbSurfaceAt(p.x, p.z), cliff = false;
+        for (let d = 0.2; d <= 3.2; d += 0.2) {
+          const y = climbSurfaceAt(p.x + sx * d, p.z + sz * d);
+          if (previousY - y > STEP) { cliff = true; break; }
+          previousY = y;
+        }
+        if (!cliff) { e.climb.retry = 0; return false; }
         let edge = NaN;
         for (let d = 0.35; d <= 3.1; d += 0.25) {
           if (climbSurfaceAt(p.x + sx * d, p.z + sz * d) < p.y - 0.8) { edge = d; break; }
@@ -2513,7 +2715,8 @@
         if (!Number.isFinite(edge)) return false;
         for (let n = 0; n < 7; n++) for (let d = edge + 1.8; d <= edge + 6; d += 0.6) {
           const side = n ? Math.ceil(n / 2) * 0.75 * (n % 2 ? 1 : -1) : 0;
-          const x = p.x + sx * d + sz * side, z = p.z + sz * d - sx * side, y = climbSurfaceAt(x, z);
+          const x = p.x + sx * d + sz * side, z = p.z + sz * d - sx * side;
+          const y = support(e, x, z, climbSurfaceAt(x, z), STEP, heading + Math.PI);
           if (!landing(x, y, z) || y > p.y - 0.8 || y < p.y - 16
             || !climbWalkClear(e, x, y, z, x, y, z, heading + Math.PI, false)) continue;
           if (attemptClimb(e, x, y, z, p.x, p.y, p.z, heading + Math.PI, true)) return true;
@@ -2539,7 +2742,8 @@
           // A voxel crest can slope sideways. Pull over onto the nearest
           // complete foothold rather than insisting on an unsafe half ledge.
           const side = n ? Math.ceil(n / 2) * 0.75 * (n % 2 ? 1 : -1) : 0;
-          const x = p.x + sx * d + sz * side, z = p.z + sz * d - sx * side, y = climbSurfaceAt(x, z);
+          const x = p.x + sx * d + sz * side, z = p.z + sz * d - sx * side;
+          const y = support(e, x, z, climbSurfaceAt(x, z), STEP, heading);
           if (!landing(x, y, z) || y < p.y + 0.8 || y > p.y + 16
             || !climbWalkClear(e, x, y, z, x, y, z, heading, false)) continue;
           if (attemptClimb(e, p.x, p.y, p.z, x, y, z, heading, false)) return true;
@@ -2577,13 +2781,19 @@
       if (!c.retry) { c.searchPending = false; return false; }
       // A diagonal approach can point through the corner of the cave rim.
       // Approach that same wall squarely, then resume the original goal above.
-      let normal = Math.round(heading / (Math.PI / 2)) * Math.PI / 2, nearest = 10 * 10;
+      const cardinal = Math.round(heading / (Math.PI / 2)) * Math.PI / 2;
+      let normal = cardinal, nearest = 10 * 10;
+      if (Math.abs(Math.atan2(Math.sin(cardinal - heading), Math.cos(cardinal - heading))) > 0.02) {
+        c.retry = 0;
+        if (tryClimbAlong(e, cardinal, descending)) return true;
+        if (c.searchDeferred) return false;
+      }
       if (ctx.loungeRoofs) for (let i = 0; i < ctx.loungeRoofs.length; i++) {
         const roof = ctx.loungeRoofs[i], distance = (p.x - roof.x) ** 2 + (p.z - roof.z) ** 2;
         if (distance < nearest) { nearest = distance; normal = roof.angle + (descending ? 0 : Math.PI); }
       }
       const delta = Math.abs(Math.atan2(Math.sin(normal - heading), Math.cos(normal - heading)));
-      if (delta > 0.02 && delta < 0.65) {
+      if (delta > 0.02 && delta < Math.PI / 2 && Math.abs(Math.atan2(Math.sin(normal - cardinal), Math.cos(normal - cardinal))) > 0.02) {
         e.climb.retry = 0;
         if (tryClimbAlong(e, normal, descending)) return true;
         if (c.searchDeferred) return false;
@@ -2635,21 +2845,278 @@
         c.descending = !c.fromTop; c.autoTo = -1; c.blocked = 0; e.drive.resume = true;
       }
     };
-    const prepareClimbPose = (e, dt, heading, stride) => {
+    const prepareAscendingClearance = (e, dt, heading, stride, nextStride, direction, side, blockedArm) => {
       const c = e.climb, m = e.motion, p = e.root.position;
+      if (!c.lowerExit || c.descending || c.debugTraverse || c.progress <= c.lowerGroundDistance
+        || p.y > c.lowerY + CLIMB_HEIGHT || c.progress >= c.mantleStart - 1.6 || c.lowerClearance >= 0.48) return false;
+      const sx = Math.sin(c.heading), sz = Math.cos(c.heading), remaining = 0.48 - c.lowerClearance;
+      const tx = POINT.x - sx * remaining, tz = POINT.z - sz * remaining;
+      const oldRelease = m.climbGripRelease, oldX = m.climbGripX, oldY = m.climbGripY, oldZ = m.climbGripZ;
+      // Clear the projecting foot of the wall, keeping one hand available.
+      // The full next pose must fit before taking a speed-limited outward step.
+      let fits = false;
+      for (let attempt = 0; attempt < (blockedArm ? 2 : 1); attempt++) {
+        m.climbGripRelease = attempt ? blockedArm : 0;
+        m.climbGripX = attempt ? tx : NaN; m.climbGripY = attempt ? POINT.y : NaN; m.climbGripZ = attempt ? tz : NaN;
+        if (wallGrip(tx, POINT.y, tz, heading) && climbPoseClear(e, dt, tx, POINT.y, tz, heading, m)) { fits = true; break; }
+      }
+      const shift = Math.min(remaining, dt * CLIMB_SPEED);
+      const weight = Math.min(1, (c.progress - c.lowerGroundDistance) / 0.6);
+      const x = p.x - sx * shift * weight, z = p.z - sz * shift * weight;
+      m.climbStride = stride; m.climbDirection = m.climbSide = 0;
+      if (m.climbGripRelease) { m.climbGripX = x; m.climbGripY = p.y; m.climbGripZ = z; }
+      if (!fits || !wallGrip(x, p.y, z, heading) || !climbClear(e, p.x, p.y, p.z, x, p.y, z)
+        || !climbPoseClear(e, dt, x, p.y, z, heading, m)) {
+        m.climbStride = nextStride; m.climbDirection = direction; m.climbSide = side;
+        m.climbGripRelease = oldRelease; m.climbGripX = oldX; m.climbGripY = oldY; m.climbGripZ = oldZ;
+        return false;
+      }
+      p.x = x; p.z = z; c.lowerClearance += shift; c.lowerClearanceAscent = true;
+      c.blocked = 0; c.holdPose = false; e.speed = 0; return true;
+    };
+    const prepareLowerClearance = (e, dt, heading, stride, nextStride, direction, side) => {
+      const c = e.climb, m = e.motion, p = e.root.position;
+      if (!c.lowerExit || !c.descending || c.debugTraverse || c.progress <= c.lowerGroundDistance
+        || c.progress > c.lowerGroundDistance + 1.6 || c.lowerClearance >= 0.28) return false;
+      const sx = Math.sin(c.heading), sz = Math.cos(c.heading), remaining = 0.28 - c.lowerClearance;
+      const tx = POINT.x - sx * remaining, tz = POINT.z - sz * remaining;
+      // A projecting low lip can need slightly more room than the wall's
+      // sampled trunk corridor. First prove a complete next pose with a grip;
+      // then approach that clearance through a swept, speed-limited move.
+      if (!wallGrip(tx, POINT.y, tz, heading) || !climbPoseClear(e, dt, tx, POINT.y, tz, heading, m)) return false;
+      const shift = Math.min(remaining, dt * CLIMB_SPEED);
+      const weight = Math.min(1, (c.progress - c.lowerGroundDistance) / 0.6);
+      const x = p.x - sx * shift * weight, z = p.z - sz * shift * weight;
+      m.climbStride = stride; m.climbDirection = m.climbSide = 0;
+      if (!wallGrip(x, p.y, z, heading) || !climbClear(e, p.x, p.y, p.z, x, p.y, z)
+        || !climbPoseClear(e, dt, x, p.y, z, heading, m)) {
+        m.climbStride = nextStride; m.climbDirection = direction; m.climbSide = side; return false;
+      }
+      p.x = x; p.z = z; c.lowerClearance += shift; c.blocked = 0; c.holdPose = false; e.speed = 0;
+      return true;
+    };
+    const prepareClimbPose = (e, dt, heading, stride, nextStride, direction, side) => {
+      const c = e.climb, m = e.motion, p = e.root.position;
+      const blockedArm = e.gorilla.climbBlockedArm;
+      if (prepareLowerClearance(e, dt, heading, stride, nextStride, direction, side)
+        || prepareAscendingClearance(e, dt, heading, stride, nextStride, direction, side, blockedArm)) return true;
+      m.climbGripX = POINT.x; m.climbGripY = POINT.y; m.climbGripZ = POINT.z;
+      m.climbGripStride = nextStride; m.climbGripDirection = direction; m.climbGripSide = side;
+      m.climbGripRelease = 0;
       m.climbStride = stride; m.climbDirection = m.climbSide = 0;
       // Preparing the next grip does not translate the root. Retain this
-      // collision-checked articulation target so the live damped limbs can
-      // actually reach the pose that the next movement sample requires.
-      if (!climbPoseClear(e, dt, p.x, p.y, p.z, heading, m)
-        || ctx.climbRidersClear && !ctx.climbRidersClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.heading, heading)) return false;
+      // collision-checked articulation target, including its shoulder/foot
+      // phase, without adding distance to the spatial stride while blocked.
+      let fits = climbPoseClear(e, dt, p.x, p.y, p.z, heading, m);
+      if (blockedArm || !fits && e.gorilla.climbBlockedArm) {
+        // Free the hand before shifting its shoulder around a projecting lip.
+        // Only the obstructed arm releases; the body stays in its old phase
+        // until the same full pose check admits the next grip. A stationary
+        // preview can pass without changing a hooked hand, so retain the arm
+        // that prevented translation before that preview resets its result.
+        const normalFits = fits;
+        m.climbGripRelease = blockedArm || e.gorilla.climbBlockedArm;
+        m.climbGripStride = stride; m.climbGripDirection = m.climbGripSide = 0;
+        fits = climbPoseClear(e, dt, p.x, p.y, p.z, heading, m);
+        if (!fits && normalFits) {
+          m.climbGripRelease = 0;
+          m.climbGripStride = nextStride; m.climbGripDirection = direction; m.climbGripSide = side;
+          fits = true;
+        }
+      }
+      if (!fits || ctx.climbRidersClear && !ctx.climbRidersClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.heading, heading)) {
+        m.climbGripRelease = 0;
+        m.climbGripX = m.climbGripY = m.climbGripZ = NaN; return false;
+      }
       e.heading = heading; e.speed = 0; c.holdPose = false; c.blocked += dt;
       if (c.blocked > 1.2) climbBlocked(e, 0);
       return true;
     };
+    // A controlled lateral climb leaves the original vertical rail. Admit its
+    // exit at the new position; translating the old roof/ground endpoints
+    // would silently move a reserved landing into an opening or a prop.
+    const playerWallRoute = { points: new Float64Array(72), lengths: new Float64Array(24), headings: new Float64Array(24),
+      count: 0, length: 0, index: 0, probeHeading: 0, heading: 0, topHeading: 0, descending: false,
+      lowerExit: false, lowerGroundDistance: 0, basePrepEnd: 0, mantleStart: 0, mantleRiseEnd: 0, lowerY: 0, upperY: 0,
+      blockX: 0, blockY: 0, blockZ: 0 };
+    const freeClimbHandoff = (e, ascending) => {
+      const c = e.climb, p = e.root.position, heading = e.heading, sx = Math.sin(heading), sz = Math.cos(heading);
+      if (elapsed < c.freeExitAt || !climbFrameBudget || climbTurn >= 0 && climbTurn !== e.index) return false;
+      c.freeExitAt = elapsed + 0.12;
+      let x = p.x, z = p.z;
+      if (ascending) {
+        const distance = 1.3 + (c.freeExitCursor++ % 4) * 0.5;
+        x += sx * distance; z += sz * distance;
+      } else {
+        const distance = (c.freeExitCursor++ % 3) * 0.18;
+        x -= sx * distance; z -= sz * distance;
+      }
+      const floor = ascending ? climbSurfaceAt(x, z) : p.y;
+      const facing = ascending ? heading : heading + Math.PI;
+      const y = support(e, x, z, floor, STEP, facing);
+      if (!Number.isFinite(y) || (ascending ? y < p.y + 0.12 || y > p.y + 2.8 : y > p.y + 0.02 || p.y - y > 0.65)
+        || !actorLanding(e, x, y, z) || !climbWalkClear(e, x, y, z, x, y, z, facing)
+        || ctx.restFootingClear && !ctx.restFootingClear(e, x, y, z, facing)) return false;
+      climbFrameBudget = 0;
+      const route = playerWallRoute;
+      route.count = route.length = route.index = route.basePrepEnd = route.lowerGroundDistance = 0;
+      route.heading = route.probeHeading = route.topHeading = heading;
+      route.descending = !ascending; route.lowerExit = !ascending;
+      route.lowerY = ascending ? p.y : y; route.upperY = ascending ? y : p.y;
+      let valid = false;
+      e.climb = route;
+      try {
+        if (ascending) {
+          if (!appendClimbPoint(e, p.x, p.y, p.z)) return false;
+          // Hands encounter the roof before the root reaches crest height.
+          // Keep the upright, actually gripped rise before folding over it.
+          const riseY = Math.max(p.y, y - 0.9), steps = Math.ceil((riseY - p.y) / 0.3);
+          plannedGuideMotion.climbDirection = 1;
+          for (let i = 1; i <= steps; i++) {
+            const height = p.y + (riseY - p.y) * i / steps;
+            plannedGuideMotion.climbStride = e.motion.climbStride + height - p.y;
+            if (!e.gorilla.climbPoseClear(2, p.x, height, p.z, heading, plannedGuideMotion,
+              ctx.solidAt, plannedTurnClear, e, 0, true) || !e.gorilla.climbContactMask
+              || !appendClimbPoint(e, p.x, height, p.z)) return false;
+          }
+          route.mantleStart = route.length;
+          const run = Math.hypot(x - p.x, z - p.z), pull = Math.min(1.05, run * 0.65);
+          for (let i = 1; i <= 8; i++) {
+            const t = i / 8;
+            if (!appendClimbPoint(e, p.x + sx * pull * t * t, riseY + (y - riseY) * (2 * t - t * t),
+              p.z + sz * pull * t * t, true)) return false;
+          }
+          route.mantleRiseEnd = route.length;
+          if (!appendClimbPoint(e, x, y, z, true) || !climbCrestClear(e)) return false;
+        } else {
+          if (!bottomTurnClear(e, x, y, z, heading)
+            || !appendClimbPoint(e, x, y, z) || !appendClimbPoint(e, x, p.y, z, true)
+            || !appendClimbPoint(e, p.x, p.y, p.z, true)) return false;
+          // The root may already be at the proved ground position. Keep the
+          // two-endpoint rail invariant for its in-place lowering/turn.
+          if (route.count === 1) {
+            route.count = 2; route.lengths[1] = 0; route.headings[1] = heading;
+            for (let i = 0; i < 3; i++) route.points[i + 3] = route.points[i];
+          }
+          route.mantleStart = route.mantleRiseEnd = route.length + 2;
+        }
+        for (let i = 0; i < list.length; i++) {
+          const other = list[i];
+          if (other !== e && other.active && other.climb.active && climbRoutesOverlap(route, other.climb)) return false;
+        }
+        valid = true;
+      } finally { e.climb = c; plannedGuideMotion.climbDirection = 0; }
+      if (!valid) return false;
+      for (let i = 0; i < route.count; i++) {
+        c.lengths[i] = route.lengths[i]; c.headings[i] = route.headings[i];
+        for (let j = 0; j < 3; j++) c.points[i * 3 + j] = route.points[i * 3 + j];
+      }
+      c.count = route.count; c.length = route.length; c.index = 0;
+      c.heading = c.topHeading = c.exitHeading = heading; c.lowerY = route.lowerY; c.upperY = route.upperY;
+      c.mantleStart = route.mantleStart; c.mantleRiseEnd = route.mantleRiseEnd;
+      c.lowerExit = !ascending; c.fromTop = c.descending = !ascending;
+      c.progress = ascending ? 0 : c.length; c.minimum = c.basePrepEnd = c.lowerGroundDistance = c.bottomTurn = 0;
+      c.lowerClearance = 0; c.lowerClearanceAscent = c.free = c.debugTraverse = c.waitRelease = false;
+      c.autoTo = -1; c.handoffDirection = ascending ? 1 : -1;
+      c.claimOrder = ++climbClaimSerial;
+      c.blocked = 0; c.holdPose = false;
+      return true;
+    };
+    const updateFreeClimb = (e, dt, released = 0) => {
+      const c = e.climb, d = e.drive, m = e.motion, p = e.root.position;
+      let side = e.controlled ? d.climbSide : 0, vertical = e.controlled ? d.climbAxis : c.fromTop ? 1 : -1;
+      const amount = Math.max(1, Math.hypot(side, vertical)); side /= amount; vertical /= amount;
+      c.holdPose = false; e.speed = 0;
+      e.compact = false; e.footprintMode = "pound";
+      e.radius = Math.max(CLIMB_RADIUS, e.gorilla.bodyRadius + 0.015); e.height = Math.max(CLIMB_HEIGHT, e.gorilla.bodyHeight + 0.015);
+      m.climb = m.climbBlend = 1; m.mantle = 0; m.climbDirection = vertical; m.climbSide = side;
+      if (vertical && freeClimbHandoff(e, vertical > 0)) return;
+      if (Math.abs(side) + Math.abs(vertical) < 0.001) {
+        m.verifyGrip = true;
+        c.holdPose = !climbPoseClear(e, dt, p.x, p.y, p.z, e.heading, m) || !e.gorilla.climbContactMask;
+        if (c.holdPose && released) m.climbGripRelease = released;
+        m.verifyGrip = false; return;
+      }
+      const distance = dt * CLIMB_SPEED, intensity = Math.hypot(side, vertical), oldStride = m.climbStride;
+      const x = p.x + Math.cos(e.heading) * side * distance, y = p.y + vertical * distance,
+        z = p.z - Math.sin(e.heading) * side * distance;
+      m.climbStride += distance * intensity * (vertical < 0 ? -1 : 1);
+      let blockedArm = 0;
+      // Prefer the current contact plane. Tiny swept normal corrections and
+      // gradual wall-facing turns follow masonry without snapping to a new
+      // ray hit. Every option retains a real palm, solid body and peer checks.
+      m.verifyGrip = true;
+      for (let turn = 0; turn < 3; turn++) {
+        const heading = e.heading + (turn ? (turn === 1 ? 1 : -1) * dt * 1.4 * intensity : 0);
+        for (let n = 0; n < 3; n++) {
+          const shift = n ? (n === 1 ? -1 : 1) * dt * 0.8 * intensity : 0;
+          const nx = x + Math.sin(heading) * shift, nz = z + Math.cos(heading) * shift;
+          if (!wallGrip(nx, y, nz, heading) || !climbClear(e, p.x, p.y, p.z, nx, y, nz, heading)) continue;
+          const travel = Math.hypot(nx - p.x, y - p.y, nz - p.z);
+          m.climbStride = oldStride + travel * (vertical < 0 ? -1 : 1);
+          m.climbDirection = (y - p.y) / Math.max(0.0001, travel);
+          m.climbSide = ((nx - p.x) * Math.cos(heading) - (nz - p.z) * Math.sin(heading)) / Math.max(0.0001, travel);
+          if (climbPoseClear(e, dt, nx, y, nz, heading, m) && e.gorilla.climbContactMask) {
+            p.x = nx; p.y = y; p.z = nz; e.heading = c.heading = heading;
+            c.blocked = 0; m.verifyGrip = false; return;
+          }
+          blockedArm = blockedArm || e.gorilla.climbBlockedArm;
+        }
+      }
+      m.climbStride = oldStride + distance * intensity * (vertical < 0 ? -1 : 1);
+      m.climbDirection = vertical; m.climbSide = side;
+      if (released) {
+        m.climbGripX = x; m.climbGripY = y; m.climbGripZ = z; m.climbGripRelease = released;
+        if (wallGrip(x, y, z, e.heading) && climbClear(e, p.x, p.y, p.z, x, y, z)
+          && climbPoseClear(e, dt, x, y, z, e.heading, m) && (e.gorilla.climbContactMask & (released === 1 ? 2 : 1))) {
+          p.x = x; p.y = y; p.z = z; c.blocked = 0; m.verifyGrip = false; return;
+        }
+      }
+      // A lip can need several frames of outward clearance before the
+      // requested tangent step fits. Prove that upcoming step first, then
+      // accumulate only a small, independently swept correction with a palm
+      // still planted; never teleport to the prospective clearance point.
+      m.climbGripX = m.climbGripY = m.climbGripZ = NaN; m.climbGripRelease = 0;
+      const sx = Math.sin(e.heading), sz = Math.cos(e.heading);
+      for (let clearance = 0.12; clearance <= 0.361; clearance += 0.12) {
+        const tx = x - sx * clearance, tz = z - sz * clearance;
+        if (!wallGrip(tx, y, tz, e.heading)
+          || !climbClear(e, p.x - sx * clearance, p.y, p.z - sz * clearance, tx, y, tz)
+          || !e.gorilla.climbPoseClear(2, tx, y, tz, e.heading, m, ctx.solidAt, plannedTurnClear, e, 0, true)
+          || !e.gorilla.climbContactMask) continue;
+        const shift = Math.min(clearance, dt * 0.8 * intensity), nx = p.x - sx * shift, nz = p.z - sz * shift;
+        m.climbStride = oldStride; m.climbDirection = m.climbSide = 0;
+        if (wallGrip(nx, p.y, nz, e.heading) && climbClear(e, p.x, p.y, p.z, nx, p.y, nz)
+          && climbPoseClear(e, dt, nx, p.y, nz, e.heading, m) && e.gorilla.climbContactMask) {
+          p.x = nx; p.z = nz; c.blocked = 0; m.verifyGrip = false; return;
+        }
+        m.climbStride = oldStride + distance * intensity * (vertical < 0 ? -1 : 1);
+        m.climbDirection = vertical; m.climbSide = side;
+      }
+      m.verifyGrip = false;
+      // Prepare a new grip without translating the body through the old one.
+      m.climbGripX = x; m.climbGripY = y; m.climbGripZ = z;
+      m.climbGripStride = m.climbStride; m.climbGripDirection = vertical; m.climbGripSide = side;
+      m.climbGripRelease = blockedArm; m.climbStride = oldStride; m.climbDirection = m.climbSide = 0;
+      m.verifyGrip = true;
+      if (!climbPoseClear(e, dt, p.x, p.y, p.z, e.heading, m) || !e.gorilla.climbContactMask) {
+        m.climbGripX = m.climbGripY = m.climbGripZ = NaN; m.climbGripRelease = 0; c.holdPose = true;
+      }
+      m.verifyGrip = false;
+      c.blocked += dt;
+      if (c.debugRole >= 0 && !e.controlled && c.blocked > 1.2) {
+        c.debugStuck = c.holdPose = true;
+        if (e.debugMove.active) { e.debugMove.status = "blocked"; e.debugMove.reason = "Climbing motion blocked"; }
+      }
+    };
     const updateClimb = (e, dt) => {
       const c = e.climb, d = e.drive, m = e.motion, p = e.root.position;
+      const released = m.climbGripRelease, gripStride = m.climbGripStride;
+      const gripDirection = m.climbGripDirection, gripSide = m.climbGripSide;
+      m.climbGripX = m.climbGripY = m.climbGripZ = NaN;
+      m.climbGripRelease = 0;
       if (c.debugStuck) { c.holdPose = true; e.speed = 0; return; }
+      if (c.free) { updateFreeClimb(e, dt, released); return; }
       if (e.debugMove.active && c.debugStop >= 0 && Math.abs(c.progress - c.debugStop) < 0.001) {
         if (e.debugMove.wallFinal) {
           e.debugMove.status = "arrived"; c.holdPose = true; e.speed = 0; m.climbSide = m.climbDirection = 0; return;
@@ -2666,6 +3133,12 @@
       e.radius = Math.max(CLIMB_RADIUS, e.gorilla.bodyRadius + 0.015); e.height = Math.max(CLIMB_HEIGHT, e.gorilla.bodyHeight + 0.015);
       e.footprintMode = "pound";
       m.climb = 1; m.climbDirection = m.climbSide = 0;
+      if (e.controlled && Math.abs(d.climbSide) > 0.01 && !c.handoffDirection && c.autoTo < 0
+        && c.progress > c.lowerGroundDistance + 0.12 && c.progress < c.mantleStart - 0.12
+        && m.climbBlend > 0.98 && e.gorilla.debug.climbing > 0.98) {
+        c.free = true; c.freeExitAt = c.freeExitCursor = 0;
+        updateFreeClimb(e, dt); return;
+      }
       if (c.waitRelease && d.climbAxis <= 0) c.waitRelease = false;
       let axis = e.controlled ? c.waitRelease ? 0 : d.climbAxis : c.descending ? -1 : 1;
       if (!e.controlled && !c.lowerExit && c.progress <= c.minimum + 0.001) {
@@ -2677,13 +3150,30 @@
         else if (c.autoDirection > 0 ? c.progress < c.autoTo - 0.01 : c.progress > c.autoTo + 0.01) axis = c.autoDirection > 0 ? 1 : -1;
         else c.autoTo = -1;
       }
+      if (e.controlled && !c.handoffDirection && (axis > 0 && c.progress >= c.mantleStart - 0.001
+        || axis < 0 && c.lowerExit && c.progress <= c.lowerGroundDistance + 0.12)) c.handoffDirection = Math.sign(axis);
+      if (c.handoffDirection) axis = c.handoffDirection;
       if (axis < 0 && c.basePrepEnd > c.progress + 0.001) {
         // The initial backstep is still ordinary supported walking. Reversing
         // here releases the grip attempt at that safe footing immediately.
         c.active = false; c.retry = 0.8; d.grounded = true;
+        c.free = false; c.handoffDirection = d.climbSide = 0;
         m.climb = 0; m.climbBlend = NaN; m.mantle = 0;
         e.compact = e.gorilla.compact; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
         return;
+      }
+      if (!c.fromTop && c.progress === 0 && axis > 0) {
+        const turn = Math.atan2(Math.sin(c.heading - e.heading), Math.cos(c.heading - e.heading));
+        if (Math.abs(turn) > 0.001) {
+          const facing = e.heading + clamp(turn, -dt * 3, dt * 3);
+          m.climbBlend = m.mantle = 0;
+          if (climbStartTurnClear(e, facing)
+            && climbPoseClear(e, dt, p.x, p.y, p.z, facing, m)
+            && (!ctx.climbRidersClear || ctx.climbRidersClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.heading, facing))) {
+            e.heading = facing; c.blocked = 0;
+          } else climbBlocked(e, dt);
+          return;
+        }
       }
       // Finish the ground-facing turn at the foot of the wall, before taking
       // any horizontal step. The hands lower as the body rotates away, rather
@@ -2719,6 +3209,15 @@
       if (e.debugMove.active && c.debugStop >= 0) next = axis > 0 ? Math.min(next, c.debugStop) : Math.max(next, c.debugStop);
       if (axis < 0 && c.lowerExit && c.progress > c.lowerGroundDistance && next < c.lowerGroundDistance) next = c.lowerGroundDistance;
       climbPoint(c, next, POINT);
+      let nextClearance = c.lowerClearance;
+      const clearanceWeight = clamp((next - c.lowerGroundDistance) / 0.6, 0, 1)
+        * (c.lowerClearanceAscent ? clamp((c.mantleStart - next) / 1.6, 0, 1) : 1);
+      if (c.lowerClearance && c.lowerExit && !c.debugTraverse) {
+        // Meet the unchanged reserved handoffs exactly. Ascending corrections
+        // also disappear before the already checked crest and roof landing.
+        const clearance = c.lowerClearance * clearanceWeight;
+        POINT.x -= Math.sin(c.heading) * clearance; POINT.z -= Math.cos(c.heading) * clearance;
+      }
       const riseEnd = Number.isFinite(c.mantleRiseEnd) ? c.mantleRiseEnd : c.mantleStart;
       const top = next <= c.mantleStart ? 0 : riseEnd > c.mantleStart && next < riseEnd
         ? 0.65 * (next - c.mantleStart) / (riseEnd - c.mantleStart)
@@ -2751,6 +3250,29 @@
       m.climbDirection = !ground && top === 0 ? (POINT.y - p.y) / Math.max(0.0001, stepLength) : Math.sign(axis);
       m.climbSide = !ground && top === 0
         ? ((POINT.x - p.x) * Math.cos(facing) - (POINT.z - p.z) * Math.sin(facing)) / Math.max(0.0001, stepLength) : 0;
+      if (c.lowerClearanceAscent && nextClearance > 0 && !ground && !top && axis > 0) {
+        // Once the hands clear a projecting lip, return toward the wall. A
+        // permanent offset would leave them reaching into air above the lip.
+        // Each inward step is independently proved with the full moving rig.
+        const x = POINT.x, z = POINT.z, direction = m.climbDirection, side = m.climbSide;
+        const shift = Math.min(nextClearance, dt * CLIMB_SPEED);
+        POINT.x += Math.sin(c.heading) * shift * clearanceWeight;
+        POINT.z += Math.cos(c.heading) * shift * clearanceWeight;
+        const distance = Math.hypot(POINT.x - p.x, POINT.y - p.y, POINT.z - p.z);
+        m.climbDirection = (POINT.y - p.y) / Math.max(0.0001, distance);
+        m.climbSide = ((POINT.x - p.x) * Math.cos(facing) - (POINT.z - p.z) * Math.sin(facing)) / Math.max(0.0001, distance);
+        let fits = false;
+        if (climbClear(e, p.x, p.y, p.z, POINT.x, POINT.y, POINT.z)) for (let release = 0; release <= 2; release++) {
+          m.climbGripRelease = release;
+          m.climbGripX = release ? POINT.x : NaN; m.climbGripY = release ? POINT.y : NaN; m.climbGripZ = release ? POINT.z : NaN;
+          if (climbPoseClear(e, dt, POINT.x, POINT.y, POINT.z, facing, m)) { fits = true; break; }
+        }
+        if (fits) nextClearance -= shift;
+        else {
+          POINT.x = x; POINT.z = z; m.climbDirection = direction; m.climbSide = side;
+          m.climbGripRelease = 0; m.climbGripX = m.climbGripY = m.climbGripZ = NaN;
+        }
+      }
       const transition = c.debugTraverse && next >= c.traverseStart - 0.2 && next <= c.traverseEnd + 0.2
         || blend < 0.999 || e.gorilla.debug.climbing < 0.999 || Math.abs(facing - e.heading) > 0.001;
       if (!transition && !climbClear(e, p.x, p.y, p.z, POINT.x, POINT.y, POINT.z)) {
@@ -2758,12 +3280,44 @@
         climbBlocked(e, dt);
         return;
       }
-      if (transition && !climbPoseClear(e, dt, POINT.x, POINT.y, POINT.z, facing, m, speed)) {
+      // Even a steady wall step changes the grip around uneven stone. Its
+      // coarse body sweep cannot certify the articulated hands: prove the
+      // same damped pose that will be rendered before moving the root.
+      const nextStride = m.climbStride, nextDirection = m.climbDirection, nextSide = m.climbSide;
+      let poseFits = climbPoseClear(e, dt, POINT.x, POINT.y, POINT.z, facing, m, speed);
+      if (!poseFits && (released === 1 || released === 2) && !ground && !top) {
+        // A hand released above a lip must stay raised through the first
+        // translation past it. Reaching down again before that step repeats
+        // the same blocked sweep forever. Try the ordinary grip first on
+        // every frame, and retain just this one hand only if the full moving
+        // pose and remaining wall grip both still pass.
+        m.climbGripX = POINT.x; m.climbGripY = POINT.y; m.climbGripZ = POINT.z;
+        m.climbGripStride = gripStride; m.climbGripDirection = gripDirection; m.climbGripSide = gripSide;
+        m.climbGripRelease = released;
+        poseFits = wallGrip(POINT.x, POINT.y, POINT.z, facing)
+          && climbPoseClear(e, dt, POINT.x, POINT.y, POINT.z, facing, m, speed);
+        if (!poseFits && c.lowerExit && c.descending && next > c.lowerGroundDistance
+          && next < c.lowerGroundDistance + 1.6) {
+          // At the low masonry handoff, the root-height grip bands can already
+          // be below the wall. Keep the released hand raised through the new
+          // phase only when the remaining actual palm retains a stone witness.
+          m.climbGripStride = nextStride; m.climbGripDirection = nextDirection; m.climbGripSide = nextSide;
+          const retained = released === 1 ? 2 : 1;
+          poseFits = climbPoseClear(e, dt, POINT.x, POINT.y, POINT.z, facing, m, speed)
+            && !!(e.gorilla.climbContactMask & retained)
+            && climbPoseClear(e, 2, POINT.x, POINT.y, POINT.z, facing, m, 0)
+            && !!(e.gorilla.climbContactMask & retained);
+        }
+        if (!poseFits) {
+          m.climbGripX = m.climbGripY = m.climbGripZ = NaN; m.climbGripRelease = 0;
+        }
+      }
+      if (!poseFits) {
         // An uneven crest may interrupt a turn. Keep the low walking pose and
         // advance toward the open lip before continuing the pivot.
         if (!top || !climbPoseClear(e, dt, POINT.x, POINT.y, POINT.z, e.heading, m, speed)) {
-          if (prepareClimbPose(e, dt, facing, oldStride)
-            || facing !== e.heading && prepareClimbPose(e, dt, e.heading, oldStride)) return;
+          if (prepareClimbPose(e, dt, facing, oldStride, nextStride, nextDirection, nextSide)
+            || facing !== e.heading && prepareClimbPose(e, dt, e.heading, oldStride, nextStride, nextDirection, nextSide)) return;
           m.climbBlend = oldBlend; m.mantle = oldMantle; m.climbStride = oldStride; m.climbDirection = 0; m.climbSide = oldSide;
           climbBlocked(e, dt); return;
         }
@@ -2774,9 +3328,10 @@
         climbBlocked(e, dt); return;
       }
       c.blocked = 0; e.speed = speed;
-      p.x = POINT.x; p.y = POINT.y; p.z = POINT.z; c.progress = next; e.heading = facing;
+      p.x = POINT.x; p.y = POINT.y; p.z = POINT.z; c.progress = next; c.lowerClearance = nextClearance; e.heading = facing;
       if (next === c.length && axis > 0 || next === bottom && axis < 0 && c.lowerExit) {
         c.active = false; c.retry = 0.8; d.grounded = true;
+        c.free = false; c.handoffDirection = d.climbSide = 0;
         c.debugTraverse = false; c.debugRole = -1;
         m.climb = 0; m.climbBlend = NaN; m.mantle = m.climbSide = 0;
         e.compact = e.gorilla.compact; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = 2.7;
@@ -2974,6 +3529,9 @@
     };
     const propStepClear = (e, x, y, z, nx, ny, nz, fromHeading, toHeading) => {
       if (staticClear(e, x, y, z, nx, ny, nz, fromHeading, toHeading)) return true;
+      // Splitting a coarse cylinder sweep can clear a rounded prop, but it
+      // cannot override a rejected real stride with a different idle pose.
+      if (e.walkPoseChecked) return false;
       if (ny > y && (nx !== x || nz !== z)) return !occupied(e, x, ny, z, true, fromHeading)
         && staticClear(e, x, y, z, x, ny, z, fromHeading, fromHeading)
         && staticClear(e, x, ny, z, nx, ny, nz, fromHeading, toHeading);
@@ -2983,6 +3541,18 @@
       return ny < y && (nx !== x || nz !== z) && !occupied(e, nx, y, nz, true, toHeading)
         && staticClear(e, x, y, z, nx, y, nz, fromHeading, toHeading)
         && staticClear(e, nx, y, nz, nx, ny, nz, toHeading, toHeading);
+    };
+    const roamStepClear = (e, x, y, z, nx, ny, nz, fromHeading, toHeading) => {
+      if (propStepClear(e, x, y, z, nx, ny, nz, fromHeading, toHeading)) return true;
+      if (nx === x && nz === z || Math.abs(e.speed) > 0.01 || e.gorilla.debug.speed > 0.01
+        || e.motion.lab || e.lounge || e.biped || e.climb.active || e.jump.active || e.drive.airborne) return false;
+      // Keep the same step and collision proof, but try the opposite leading
+      // hand when the first stride from rest would hit adjacent stone.
+      const previous = e.motion.walkPhase;
+      e.motion.walkPhase = (e.gorilla.debug.phase + 1.5) % 1;
+      if (propStepClear(e, x, y, z, nx, ny, nz, fromHeading, toHeading)) return true;
+      e.motion.walkPhase = previous;
+      return false;
     };
     const move = (e, dt, speed) => {
       if (e.recover > 0) { e.speed = 0; return; }
@@ -3157,13 +3727,14 @@
         r.wallFailedX = e.goalX; r.wallFailedZ = e.goalZ; r.wallFailedUntil = elapsed + 60;
       }
       r.failedX = e.goalX; r.failedZ = e.goalZ; r.failedUntil = elapsed + 60;
-      r.count = r.index = 0; r.wall = false; r.blocked = r.progressTime = 0; r.obstacle = null;
+      r.count = r.index = 0; r.wall = r.propDeparture = false; r.blocked = r.progressTime = 0; r.obstacle = null;
       setGoal(e, p.x, p.y, p.z); e.rest = 0; e.speed = 0;
       r.nextChoice = elapsed + 0.2;
     };
     const moveRoam = (e, dt) => {
       const p = e.root.position, r = e.roam;
-      const point = r.index * 3, tx = r.index < r.count ? r.path[point] : e.goalX;
+      const point = r.index * 3;
+      const tx = r.index < r.count ? r.path[point] : e.goalX;
       const tz = r.index < r.count ? r.path[point + 2] : e.goalZ;
       const distanceToPoint = Math.hypot(tx - p.x, tz - p.z);
       const desired = r.index === 0 && r.reverseStart ? r.departHeading : Math.atan2(tx - p.x, tz - p.z);
@@ -3198,7 +3769,17 @@
       // treads stay on the retained route; switching controllers at every
       // half-metre prop edge reverses their steps and produces vertical jitter.
       const terrainY = ctx.terrainSupportAt ? ctx.terrainSupportAt(e, p.x, p.z, p.y, STEP) : groundAt(p.x, p.z, p.y);
-      if ((!r.count || r.wall) && p.y - terrainY > STEP && raisedSupport(e)) { move(e, dt, CHILL_SPEED); return; }
+      if (!r.propDeparture && (!r.count || r.wall) && p.y - terrainY > STEP && raisedSupport(e)) {
+        // Commit to the supported exit until all of the footprint reaches
+        // terrain. Switching back at STEP can replay a reverse waypoint and
+        // send the body up the prop on the very next frame.
+        r.propDeparture = true; r.count = r.index = 0; r.wall = false;
+        r.progressTime = 0; r.progressX = r.progressZ = NaN;
+      }
+      if (r.propDeparture) {
+        if (raisedSupport(e)) { move(e, dt, CHILL_SPEED); return; }
+        r.propDeparture = false;
+      }
       if ((!r.count || r.wall) && Math.abs(e.goalY - p.y) >= 1 && !e.lowCover && caveAt(p.x, p.y, p.z) < 0) {
         const searched = e.climb.retry <= 0;
         if (tryClimb(e, Math.atan2(e.goalX - p.x, e.goalZ - p.z), e.goalY < p.y) || holdClimbSearch(e)) { e.speed = 0; return; }
@@ -3277,12 +3858,21 @@
         && !occupied(e, x, y, z, true, heading) && propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)
         && beginSupportFall(e, x, z, heading, 0, 0)) return;
       if (Number.isFinite(y) && Math.abs(y - p.y) <= PROP_STEP && actorLanding(e, x, y, z)
-        && !occupied(e, x, y, z, true, heading) && propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)) {
+        && !occupied(e, x, y, z, true, heading) && roamStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)) {
         p.x = x; setSupportY(e, y); p.z = z; e.heading = heading;
         e.speed = step / dt * (r.index === 0 && r.reverseStart ? -1 : 1); r.blocked = 0;
       } else {
         e.speed = 0; r.blocked += dt;
-        if (e.lowCover && r.blocked > 0.35 && backOut(e, dt, true)) { r.count = 0; return; }
+        if (e.lowCover && r.blocked > 0.35 && backOut(e, dt, true)) {
+          // Keep the failed approach while withdrawing. Retrying that same
+          // candidate after every retreat repeatedly walks into the canopy.
+          if (e.debugMove.active) {
+            const speed = e.speed;
+            resetDebugRoute(e, true); e.speed = speed;
+          }
+          else { r.count = 0; }
+          return;
+        }
         if (r.blocked > 0.5 && roamBudget && elapsed >= r.planAt) {
           r.obstacle = null;
           for (let i = 0; i < list.length; i++) {
@@ -3325,6 +3915,13 @@
         }
         releasePortal(e); e.route = ""; e.phase = "chill"; resetDebugRoute(e);
       }
+      // A failed approach owns its safe withdrawal before another candidate
+      // gets planned from the new footing.
+      if (e.backoutLeft > 0) {
+        const moved = backOut(e, dt);
+        d.originX = p.x; d.originY = p.y; d.originZ = p.z;
+        if (moved) return;
+      }
       // A face below a nearby rim is an intentional descent. The complete
       // wall route is still checked before the first foot leaves its support.
       const atGoal = d.normalized && Math.hypot(g.x - p.x, g.z - p.z) < 0.18 && Math.abs(g.y - p.y) < 0.55;
@@ -3351,6 +3948,15 @@
         e.speed = 0; return;
       }
       if (atGoal) {
+        const turn = Number.isFinite(g.heading) ? Math.atan2(Math.sin(g.heading - e.heading), Math.cos(g.heading - e.heading)) : 0;
+        if (Math.abs(turn) > 0.005) {
+          const heading = e.heading + clamp(turn, -3 * dt, 3 * dt);
+          e.speed = 0;
+          if (!occupied(e, p.x, p.y, p.z, true, heading)
+            && propStepClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.heading, heading)) { e.heading = heading; e.blocked = 0; }
+          else if ((e.blocked += dt) > 2) { d.normalized = false; d.normalizeAt = 0; d.normalizeScore = Infinity; }
+          return;
+        }
         d.status = "arrived"; d.reason = ""; e.speed = 0;
         e.roam.count = e.roam.index = 0; return;
       }
@@ -3437,10 +4043,10 @@
     const cancelInput = () => {
       if (!player) return;
       const d = player.drive;
-      if (d.charge > 0) d.motionRecover = 0.6;
-      d.x = d.z = d.climbAxis = d.charge = player.motion.charge = 0; d.heading = NaN;
+      d.x = d.z = d.climbAxis = d.climbSide = player.motion.charge = 0; d.heading = NaN;
+      d.avoidSide = d.avoidTime = 0;
       d.climbExitHeading = d.climbExitLook = NaN;
-      d.jumpHeld = d.jumpDown = d.jumpArmed = d.run = false; d.cancelled = true;
+      d.jumpHeld = d.jumpDown = d.jumpPressed = d.run = false; d.cancelled = true;
       player.climb.requested = 0;
       player.climb.searchPending = player.climb.searchDeferred = player.climb.claimPending = player.climb.crestPending = false;
       player.climb.claimFor = -1; player.climb.claimOwnerOrder = player.climb.claimOrder = 0;
@@ -3466,7 +4072,8 @@
       releaseLab(e);
       releasePortal(e); e.hasSlot = false; e.pendingSite = -1;
       const d = e.drive, p = e.root.position;
-      d.x = d.z = d.charge = 0; d.heading = e.heading; d.run = d.jumpHeld = d.jumpDown = d.jumpArmed = d.cancelled = false;
+      d.x = d.z = 0; d.heading = e.heading; d.run = d.jumpHeld = d.jumpDown = d.jumpPressed = d.cancelled = false;
+      d.avoidSide = d.avoidTime = 0;
       d.vx = d.vy = d.vz = 0; d.airborne = e.jump.active;
       if (e.jump.active) {
         const j = e.jump, direction = j.reverse ? -1 : 1;
@@ -3477,6 +4084,7 @@
       }
       d.grounded = !d.airborne && Math.abs(support(e, p.x, p.z, p.y, STEP) - p.y) < 0.08;
       if (!d.grounded && !e.climb.active) d.airborne = true;
+      d.jumps = d.grounded ? 0 : Math.max(1, d.jumps);
       if (e.lounge) { e.lounge = ""; e.recover = 0.65; }
       e.phase = "controlled"; e.route = ""; e.exitFootprint = true;
       return true;
@@ -3489,7 +4097,8 @@
       d.heading = Number.isFinite(input.heading) ? input.heading : NaN;
       d.run = !!input.run; d.jumpHeld = !!input.jumpHeld;
       d.climbAxis = Number.isFinite(input.climbAxis) ? clamp(input.climbAxis, -1, 1) : 0;
-      if (input.jumpPressed) { d.cancelled = false; d.jumpDown = false; }
+      d.climbSide = Number.isFinite(input.climbSide) ? clamp(input.climbSide, -1, 1) : 0;
+      if (input.jumpPressed) { d.cancelled = false; d.jumpPressed = true; }
       return true;
     };
     const climbAction = (value) => {
@@ -3536,7 +4145,7 @@
         c.requestHeading = Math.hypot(d.x, d.z) > 0.05 ? Math.atan2(d.x, d.z) : Number.isFinite(d.heading) ? d.heading : e.heading;
         c.searchPending = c.searchDeferred = false; c.searchCursor = 0; c.retry = 0;
       }
-      d.jumpArmed = false; d.charge = e.motion.charge = 0;
+      d.jumpPressed = false; e.motion.charge = 0;
       d.jumpDown = d.jumpHeld; d.cancelled = true;
       return true;
     };
@@ -3589,8 +4198,7 @@
       if (!e || !e.active || !e.root.visible || e.fire.burning || e.fire.rolling || e.fire.cooldown > 0) return false;
       const f = e.fire;
       f.burning = true; f.requested = f.escaping = false; f.retry = f.escapeRetry = 0; f.age = 0; f.heat = 0.05; f.reaction = 1 + e.random() * 2;
-      if (e.drive.charge > 0) e.drive.motionRecover = 0.6;
-      e.drive.charge = e.motion.charge = 0; e.drive.jumpArmed = false;
+      e.motion.charge = 0; e.drive.jumpPressed = false;
       if (e.lounge) { e.lounge = ""; e.recover = 0.65; }
       return true;
     };
@@ -3605,8 +4213,8 @@
       const f = e.fire, p = e.root.position;
       f.rolling = true; f.requested = f.escaping = false; f.rollTime = 0; f.x = p.x; f.z = p.z; f.heading = e.heading;
       e.pound = e.beat = e.stand = e.recover = e.speed = 0; e.actionControlled = e.motion.smash = false; e.lounge = ""; e.parked = false;
-      e.drive.vx = e.drive.vy = e.drive.vz = e.drive.charge = e.motion.charge = 0;
-      e.drive.jumpArmed = false; e.drive.motionEnvelope = true; e.motion.roll = 1;
+      e.drive.vx = e.drive.vy = e.drive.vz = e.motion.charge = 0;
+      e.drive.jumpPressed = false; e.drive.motionEnvelope = true; e.motion.roll = 1;
       return true;
     };
     const smash = (charge = 0) => {
@@ -3636,13 +4244,14 @@
       e.beat = BL.agent.MANAGED_BEAT_TIME; e.beats++;
       return true;
     };
-    const beginDrivenJump = (e, strength) => {
+    const beginDrivenJump = (e) => {
       const d = e.drive;
-      if (e.lowCover || !d.grounded || d.airborne || e.recover > 0 || e.pound || e.beat || e.fire.burning || e.fire.rolling || e.parked
+      const jumps = d.grounded && !d.airborne ? 0 : Math.max(1, d.jumps);
+      if (jumps >= 2 || e.lowCover || e.climb.active || e.recover > 0 || e.pound || e.beat || e.fire.burning || e.fire.rolling || e.parked
         || !fullEnvelope(e, MOTION_RADIUS, MOTION_HEIGHT)) return false;
-      // Height is proportional to velocity squared: sqrt(3), not 3, reaches
-      // exactly three normal Ooga jump heights with the same gravity.
-      d.vy = NORMAL_JUMP * Math.sqrt(1 + 2 * clamp(strength, 0, 1));
+      // Each fresh press supplies one impulse, with one additional press in
+      // the air. Under the Ooga's gravity sqrt(1.5) gives 50% more height.
+      d.vy = PLAYER_JUMP_SPEED; d.jumps = jumps + 1;
       d.grounded = d.passiveFall = false; d.airborne = true; d.motionEnvelope = true; d.motionRecover = 0.6; e.motion.takeoff = 1; e.jumps++;
       return true;
     };
@@ -3716,21 +4325,77 @@
       } else { f.escaping = false; e.speed = 0; }
       return true;
     };
+    const drivenGroundStep = (e, x, z, heading, drop, allowFall = false) => {
+      const p = e.root.position, d = e.drive;
+      const y = support(e, x, z, p.y, PROP_STEP, heading);
+      if (!Number.isFinite(y) || y < p.y - drop) {
+        // Only the requested step may leave a prop. An avoidance sidestep
+        // never chooses an unsupported drop on the player's behalf.
+        return allowFall && beginSupportFall(e, x, z, heading, d.vx, d.vz);
+      }
+      if (y > p.y + PROP_STEP || e.parked && caveAt(x, y, z) < 0
+        || occupied(e, x, y, z, true, heading)) return false;
+      let valid = staticClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading);
+      // Keep the existing two-leg prop step proofs. A rejected posed hull
+      // stays rejected; a broad capsule must not override that exact result.
+      if (!valid && !e.walkPoseChecked && y < p.y && (x !== p.x || z !== p.z)
+        && !occupied(e, x, p.y, z, true, heading)
+        && staticClear(e, p.x, p.y, p.z, x, p.y, z, e.heading, heading)
+        && staticClear(e, x, p.y, z, x, y, z, heading, heading)) valid = true;
+      if (!valid && !e.walkPoseChecked && y > p.y
+        && !occupied(e, p.x, y, p.z)
+        && staticClear(e, p.x, p.y, p.z, p.x, y, p.z)
+        && staticClear(e, p.x, y, p.z, x, y, z, e.heading, heading)) valid = true;
+      if (!valid) return false;
+      p.x = x; setSupportY(e, y); p.z = z; e.heading = heading;
+      return true;
+    };
+    const drivenGroundSlide = (e, dx, dz, facing, dt, steer, drop) => {
+      const p = e.root.position, d = e.drive, distance = Math.hypot(dx, dz);
+      // A blocked turn need not stop translation along a wall. All retries
+      // reserve the same rig, including its swept rotation and real support.
+      if (Math.abs(facing - e.heading) > 1e-6
+        && drivenGroundStep(e, p.x + dx, p.z + dz, e.heading, drop)) return true;
+      if (distance < 1e-7) return false;
+      // Keep only one component of the requested displacement, so sliding
+      // never increases speed or crosses the blocked diagonal's inside corner.
+      const xFirst = Math.abs(dx) >= Math.abs(dz);
+      for (let i = 0; i < 2; i++) {
+        const alongX = i ? !xFirst : xFirst;
+        const sx = alongX ? dx : 0, sz = alongX ? 0 : dz;
+        if (Math.abs(sx) + Math.abs(sz) < 1e-7 || sx === dx && sz === dz) continue;
+        if (drivenGroundStep(e, p.x + sx, p.z + sz, facing, drop)
+          || Math.abs(facing - e.heading) > 1e-6 && drivenGroundStep(e, p.x + sx, p.z + sz, e.heading, drop)) return true;
+      }
+      if (!steer || e.parked || e.lowCover || e.gorilla.motionActive) return false;
+      const direction = Math.atan2(dx, dz), backwards = dx * Math.sin(e.heading) + dz * Math.cos(e.heading) < 0;
+      const preferred = d.avoidTime > 0 ? d.avoidSide : e.turn;
+      // Like an Ooga's shoulder pass, keep one side until the obstruction is
+      // cleared. Turn the natural body, never retract or shrink the arms.
+      for (let side = 0; side < (d.avoidTime > 0 ? 1 : 2); side++) {
+        const sign = side ? -preferred : preferred;
+        for (let trial = 1; trial <= 3; trial++) {
+          const heading = direction + sign * trial * 0.45;
+          const turn = Math.atan2(Math.sin(heading + (backwards ? Math.PI : 0) - e.heading), Math.cos(heading + (backwards ? Math.PI : 0) - e.heading));
+          const body = e.heading + clamp(turn, -dt * 7, dt * 7);
+          if (!drivenGroundStep(e, p.x + Math.sin(heading) * distance, p.z + Math.cos(heading) * distance, body, drop)) continue;
+          d.avoidSide = sign; d.avoidHeading = direction; d.avoidTime = 0.45;
+          return true;
+        }
+      }
+      return false;
+    };
     const updateDriven = (e, dt) => {
       const d = e.drive, p = e.root.position, m = e.motion;
       e.phase = "controlled"; e.route = ""; e.lounge = "";
       if (d.cancelled && !d.jumpHeld) d.cancelled = false;
-      const pressed = d.jumpHeld && !d.jumpDown && !d.cancelled;
-      if (pressed && e.fire.burning) { dropRoll(e); d.jumpArmed = false; d.charge = 0; }
-      else if (pressed && startClimb(e)) { d.jumpArmed = false; d.charge = 0; }
-      else if (pressed && !e.lowCover && d.grounded && !e.fire.rolling && !e.parked && !e.pound && !e.beat
-        && fullEnvelope(e, MOTION_RADIUS, MOTION_HEIGHT)) { d.jumpArmed = true; d.motionEnvelope = true; d.charge = 0; }
-      if (d.jumpHeld && d.jumpArmed && d.grounded) d.charge = Math.min(1, d.charge + dt / JUMP_CHARGE);
-      if (!d.jumpHeld && d.jumpDown) {
-        if (d.jumpArmed && !d.cancelled) { beginDrivenJump(e, d.charge); d.motionRecover = 0.6; }
-        d.jumpArmed = false; d.charge = 0;
+      const pressed = (d.jumpPressed || d.jumpHeld && !d.jumpDown) && !d.cancelled;
+      d.jumpPressed = false;
+      if (pressed) {
+        if (e.fire.burning) dropRoll(e);
+        else beginDrivenJump(e);
       }
-      d.jumpDown = d.jumpHeld; m.charge = d.charge;
+      d.jumpDown = d.jumpHeld; m.charge = 0;
       if (e.fire.rolling) return;
       if (requestedClimb(e)) return;
       if (d.x * d.x + d.z * d.z > 0.0025) e.fire.escaping = false;
@@ -3761,9 +4426,9 @@
       }
       e.biped = e.parked;
       const previousCompact = e.compact, previousRadius = e.radius, previousHeight = e.height;
-      e.footprintMode = e.parked ? "stand" : d.passiveFall ? e.footprintMode : "pound";
-      if (!d.airborne && !d.jumpArmed) d.motionRecover = Math.max(0, d.motionRecover - dt);
-      const motion = d.airborne && !d.passiveFall || d.jumpArmed || d.motionRecover > 0 || e.fire.rollRecover > 0 || e.drive.motionEnvelope && e.gorilla.motionActive;
+      e.footprintMode = e.parked ? "stand" : d.passiveFall ? e.footprintMode : "walk";
+      if (!d.airborne) d.motionRecover = Math.max(0, d.motionRecover - dt);
+      const motion = d.airborne && !d.passiveFall || d.motionRecover > 0 || e.fire.rollRecover > 0 || e.drive.motionEnvelope && e.gorilla.motionActive;
       e.compact = !motion && (e.parked ? e.gorilla.standCompact : e.footprintMode === "walk" ? e.gorilla.compact : e.gorilla.poundCompact);
       e.radius = Math.max(motion ? MOTION_RADIUS : WALK_RADIUS, e.gorilla.bodyRadius + 0.1);
       e.height = Math.max(motion ? MOTION_HEIGHT : WALK_HEIGHT, e.gorilla.bodyHeight + 0.04);
@@ -3775,6 +4440,8 @@
         e.compact = false; e.radius = Math.max(previousRadius, e.radius); e.height = Math.max(previousHeight, e.height);
       }
       const amount = Math.min(1, Math.hypot(d.x, d.z)), norm = amount > 0 ? Math.hypot(d.x, d.z) : 1;
+      d.avoidTime = Math.max(0, d.avoidTime - dt);
+      if (amount <= 0.05 || d.airborne || d.x * Math.sin(d.avoidHeading) + d.z * Math.cos(d.avoidHeading) < norm * 0.8) d.avoidTime = 0;
       const speed = e.parked ? 0.6 : BL.pilot.WALK.speed * (d.run ? 1.5 : 1);
       const wantX = d.x / norm * speed * amount, wantZ = d.z / norm * speed * amount;
       d.vx = damp(d.vx, e.controlled ? wantX : 0, d.airborne ? 3 : 18, dt);
@@ -3786,61 +4453,60 @@
         if (!Number.isFinite(d.climbExitLook)) d.climbExitLook = wantedHeading;
         const lookTurn = Math.abs(Math.atan2(Math.sin(wantedHeading - d.climbExitLook), Math.cos(wantedHeading - d.climbExitLook)));
         const movingAway = amount < 0.05 || (d.x * Math.sin(d.climbExitHeading) + d.z * Math.cos(d.climbExitHeading)) / norm > 0.7;
-        if (lookTurn > 0.25 || !movingAway || d.airborne || d.jumpArmed) d.climbExitHeading = d.climbExitLook = NaN;
+        if (lookTurn > 0.25 || !movingAway || d.airborne) d.climbExitHeading = d.climbExitLook = NaN;
         else wantedHeading = d.climbExitHeading;
       }
       if (e.lowCover && !motion && amount > 0.05
         && (d.x * Math.sin(e.heading) + d.z * Math.cos(e.heading)) / norm < -0.5) wantedHeading = e.heading;
       const delta = Math.atan2(Math.sin(wantedHeading - e.heading), Math.cos(wantedHeading - e.heading));
       const heading = e.heading + clamp(delta, -dt * 7, dt * 7);
-      if (!e.lowCover && !d.airborne && !d.jumpArmed && amount > 0.05 && !e.climb.retry && caveAt(p.x, p.y, p.z) < 0
+      if (!e.lowCover && !d.airborne && amount > 0.05 && !e.climb.retry && caveAt(p.x, p.y, p.z) < 0
         && p.y - groundAt(p.x, p.z, p.y) <= STEP) {
-        const direction = Math.atan2(d.x, d.z);
-        const drop = ctx.surfaceAt && ctx.surfaceAt(p.x + Math.sin(direction) * 3.1, p.z + Math.cos(direction) * 3.1) < p.y - 0.8;
-        if (tryClimb(e, direction, !!drop)) return;
+        const direction = Math.atan2(d.x, d.z), sx = Math.sin(direction), sz = Math.cos(direction);
+        const drop = climbSurfaceAt && climbSurfaceAt(p.x + sx * 2.2, p.z + sz * 2.2) < p.y - 0.8;
+        let wall = false;
+        // Mount only the nearby wall the player is approaching. Distant
+        // chest-height scenery must not stop ordinary walking for a full
+        // crest search, particularly while passing tangentially beside it.
+        const reach = controlledWallReach(e, direction);
+        if (!drop && climbSolidAt) for (let distance = 0.4; distance <= reach; distance += 0.2) {
+          if (climbSolidAt(p.x + sx * distance, p.y + 0.9, p.z + sz * distance)) { wall = true; break; }
+        }
+        if ((wall || drop || e.climb.searchPending) && tryClimb(e, direction, !!drop)) return;
       }
       if (holdClimbSearch(e)) return;
       const count = Math.max(1, Math.ceil(Math.max(Math.hypot(d.vx, d.vz), Math.abs(d.vy)) * dt / 0.1));
       const step = dt / count, oldX = p.x, oldZ = p.z;
       for (let i = 0; i < count; i++) {
         const facing = e.heading + (heading - e.heading) / (count - i);
-        let x = p.x + d.vx * step, z = p.z + d.vz * step, y = p.y, landing = false;
-        let floor = support(e, x, z, p.y, d.airborne ? 0 : PROP_STEP, facing);
         if (!d.airborne) {
-          const propSupported = raisedSupport(e);
-          if (!Number.isFinite(floor) || floor < p.y - (propSupported ? PROP_STEP : STEP)) {
-            if (beginSupportFall(e, x, z, facing, d.vx, d.vz)) continue;
-            d.vx = d.vz = 0; break;
-          }
-          else if (floor > p.y + PROP_STEP) { x = p.x; z = p.z; floor = p.y; }
-          else y = floor;
+          const dx = d.vx * step, dz = d.vz * step, drop = raisedSupport(e) ? PROP_STEP : STEP;
+          if (drivenGroundStep(e, p.x + dx, p.z + dz, facing, drop, true)
+            || drivenGroundSlide(e, dx, dz, facing, step, amount > 0.05, drop)) continue;
+          // Turning and walking have separate clearance: a blocked forward
+          // step must still let the body pivot away from the obstacle.
+          if (Math.abs(facing - e.heading) > 1e-6) drivenGroundStep(e, p.x, p.z, facing, drop);
+          const horizontal = Math.hypot(d.vx, d.vz);
+          if (ctx.push && horizontal > 0) ctx.push(e, d.vx / horizontal, d.vz / horizontal, step);
+          continue;
         }
-        if (d.airborne) {
-          y = p.y + d.vy * step - GRAVITY * step * step * 0.5;
-          d.vy = Math.max(-40, d.vy - GRAVITY * step);
-          floor = support(e, x, z, Math.max(p.y, y), 0, facing);
-          if (d.vy <= 0 && Number.isFinite(floor) && floor <= p.y + 0.02 && y <= floor) {
-            y = floor; landing = true;
-          }
+        const x = p.x + d.vx * step, z = p.z + d.vz * step;
+        let y = p.y + d.vy * step - GRAVITY * step * step * 0.5, landing = false;
+        d.vy = Math.max(-40, d.vy - GRAVITY * step);
+        const floor = support(e, x, z, Math.max(p.y, y), 0, facing);
+        if (d.vy <= 0 && Number.isFinite(floor) && floor <= p.y + 0.02 && y <= floor) {
+          y = floor; landing = true;
         }
         let valid = (!e.parked || caveAt(x, y, z) >= 0) && !occupied(e, x, y, z, true, facing)
           && staticClear(e, p.x, p.y, p.z, x, y, z, e.heading, facing);
-        if (!valid && y < p.y && (x !== p.x || z !== p.z) && (!e.parked || caveAt(x, y, z) >= 0)
+        if (!valid && !e.walkPoseChecked && y < p.y && (x !== p.x || z !== p.z) && (!e.parked || caveAt(x, y, z) >= 0)
           && !occupied(e, x, p.y, z, true, facing) && !occupied(e, x, y, z, true, facing)
           && staticClear(e, p.x, p.y, p.z, x, p.y, z, e.heading, facing)
           && staticClear(e, x, p.y, z, x, y, z, facing, facing)) valid = true;
-        // Curved prop tops can intersect a diagonal descent even though its
-        // horizontal and vertical legs are both clear. Keep both swept tests.
-        if (!valid && !d.airborne && y > p.y && y - p.y <= PROP_STEP && (!e.parked || caveAt(x, y, z) >= 0)
-          && !occupied(e, p.x, y, p.z) && !occupied(e, x, y, z, true, facing)
-          && staticClear(e, p.x, p.y, p.z, p.x, y, p.z)
-          && staticClear(e, p.x, y, p.z, x, y, z, e.heading, facing)) valid = true;
         if (valid) {
-          p.x = x;
-          if (!d.airborne && !landing) setSupportY(e, y); else p.y = y;
-          p.z = z; e.heading = facing;
+          p.x = x; p.y = y; p.z = z; e.heading = facing;
           if (landing) {
-            d.airborne = false; d.grounded = true; d.vy = 0;
+            d.airborne = false; d.grounded = true; d.vy = d.jumps = 0;
             d.motionRecover = d.passiveFall ? 0 : 0.6; m.landing = d.passiveFall ? 0 : 1; d.passiveFall = false;
           }
         }
@@ -3855,7 +4521,7 @@
           else if (d.vy > 0) d.vy = 0;
           if (Number.isFinite(ownFloor) && Math.abs(p.y - ownFloor) < 0.02 && d.vy <= 0) {
             if (d.airborne) { d.motionRecover = d.passiveFall ? 0 : 0.6; m.landing = d.passiveFall ? 0 : 1; }
-            d.airborne = d.passiveFall = false; d.grounded = true; d.vy = 0;
+            d.airborne = d.passiveFall = false; d.grounded = true; d.vy = d.jumps = 0;
           }
         }
       }
@@ -3907,6 +4573,7 @@
         }
       }
       e.gorilla.poseManaged(dt, p.x, p.y, p.z, e.heading, e.speed, e.jump.active || e.drive.airborne && !e.drive.passiveFall, e.biped, e.lounge, e.motion);
+      e.motion.walkPhase = NaN;
       e.roam.riseAdmitted = false;
       if (!e.motion.lab && e.footprintMode === "lab") {
         e.footprintMode = "pound"; e.compact = e.gorilla.poundCompact;
@@ -3927,7 +4594,7 @@
         e.radius = Math.max(e.radius, MOTION_RADIUS);
         e.height = Math.max(e.height, MOTION_HEIGHT);
       }
-      if (e.drive.motionEnvelope && !e.gorilla.motionActive && !e.drive.airborne && !e.drive.jumpArmed
+      if (e.drive.motionEnvelope && !e.gorilla.motionActive && !e.drive.airborne
         && !e.drive.motionRecover && !e.fire.rolling && !e.fire.rollRecover) e.drive.motionEnvelope = false;
       labEnvelope(e);
       if (ctx.fireContact && ctx.fireContact(e, beforeX, beforeY, beforeZ)) ignite(e);
@@ -4055,6 +4722,7 @@
     const updateEntry = (e, dt) => {
       const p = e.root.position, beforeX = p.x, beforeY = p.y, beforeZ = p.z;
       e.motion.labDt = dt;
+      e.motion.walkPhase = NaN;
       if (!e.climb.active) e.motion.climbSide = 0;
       syncLab(e);
       e.motion.takeoff = Math.max(0, e.motion.takeoff - dt * 5);
@@ -4070,8 +4738,8 @@
           releasePortal(e);
           releaseLab(e);
           e.active = e.root.visible = e.hasSlot = e.jump.active = false;
-          e.debugMove.active = false; e.debugMove.status = "";
-          if (wallSearch && wallSearch.owner === e) wallSearch.owner = null;
+          e.debugMove.active = e.debugMove.cancelled = false; e.debugMove.status = "";
+          clearWallSearch(e);
           e.overflow = false;
           if (e.tracked && ctx.untrack) ctx.untrack(e);
           e.tracked = false;
@@ -4288,7 +4956,10 @@
       poseEntry(e, dt, beforeX, beforeY, beforeZ);
     };
     const recoverStall = (e, dt) => {
-      if (e.debugMove.active || e.climb.debugRole >= 0 && e.climb.active) return;
+      // Debug inspection keeps a previously commanded actor visible even
+      // after cancellation and dismount. Ordinary collision-safe wandering
+      // still runs; a stall must not silently relocate or hide this actor.
+      if (e.debugMove.active || e.debugMove.cancelled || e.climb.debugRole >= 0 && e.climb.active) return;
       const p = e.root.position, s = e.stuck, job = e.lab, r = e.roam;
       const invalidRest = e.active && !e.controlled && e.phase === "chill" && Math.abs(e.speed) < 0.1
         && !e.fire.burning && !e.fire.rolling && !e.pound && !e.beat

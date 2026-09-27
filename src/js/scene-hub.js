@@ -26,7 +26,9 @@
   const preloadedPose = DEBUG ? readPositionPose(params.get("pose")) : null;
   const preloadedMode = DEBUG ? params.get("mode") || preloadedPose?.mode : null;
   const preloadedFirstPerson = DEBUG && (params.get("firstperson") === "1" || preloadedMode === "first-person" || preloadedMode === "eye-level");
-  const preloadedCharacter = DEBUG ? (params.get("character") || preloadedPose?.character)?.trim().toLowerCase() : null;
+  const preloadedSelection = DEBUG ? (params.get("character") || preloadedPose?.character)?.trim().toLowerCase() : null;
+  const preloadedGorilla = !!preloadedSelection && /^(?:gorilla|clanker)-/.test(preloadedSelection);
+  const preloadedCharacter = preloadedGorilla ? preloadedSelection.slice(preloadedSelection.indexOf("-") + 1) : preloadedSelection;
   const preloadedWeapon = DEBUG ? Number(params.get("weapon")) : 0;
   const preloadedAmmo = DEBUG ? params.get("ammo") : null;
   const preloadedEquipment = preloadedWeapon === 1 || preloadedWeapon === 2 || preloadedAmmo === "unlimited"
@@ -539,6 +541,7 @@
   const spots = [];
   const openMouths = [];
   const headquartersRimLintels = [];
+  const climbMasonry = [];
   const launchers = [];
   const props = [];
   const scenery = [];
@@ -1782,6 +1785,24 @@
     lawn = { node, version: -1 };
     layLawn();
   };
+  const registerClimbMasonry = (node, mouth) => {
+    const sr = Math.sin(mouth.ry), cr = Math.cos(mouth.ry), y = mouth.floorY + node.position.y;
+    const slabs = node.geometry.climbBoxes, boxes = [];
+    let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let at = 0; at < slabs.length; at += 6) {
+      const box = new Float64Array(24);
+      for (let corner = 0; corner < 8; corner++) {
+        const x = slabs[at + (corner & 1 ? 3 : 0)], z = slabs[at + (corner & 4 ? 5 : 2)] + node.position.z;
+        const wx = mouth.x + cr * x + sr * z, wy = y + slabs[at + (corner & 2 ? 4 : 1)], wz = mouth.z - sr * x + cr * z;
+        box[corner * 3] = wx; box[corner * 3 + 1] = wy; box[corner * 3 + 2] = wz;
+        minX = Math.min(minX, wx); minY = Math.min(minY, wy); minZ = Math.min(minZ, wz);
+        maxX = Math.max(maxX, wx); maxY = Math.max(maxY, wy); maxZ = Math.max(maxZ, wz);
+      }
+      boxes.push(box);
+    }
+    climbMasonry.push({ node, x: mouth.x, y, z: mouth.z, sr, cr, offsetZ: node.position.z,
+      boxes, minX, minY, minZ, maxX, maxY, maxZ });
+  };
   const buildMouth = (slot, m) => {
     const ax = Math.sin(m.ry), az = Math.cos(m.ry);
     const caveIndex = island.mouths.indexOf(m) + 1;
@@ -1789,10 +1810,12 @@
     const rim = createNode({ position: { x: 0, y: slot.status === "headquarters" ? 0 : -RIM_SEAM_DROP, z: 0.5 }, geometry: hubModels.caveMouthRim(slot.status === "headquarters" ? 1 : 0), sightSolid: true });
     addChild(group, rim);
     solids.add(rim);
+    registerClimbMasonry(rim, m);
     if (slot.status === "headquarters") {
       const lintel = createNode({ position: { x: 0, y: -RIM_SEAM_DROP, z: 0.5 }, geometry: hubModels.caveMouthRim(2), sightSolid: true });
       addChild(group, lintel);
       solids.add(lintel);
+      registerClimbMasonry(lintel, m);
       headquartersRimLintels.push(lintel);
     }
     if (slot.status === "dark") {
@@ -2451,7 +2474,7 @@
     const beer = BL.timechainBeer.create(site);
     solids.add(beer.dispenser); solids.add(beer.cabinet); solids.add(beer.bin);
     addProp("timechainbeer", beer.mug, site.chair.position.x - 0.95, site.chair.position.z, 0.3);
-    return { site, place: p, boards: null, seat, beer, claimGround, hangout, residentPlaced: false, show: T.show(site) };
+    return { site, place: p, cos, sin, boards: null, seat, beer, claimGround, hangout, residentPlaced: false, show: T.show(site) };
   };
   // The Sphere's walls and their feed (six slow API calls, then polls, each repainting a wall) wait until the camera
   // comes near, so a visit that never goes there never pays for them. They sit on the shell's inner face, which keeps
@@ -6390,16 +6413,35 @@
   // once per complete rig sweep; arm slices may then overlap those same peers.
   let clankerPassingEntry = null;
   const clankerPassingPeer = (entry, other) => !!entry && entry === clankerPassingEntry && other !== entry;
-  const clankerPoolLandAt = (x, y, z, radius) => {
-    if (!mempoolIsland) return false;
-    const p = mempoolIsland.place, s = poolModels.SITE, dx = x - p.x, dz = z - p.z;
-    const cos = mempoolIsland.cos, sin = mempoolIsland.sin;
-    const across = dx * cos - dz * sin, along = dx * sin + dz * cos;
-    const reach = Math.max(radius, BL.clankers.WALK_RADIUS);
-    const bridge = Math.abs(across) + reach < s.width / 2
-      && along >= p.bridgeLocalZ - reach - 0.4 && along <= p.bridgeLocalZ + s.span + reach;
-    const islet = Math.hypot(dx, dz) + reach < s.isletR * 0.9;
-    if (!bridge && !islet) return false;
+  const clankerSatelliteLandAt = (x, y, z, radius) => {
+    let admitted = false;
+    if (mempoolIsland) {
+      const p = mempoolIsland.place, s = poolModels.SITE, dx = x - p.x, dz = z - p.z;
+      const cos = mempoolIsland.cos, sin = mempoolIsland.sin;
+      const across = dx * cos - dz * sin, along = dx * sin + dz * cos;
+      const reach = Math.max(radius, BL.clankers.WALK_RADIUS);
+      const bridge = Math.abs(across) + reach < s.width / 2
+        && along >= p.bridgeLocalZ - reach - 0.4 && along <= p.bridgeLocalZ + s.span + reach;
+      admitted = bridge || Math.hypot(dx, dz) + reach < s.isletR * 0.9;
+    }
+    // These floors are solid-prop meshes outside the main terrain's domain.
+    // Use the queried footprint circle, not the complete body's bounding
+    // radius: its three aligned circles fit the narrow wooden crossings.
+    if (!admitted && timechainIsland) {
+      const p = timechainIsland.place, s = BL.timechainModels.SITE, dx = x - p.x, dz = z - p.z;
+      const cos = timechainIsland.cos, sin = timechainIsland.sin;
+      const across = dx * cos - dz * sin, along = dx * sin + dz * cos;
+      const bridge = Math.abs(across) + radius <= s.width / 2 + 1e-7
+        && along >= p.bridgeZ - radius && along <= p.bridgeZ + s.span + 0.5 + radius;
+      admitted = bridge || Math.hypot(dx, dz) + radius < s.radius;
+    }
+    if (!admitted && launchCloudSpot) {
+      const p = launchCloudSpot, s = rocketModels.SITE, dx = x - p.x, dz = z - p.z;
+      const bridge = Math.abs(dx) + radius <= s.width / 2 + 1e-7
+        && z >= p.bridgeZ - 0.8 - radius && z <= p.bridgeZ + s.span + 0.8 + radius;
+      admitted = bridge || Math.hypot(dx, dz) + radius < s.isletR;
+    }
+    if (!admitted) return false;
     const support = solids.supportAt(x, z, y, STEP_MAX, radius);
     return support > -Infinity && support <= y + STEP_MAX && support >= y - 3.5;
   };
@@ -6421,7 +6463,7 @@
     const fromRadius = radius, fromHeight = height;
     radius = Math.max(radius, toRadius); height = Math.max(height, toHeight);
     const floor = y + 0.002, toFloor = toY + 0.002, body = height - 0.002;
-    if (!climbing && !island.onLand(toX, toZ) && !clankerPoolLandAt(toX, toY, toZ, radius) || crossesSealedCave(x, z, toX, toZ, y)
+    if (!climbing && !island.onLand(toX, toZ) && !clankerSatelliteLandAt(toX, toY, toZ, radius) || crossesSealedCave(x, z, toX, toZ, y)
       || checkTerrain && (!island.clearAt(toX, toFloor, toZ, radius, body)
         || !island.voxelSegmentClearAt(x, floor, z, toX, toFloor, toZ, radius, body))
       || !solids.segmentClear(x, floor, z, toX, toFloor, toZ, fromRadius, fromHeight - 0.002, ignore, toRadius, toHeight - 0.002)
@@ -6470,11 +6512,82 @@
       if (!entry.gorilla.labPoseClear(2, toX, toY, toZ, toHeading, entry.speed, "", 0, 1,
         island.solidAt, clankerExitTransitionClear, entry, true, false)) return false;
     }
+    if ((!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active
+      && (entry.planningRoam || entry.footprintMode === "walk")
+      && (clankerGroundPlaneAt(x, y, z, fromHeading, CLANKER_WALK_PLANE)
+        || clankerGroundPlaneAt(toX, toY, toZ, toHeading, CLANKER_WALK_PLANE))) {
+      const p = entry.root.position;
+      const planning = entry.planningRoam || Math.hypot(x - p.x, y - p.y, z - p.z) > 0.001;
+      entry.walkPoseChecked = true;
+      return entry.gorilla.walkPoseClear(x, y, z, toX, toY, toZ, fromHeading, toHeading,
+        entry.motion, clankerWalkSolidAt, clankerWalkTransitionClear, island.hullClearAt,
+        entry, planning ? 1 / 30 : entry.motion.labDt || 1 / 60, planning ? 0 : entry.speed, planning);
+    }
+    if ((!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active
+      && (entry.planningRoam || entry.footprintMode === "walk")
+      && (entry.motion.supportOffset < -0.001 || clankerTerraceAt(x, y, z, fromHeading)
+        || clankerTerraceAt(toX, toY, toZ, toHeading))) {
+      const p = entry.root.position;
+      const planning = entry.planningRoam || Math.hypot(x - p.x, y - p.y, z - p.z) > 0.001;
+      entry.walkPoseChecked = true;
+      const dt = planning ? 1 / 30 : entry.motion.labDt || 1 / 60, offset = entry.motion.supportOffset;
+      const dx = toX - x, dz = toZ - z;
+      const speed = planning ? 0 : Math.hypot(dx, dz) / dt
+        * (dx * Math.sin(toHeading) + dz * Math.cos(toHeading) < 0 ? -1 : 1);
+      entry.motion.supportOffset = planning ? 0 : Math.max(-1.02, Math.min(1.02,
+        offset + (entry.drive.passiveFall ? 0 : y - toY))) * Math.exp(-12 * dt);
+      let clear;
+      try {
+        clear = entry.gorilla.walkPoseClear(x, y, z, toX, toY, toZ, fromHeading, toHeading,
+          entry.motion, clankerWalkSolidAt, clankerWalkTransitionClear, island.hullClearAt,
+          entry, dt, speed, planning);
+        if (clear) {
+          entry.motion.supportOffset = 0;
+          clear = entry.gorilla.walkPoseClear(toX, toY, toZ, toX, toY, toZ, toHeading, toHeading,
+            entry.motion, clankerWalkSolidAt, clankerWalkTransitionClear, island.hullClearAt,
+            entry, 2, 0, true);
+        }
+      } finally { entry.motion.supportOffset = offset; }
+      return clear;
+    }
     return BL.agent.footprint.sweep(entry, x, y, z, toX, toY, toZ, radius, height,
       fromHeading, toHeading, clankerCylinderClear, ignore);
   };
+  const CLANKER_WALK_PLANE = { groundX: 0, groundY: 0, groundZ: 0 };
+  const clankerWalkSolidAt = (x, y, z) => !island.clearAt(x, y, z, 0, 0);
+  const clankerWalkTransitionClear = (entry, x, y, z, nx, ny, nz, radius, height,
+    actors, riders, toRadius, toHeight) => clankerCylinderClear(x, y, z, nx, ny, nz,
+      radius, height, entry, null, false, actors, false, toRadius, toHeight);
+  const CLANKER_REST_FOOTING = { lab: false, supportOffset: 0 };
+  const clankerPointFootingAt = (x, z, y) => Math.max(
+    island.supportAt(x, z, y, 0.02, ABYSS_FLOOR), solids.supportAt(x, z, y, 0.02, 0));
+  const clankerRestFootingClear = (entry, x, y, z, heading) => {
+    CLANKER_REST_FOOTING.lab = entropyLab.phase.inside(x, y, z);
+    return entry.gorilla.walkPoseClear(x, y, z, x, y, z, heading, heading,
+      CLANKER_REST_FOOTING, clankerWalkSolidAt, clankerWalkTransitionClear,
+      island.hullClearAt, entry, 2, 0, true, clankerPointFootingAt);
+  };
+  const clankerCanopyTerrainClear = (entry, x, y, z, nx, ny, nz, fromHeading, toHeading) => {
+    const p = entry.root.position;
+    const planning = entry.planningRoam || Math.hypot(x - p.x, y - p.y, z - p.z) > 0.001;
+    const dt = planning ? 1 / 30 : entry.motion.labDt || 1 / 60, offset = entry.motion.supportOffset;
+    const dx = nx - x, dz = nz - z;
+    const speed = planning ? 0 : Math.hypot(dx, dz) / dt
+      * (dx * Math.sin(toHeading) + dz * Math.cos(toHeading) < 0 ? -1 : 1);
+    entry.walkPoseChecked = true;
+    entry.motion.supportOffset = planning ? 0 : Math.max(-1.02, Math.min(1.02,
+      offset + (entry.drive.passiveFall ? 0 : y - ny))) * Math.exp(-12 * dt);
+    try {
+      if (!entry.gorilla.walkPoseClear(x, y, z, nx, ny, nz, fromHeading, toHeading,
+        entry.motion, clankerWalkSolidAt, null, island.hullClearAt, entry, dt, speed, planning)) return false;
+      entry.motion.supportOffset = 0;
+      return entry.gorilla.walkPoseClear(nx, ny, nz, nx, ny, nz, toHeading, toHeading,
+        entry.motion, clankerWalkSolidAt, null, island.hullClearAt, entry, 2, 0, true);
+    } finally { entry.motion.supportOffset = offset; }
+  };
   const clankerClear = (x, y, z, toX, toY, toZ, radius, height, entry = null, ignore = null,
     fromHeading = entry ? entry.heading : 0, toHeading = fromHeading) => {
+    if (entry) entry.walkPoseChecked = false;
     const previousEntry = clankerPassingEntry;
     clankerPassingEntry = null;
     try {
@@ -6517,15 +6630,32 @@
   };
   // At a lip the bent rig fits where a tall cylinder cannot. The controller
   // checks that exact terrain pose; scenery, other bodies and riders stay solid.
-  const clankerClimbTransitionClear = (entry, x, y, z, nx, ny, nz, radius, height, actors = true, riders = true, toRadius = radius, toHeight = height, peers = true, part = null) => {
+  const clankerClimbTransitionClear = (entry, x, y, z, nx, ny, nz, radius, height, actors = true, riders = true, toRadius = radius, toHeight = height, peers = true, part = null, hull = null) => {
     const previous = clankerPassingEntry;
     if (!peers) clankerPassingEntry = entry;
     const bench = (entry.motion.lab || entry.planningLab) && part === entry.gorilla.parts.armR ? entry.gorilla.labPickupBench : null;
     try {
-      return (!riders || clankerRidersClear(entry, x, y, z, nx, ny, nz, entry.heading, entry.heading))
-        && clankerCylinderClear(x, y, z, nx, ny, nz, radius, height, entry, bench, true, actors, false, toRadius, toHeight);
+      if (riders && !clankerRidersClear(entry, x, y, z, nx, ny, nz, entry.heading, entry.heading)) return false;
+      if (clankerCylinderClear(x, y, z, nx, ny, nz, radius, height, entry, bench, true, actors, false, toRadius, toHeight)) return true;
+      if (!hull || bench) return false;
+      // Circular arm slices include empty corners beside a real masonry grip.
+      // The complete, uninset swept part box must clear every slab of one rim
+      // before that same slice may omit it; every other blocker stays checked.
+      const reach = Math.max(radius, toRadius);
+      for (let i = 0; i < climbMasonry.length; i++) {
+        const row = climbMasonry[i];
+        if (Math.max(x, nx) + reach < row.minX || Math.min(x, nx) - reach > row.maxX
+          || Math.max(z, nz) + reach < row.minZ || Math.min(z, nz) - reach > row.maxZ
+          || Math.max(y + height, ny + toHeight) < row.minY || Math.min(y, ny) > row.maxY
+          || !solids.isActive(row.node)) continue;
+        let clear = true;
+        for (let j = 0; j < row.boxes.length; j++) if (BL.convex.hullsOverlap(hull, row.boxes[j])) { clear = false; break; }
+        if (clear && clankerCylinderClear(x, y, z, nx, ny, nz, radius, height, entry, row.node, true, actors, false, toRadius, toHeight)) return true;
+      }
+      return false;
     } finally { clankerPassingEntry = previous; }
   };
+  clankerClimbTransitionClear.needsHull = true;
   const clankerRestTransitionClear = (entry, x, y, z, nx, ny, nz, radius, height, actors, riders, toRadius, toHeight) => {
     const c = entry.climb;
     if (c.peerCheck) {
@@ -6607,6 +6737,16 @@
       const floor = island.supportAt(x, z, y, Math.min(step, STEP_MAX), ABYSS_FLOOR, 0.45);
       return props ? Math.max(floor, solids.supportAt(x, z, y, step, 0.45)) : floor;
     }
+    // Pitching a walking rig on the tunnel ramp can leave the flat-ground
+    // compact envelope. Its broad bounding circle then reaches the tunnel's
+    // side ledges, although the feet remain on the ramp. Keep the walking
+    // support footprint here; the complete posed hull still checks collision.
+    const compact = entry.compact, planning = entry.planningRoam;
+    if ((!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active
+      && (planning || entry.footprintMode === "walk")
+      && clankerGroundPlaneAt(x, y, z, heading, CLANKER_SUPPORT_PLANE)) {
+      entry.compact = true; entry.planningRoam = true;
+    }
     // The landing surface must cover the same body footprint as the sweep.
     // A leading arm can reach a prop before the torso is directly above it.
     const shape = BL.agent.footprint, radius = shape.radius(entry);
@@ -6617,19 +6757,97 @@
       floor = Math.max(floor, island.supportAt(px, pz, y, Math.min(step, STEP_MAX), ABYSS_FLOOR, radius));
       if (props) floor = Math.max(floor, solids.supportAt(px, pz, y, step, radius));
     }
+    entry.compact = compact; entry.planningRoam = planning;
+    if ((!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active && !entry.gorilla.motionActive
+      && (planning || entry.footprintMode === "walk")
+      && !clankerGroundPlaneAt(x, y, z, heading, CLANKER_SUPPORT_PLANE)) {
+      const center = clankerPadSupportAt(x, z, y, step, props);
+      if (floor > center + 0.2) {
+        const pads = entry.gorilla.walkSupportAt(x, z, y, heading, step, props, clankerPadSupportAt);
+        if (Number.isFinite(pads) && pads < floor - 0.02) floor = pads;
+      }
+    }
     return floor;
   };
+  const clankerPadSupportAt = (x, z, y, step, props) => {
+    const floor = island.supportAt(x, z, y, Math.min(step, STEP_MAX), ABYSS_FLOOR);
+    return props ? Math.max(floor, solids.supportAt(x, z, y, step, 0)) : floor;
+  };
+  const clankerTerraceAt = (x, y, z, heading) => {
+    const sine = Math.sin(heading), cosine = Math.cos(heading);
+    for (let i = 0; i < 3; i++) {
+      const offset = i === 0 ? 0.05 : i === 1 ? 0.7 : 1.35;
+      // Detect the stone beside the whole walking body, including a riser too
+      // high to count as a legal step. This selects exact collision proof; it
+      // does not raise the controller's permitted step height.
+      if (island.supportAt(x + sine * offset, z + cosine * offset, y, BL.clankers.WALK_HEIGHT, ABYSS_FLOOR, 0.85) > y + 0.02) return true;
+    }
+    return false;
+  };
+  const CLANKER_SUPPORT_PLANE = { groundX: 0, groundY: 0, groundZ: 0 };
   // Compare support using the same footprint so a terrain tread beneath a
   // leading limb cannot be mistaken for standing on a raised prop.
   const clankerTerrainSupportAt = (entry, x, z, y, step, heading = entry.heading) =>
     clankerSupportAt(entry, x, z, y, step, heading, false);
+  const CLANKER_RAMP_COLUMN = { floor: 0, ceiling: 0 };
+  const clankerGroundPlaneAt = (x, y, z, heading, out) => {
+    const column = CLANKER_RAMP_COLUMN, sine = Math.sin(heading), cosine = Math.cos(heading);
+    let ramp = false;
+    // The front knuckles may enter a slope while the pelvis is still on its
+    // flat landing. Keep the same floor fit until the complete rig leaves it.
+    for (let i = 0; i < 3 && !ramp; i++) {
+      const along = i === 0 ? 0 : i === 1 ? 2.4 : -0.9;
+      const px = x + sine * along, pz = z + cosine * along;
+      ramp = !!(island.rampColumnAt(px, pz, false, column) && y < column.ceiling
+        || island.rampColumnAt(px, pz, true, column) && y < column.ceiling);
+    }
+    if (!ramp) return false;
+    const floor = island.supportAt(x, z, y, STEP_MAX, ABYSS_FLOOR);
+    if (y < floor - 0.2 || y > floor + 0.9) return false;
+    const back = island.supportAt(x - sine * 0.35, z - cosine * 0.35, floor, STEP_MAX, ABYSS_FLOOR);
+    const front = island.supportAt(x + sine * 1.35, z + cosine * 1.35, floor, 0.9, ABYSS_FLOOR);
+    const left = island.supportAt(x - cosine * 0.5, z + sine * 0.5, floor, STEP_MAX, ABYSS_FLOOR);
+    const right = island.supportAt(x + cosine * 0.5, z - sine * 0.5, floor, STEP_MAX, ABYSS_FLOOR);
+    const across = right - left, along = (front - back) / 1.7;
+    if (Math.abs(left + right - floor * 2) > 0.12 || Math.hypot(across, along) > 0.65) return false;
+    out.groundX = across; out.groundZ = along; out.groundY = floor - y;
+    return true;
+  };
   // Props remain live blockers throughout a climb, but never become a cached
   // wall-route endpoint. A spawned rock beneath a dismount therefore blocks or
   // reverses that route; destroying it reopens the terrain landing immediately.
   // The surface over an HQ ramp is a tunnel roof, not a resting clearing.
   const clankerRestSurfaceClear = (x, y, z, foot) => !npcRampRoofAt(x, y, z, foot);
-  const clankerClimbSolidAt = (x, y, z) => island.solidAt(x, y, z);
-  const clankerClimbSurfaceAt = (x, z) => island.surfaceAt(x, z);
+  const clankerClimbSolidAt = (x, y, z) => {
+    if (island.solidAt(x, y, z)) return true;
+    // The cave's visible masonry projects beyond the voxel cliff. Grips and
+    // wall routes must see that same stone before ordinary props collision
+    // rejects a route through its jambs. Scenery stays on its existing mesh.
+    for (let i = 0; i < climbMasonry.length; i++) {
+      const row = climbMasonry[i], boxes = row.node.geometry.climbBoxes, ly = y - row.y;
+      if (ly < 0 || ly > 3.5 || Math.abs(x - row.x) > 4 || Math.abs(z - row.z) > 4
+        || !solids.isActive(row.node)) continue;
+      const dx = x - row.x, dz = z - row.z, lx = dx * row.cr - dz * row.sr;
+      const lz = dx * row.sr + dz * row.cr - row.offsetZ;
+      for (let at = 0; at < boxes.length; at += 6) if (lx >= boxes[at] && lx <= boxes[at + 3]
+        && ly >= boxes[at + 1] && ly <= boxes[at + 4] && lz >= boxes[at + 2] && lz <= boxes[at + 5]) return true;
+    }
+    return false;
+  };
+  const clankerClimbSurfaceAt = (x, z) => {
+    let height = island.surfaceAt(x, z);
+    // The stair/cliff probe must see the same projecting masonry as the
+    // contact probe. Walking support still comes from the live solid mesh.
+    for (let i = 0; i < climbMasonry.length; i++) {
+      const row = climbMasonry[i];
+      if (Math.abs(x - row.x) > 4 || Math.abs(z - row.z) > 4 || !solids.isActive(row.node)) continue;
+      const dx = x - row.x, dz = z - row.z, lx = dx * row.cr - dz * row.sr;
+      const lz = dx * row.sr + dz * row.cr - row.offsetZ, boxes = row.node.geometry.climbBoxes;
+      for (let at = 0; at < boxes.length; at += 6) if (lx >= boxes[at] && lx <= boxes[at + 3]
+        && lz >= boxes[at + 2] && lz <= boxes[at + 5]) height = Math.max(height, row.y + boxes[at + 4]);
+    }
+    return height;
+  };
   const LAB_ITEM_INVERSE = math.mat4.create(), LAB_ITEM_LOCAL = math.mat4.create();
   const placeLabDie = (item) => {
     const n = item.node, r = item.roll;
@@ -6742,8 +6960,24 @@
   const clankerCameraClear = (x, y, z, toX, toY, toZ) =>
     island.voxelSegmentClearAt(x, y, z, toX, toY, toZ, 0.1, 0.15)
     && solids.segmentClear(x, y, z, toX, toY, toZ, 0.1, 0.15);
-  const constrainClankerCamera = (entry, view) => {
+  const constrainClankerCamera = (entry, view, hold = false, previousEye = null) => {
     const a = view.target, b = view.position;
+    if (hold) {
+      // Mounts keep the displayed camera anchor. Looking remains possible,
+      // with the eye swept from its previous position instead of rebasing
+      // the view onto the gorilla as it crosses a ledge.
+      if (clankerCameraClear(previousEye.x, previousEye.y, previousEye.z, b.x, b.y, b.z)) return;
+      const dx = b.x - previousEye.x, dy = b.y - previousEye.y, dz = b.z - previousEye.z;
+      let low = 0, high = 1;
+      for (let i = 0; i < 9; i++) {
+        const k = (low + high) * 0.5;
+        if (clankerCameraClear(previousEye.x, previousEye.y, previousEye.z,
+          previousEye.x + dx * k, previousEye.y + dy * k, previousEye.z + dz * k)) low = k;
+        else high = k;
+      }
+      b.x = previousEye.x + dx * low; b.y = previousEye.y + dy * low; b.z = previousEye.z + dz * low;
+      return;
+    }
     let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
     let low = 0, high = 1;
     if (clankerCameraClear(a.x, a.y, a.z, b.x, b.y, b.z)) return;
@@ -7555,20 +7789,22 @@
       labEquipment: entropyLab.equipment, labPickup: pickUpLabEquipment, labReturn: returnLabEquipment, labRoll: rollLabEquipment,
       solidAt: island.solidAt, climbSolidAt: clankerClimbSolidAt, climbSurfaceAt: clankerClimbSurfaceAt,
       climbClear: clankerClimbClear, climbTransitionClear: clankerClimbTransitionClear, climbPeersClear: clankerPeersClear,
-      climbRidersClear: clankerRidersClear, restPoseClear: clankerRestPoseClear,
-      groomClear: clankerGroomClear, underCanopy: clankerUnderCanopy,
-      groundAt: (x, z, y) => island.supportAt(x, z, y, 0.52), surfaceAt: island.surfaceAt,
+      climbRidersClear: clankerRidersClear, restPoseClear: clankerRestPoseClear, restFootingClear: clankerRestFootingClear,
+      groomClear: clankerGroomClear, underCanopy: clankerUnderCanopy, canopyTerrainClear: clankerCanopyTerrainClear,
+      groundAt: (x, z, y) => island.supportAt(x, z, y, 0.52), groundPlaneAt: clankerGroundPlaneAt, groundHullAt: island.hullClearAt, surfaceAt: island.surfaceAt,
+      pointSupportAt: (x, z, y) => Math.max(island.supportAt(x, z, y, 0.02), solids.supportAt(x, z, y, 0.02)),
       isGrass: island.isGrassAt, restSurfaceClear: clankerRestSurfaceClear, onLand: island.onLand,
       roamRadius: island.radius, meadowRadius: island.meadowRadius,
       clear: clankerClear, push: pushClankerProp, onPound: poundClankerEquipment, onGrab: grabClankerOoga, onReleaseDrag: releaseClankerDrag,
       fireContact: clankerFireContact, canSmash: canClankerSmash, supportAt: clankerSupportAt, terrainSupportAt: clankerTerrainSupportAt,
       track: (entry) => trackMirrorObject(entry.root, 3.6, 4248), untrack: (entry) => untrackMirrorObject(entry.root) });
     for (const entry of clankers.list) registerClanker(entry);
-    clankerPlay = BL.clankerPlay.create({ canvas: ctx.canvas, camera, pilot, hud, clankers, input, constrainCamera: constrainClankerCamera });
+    clankerPlay = BL.clankerPlay.create({ canvas: ctx.canvas, camera, pilot, hud, clankers, input, constrainCamera: constrainClankerCamera, controlEnabled: preloadedGorilla });
     createClankerEquipment(shared.workSites);
     clankers.equipment = clankerEquipment;
     clankers.sites = shared.workSites;
     clankers.clear = clankerClear;
+    if (DEBUG) { clankers.supportAt = clankerSupportAt; clankers.restFootingClear = clankerRestFootingClear; }
 
     hud.onAssign((entryId, name) => {
       if (game.assign(entryId, name)) {
@@ -7649,10 +7885,18 @@
     unsubscribeActivity = contributors.subscribe(() => crew.refreshStates());
     let initialCharacter = ctx.from === null && preloadedCharacter ? contributors.activeRoster.find((entry) => entry.name.toLowerCase() === preloadedCharacter) : null;
     if (ctx.from === null && (preloadedJetpackWear || preloadedEquipment) && !params.has("character") && !initialCharacter) initialCharacter = contributors.activeRoster.find((entry) => crew.stateOf(crew.cavemen.get(entry.name)) === "working") || contributors.activeRoster[0];
+    const initialGorilla = initialCharacter && preloadedGorilla ? crew.cavemen.get(initialCharacter.name) : null;
     // The Ooga that went into DSB or the Lightning Factory comes back out as the one played.
     const returningCharacter = ctx.from === "dsb" || ctx.from === "factory" ? world.pilot : null;
     if (ctx.from === "dsb" || ctx.from === "factory") world.pilot = null;
-    if (initialCharacter || returningCharacter) {
+    if (initialGorilla) {
+      // A sleeping contributor has no active companion. Wake only the named
+      // owner so the normal sync builds its gorilla at a supported home.
+      if (crew.stateOf(initialGorilla) === "sleeping") {
+        initialGorilla.override = "chilling";
+        crew.refreshStates(true);
+      }
+    } else if (initialCharacter || returningCharacter) {
       const cave = crew.cavemen.get(returningCharacter || initialCharacter.name);
       if (!contributors.debugState && crew.stateOf(cave) !== "working") {
         cave.override = "working";
@@ -7661,11 +7905,11 @@
       pilot.possess(cave);
       if (initialCharacter) crew.configureWeapon(cave, preloadedWeapon, preloadedAmmo);
     }
-    const initialFirstPerson = ctx.from === null && preloadedFirstPerson;
+    const initialFirstPerson = ctx.from === null && preloadedFirstPerson && !initialGorilla;
     if (initialFirstPerson) pilot.enterClose(true);
     if (returningCharacter && !pitReturn) navigate(ctx.from === "factory" ? "factory" : "pile");
-    else if (!crew.sleeping && (ctx.place || preloadedView || initialCharacter || initialFirstPerson)) navigate(ctx.place || preloadedView || "pile");
-    if (initialCharacter && preloadedJetpack) {
+    else if (!crew.sleeping && !initialGorilla && (ctx.place || preloadedView || initialCharacter || initialFirstPerson)) navigate(ctx.place || preloadedView || "pile");
+    if (initialCharacter && !initialGorilla && preloadedJetpack) {
       grantJetpack(pilot.player, preloadedJetpackWear);
     }
     clankers.sync();
@@ -7929,7 +8173,11 @@
     }
     if (pitReturn && pilot.player) beginPitArrival();
     if (!pitArrival) pilot.update(0);
-    if (ctx.from === null) restorePositionDebug();
+    if (ctx.from === null && !initialGorilla) restorePositionDebug();
+    if (initialGorilla) {
+      const entry = clankers.list.find(entry => entry.owner === initialGorilla);
+      if (clankerPlay.possess(entry, true)) clankerPlay.update(0);
+    }
     if (ctx.from === null && pilot.mode === "first-person") pilot.focusAim();
     if (POSITION_DEBUG) updatePositionDebug(true);
     mark("visibility-start");
@@ -8039,7 +8287,7 @@
     }
     for (const node of targets) input.remove(node);
     for (const node of placed) removeChild(root, node);
-    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = spots.length = openMouths.length = headquartersRimLintels.length = launchers.length = props.length = 0;
+    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = spots.length = openMouths.length = headquartersRimLintels.length = climbMasonry.length = launchers.length = props.length = 0;
     launchCloudSpot = cloudRandom = null;
     fireHazards.length = 0;
     workZones.length = 0;

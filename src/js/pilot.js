@@ -28,7 +28,7 @@
   // feet, but never back through its pillow or the ground beneath its face.
   const LYING_YAW_LIMIT = 80 * Math.PI / 180, LYING_PITCH_LIMIT = 70 * Math.PI / 180;
   const CLOSE_GROUND_RATE = 9, CLOSE_TELEPORT = 0.8;
-  const WALK = { speed: 7.75, gravity: 9.8, step: 0.6, ledgeRise: 2.4, ledgeSpeed: 3, ledgeDrag: 1.5 };
+  const WALK = { speed: 7.75, run: 1.5, gravity: 9.8, step: 0.6, ledgeRise: 2.4, ledgeSpeed: 3, ledgeDrag: 1.5 };
   const ACT_DO = "JUMP!", ACT_FLY = "Blast off!";
   // Camera rotations carry look and up together, including a sleeper's roll.
   // Local -Z looks forward; local +Y is the top of the rendered image.
@@ -1164,7 +1164,7 @@
         overheadTargetYaw = overheadYaw + Math.atan2(Math.sin(-overheadYaw), Math.cos(-overheadYaw));
         return;
       }
-      if (e.key.toLowerCase() === "r" && !e.shiftKey && cave && cave.weapon.equipped) {
+      if (e.key.toLowerCase() === "r" && !controls.rightShift && cave && cave.weapon.equipped) {
         e.preventDefault(); e.stopImmediatePropagation();
         if (!e.repeat) weaponAction(ctx.reloadAnywhere ? "weapon-reload" : "magazine-swap");
         return;
@@ -1854,6 +1854,7 @@
     const hooks = {
       onOrbit: (dx, dy) => {
         if (dx || dy) resumePose();
+        if ((dx || dy) && hud.fadeDetachedName) hud.fadeDetachedName();
         if (birdsEye()) { moveOverheadPointer(dx, dy); return; }
         const cave = player();
         if (syncLyingView(cave)) {
@@ -1881,6 +1882,7 @@
         if (factor === 1) return;
         resumePose();
         if (gesture !== null && gesture === stoppedZoomGesture && performance.now() - stoppedZoomAt < ZOOM_HOLD * 1000) return;
+        if (hud.fadeDetachedName) hud.fadeDetachedName();
         const cave = player();
         if (birdsEye()) {
           // X may preserve a radius below the scroll boundary. Scrolling in
@@ -1986,12 +1988,14 @@
       if (!active || externalControl) return;
       syncAim();
       const a = controls.read();
+      // Arrival easing keeps its label; only manual camera input fades it.
+      if ((a.x || a.y || a.up || a.yaw || a.pitch || a.orbitYaw) && hud.fadeDetachedName) hud.fadeDetachedName();
       const cave = player();
       const lying = syncLyingView(cave);
       const shoulderCombat = !!cave && armed() && shoulderView && !closeWanted;
       if (shoulderCombat && a.shiftTap) shoulderSideTarget = -shoulderSideTarget;
-      peekTarget = shoulderCombat && a.sprint ? a.x : 0;
-      const planted = shoulderCombat && !!a.sprint;
+      peekTarget = shoulderCombat && a.peek && !a.sprint ? a.x : 0;
+      const planted = shoulderCombat && !!a.peek && !a.sprint;
       const moveX = planted ? 0 : a.x, moveY = planted ? 0 : a.y;
       if (restoredPose) {
         if (a.x || a.y || a.up || a.yaw || a.pitch || a.orbitYaw) resumePose();
@@ -2021,7 +2025,7 @@
         if (cave.jet) crew.thrust(a.up > 0);
         else if (cave.traits.footRockets) crew.holdRocketJump(a.up > 0);
         crew.steer(fx0 * moveY + rx * moveX, fz0 * moveY + rz * moveX, armed() ? 1 : close ? closeMix : 0, moveY, moveX,
-          armed() ? ads ? 0.65 : !shoulderCombat && a.sprint && moveY > 0.05 && !cave.weapon.reloading ? 1.35 : 1 : 1, peekTarget);
+          armed() && ads ? 0.65 : a.sprint ? WALK.run : 1, peekTarget);
       } else {
         if (orbit.target === freeTarget) {
           const stopStrafe = freeStrafe && (!a.x || freeStrafe * a.x < 0), stopForward = freeForward && (!a.y || freeForward * a.y < 0);

@@ -1575,6 +1575,50 @@
       }
       return true;
     };
+    const hullBox = new Float64Array(24), hullRamp = new Float64Array(18);
+    const hullClearAt = (vertices) => {
+      let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let i = 0; i < vertices.length; i += 3) {
+        minX = Math.min(minX, vertices[i]); maxX = Math.max(maxX, vertices[i]);
+        minY = Math.min(minY, vertices[i + 1]); maxY = Math.max(maxY, vertices[i + 1]);
+        minZ = Math.min(minZ, vertices[i + 2]); maxZ = Math.max(maxZ, vertices[i + 2]);
+      }
+      const gx0 = Math.max(0, Math.floor((minX - ORIGIN.x) / UNIT)), gx1 = Math.min(SX - 1, Math.floor((maxX - ORIGIN.x) / UNIT));
+      const gz0 = Math.max(0, Math.floor((minZ - ORIGIN.z) / UNIT)), gz1 = Math.min(SZ - 1, Math.floor((maxZ - ORIGIN.z) / UNIT));
+      const gy0 = Math.max(0, Math.floor((minY - ORIGIN.y) / UNIT)), gy1 = Math.min(SY - 1, Math.floor((maxY - ORIGIN.y) / UNIT));
+      for (let gx = gx0; gx <= gx1; gx++) for (let gz = gz0; gz <= gz1; gz++) {
+        const cell = gx * SZ + gz, base = gx * SY * SZ + gz;
+        for (let gy = gy0; gy <= gy1; gy++) if (data[base + gy * SZ]) {
+          for (let corner = 0; corner < 8; corner++) {
+            const at = corner * 3;
+            hullBox[at] = (gx + (corner & 1)) * UNIT + ORIGIN.x;
+            hullBox[at + 1] = (gy + ((corner >> 1) & 1)) * UNIT + ORIGIN.y;
+            hullBox[at + 2] = (gz + ((corner >> 2) & 1)) * UNIT + ORIGIN.z;
+          }
+          if (BL.convex.hullsOverlap(hullBox, vertices)) return false;
+        }
+        const pieces = windowColumns[cell];
+        if (pieces) for (const piece of pieces) if (minY < piece.maxY && maxY > piece.minY
+          && BL.convex.hullsOverlap(piece.vertices, vertices)) return false;
+        for (let layer = 0; layer < 2; layer++) {
+          const range = layer ? basementCollision[cell] : rampCollision[cell];
+          const floor = layer ? (((basementCavities[cell] >> 4) & 63) - 64) * UNIT : (((lowerCavities[cell] >> 4) & 63) - 32) * UNIT;
+          if (!range || maxY <= floor) continue;
+          for (let n = 0; n < (range & 3); n++) {
+            const face = geometry.faces[rampFaceOffset + (range >>> 2) + n], verts = geometry.verts;
+            if (Math.max(verts[face.i[0] * 3 + 1], verts[face.i[1] * 3 + 1], verts[face.i[2] * 3 + 1]) <= minY) continue;
+            for (let k = 0; k < 3; k++) {
+              const at = k * 3, v = face.i[k] * 3;
+              hullRamp[at] = hullRamp[at + 9] = verts[v];
+              hullRamp[at + 1] = verts[v + 1]; hullRamp[at + 10] = floor;
+              hullRamp[at + 2] = hullRamp[at + 11] = verts[v + 2];
+            }
+            if (BL.convex.hullsOverlap(hullRamp, vertices)) return false;
+          }
+        }
+      }
+      return true;
+    };
     const ceilingAt = (x, y, z, radius = 0) => {
       const gx0 = Math.max(0, Math.floor((x - radius - ORIGIN.x) / UNIT)), gx1 = Math.min(SX - 1, Math.floor((x + radius - ORIGIN.x) / UNIT));
       const gz0 = Math.max(0, Math.floor((z - radius - ORIGIN.z) / UNIT)), gz1 = Math.min(SZ - 1, Math.floor((z + radius - ORIGIN.z) / UNIT));
@@ -2291,6 +2335,7 @@
       supportAt,
       clearAt,
       voxelSegmentClearAt,
+      hullClearAt,
       ceilingAt,
       smoothSupportAt,
       cavityAt,

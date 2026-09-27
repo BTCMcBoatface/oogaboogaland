@@ -16,9 +16,10 @@ npm run watch   # the same, rebuilding on every change under src/
 ## The island
 
 - **Fly:** **W A S D**, **Q E** turn, **Z**/**Space** up, **X** down; drag to orbit, scroll to zoom. On a phone the left stick moves and the right stick looks.
-- **Play an Ooga:** double-tap one. **Space** jumps (twice for a double jump) and uses whatever is beside you; **Escape** lets go.
-- **Views:** **X** switches carry and combat. Combat has first-person, shoulder and birds-eye (scroll out from shoulder); in birds-eye the mouse points your Ooga, **Q E** rotate and **N** turns north up. **Right-click** returns to shoulder.
+- **Play an Ooga:** double-tap one. Hold **Left Shift** while moving to run. **Space** jumps (twice for a double jump) and uses whatever is beside you; **Escape** lets go.
+- **Views:** **X** switches carry and combat. Combat has first-person, shoulder and birds-eye (scroll out from shoulder); in birds-eye the mouse points your Ooga, **Q E** rotate and **N** turns north up. **Right-click** returns to shoulder. In shoulder view, **Right Shift + A/D** peeks; tap **Right Shift** to switch shoulders.
 - **Weapons:** **G** switches, **1** club, **2** rifle. **Left mouse** fires or swings (hold to charge), **F** strikes with the rifle in combat mode, **R** swaps magazines, **Space** at the pile reloads. Boxes, barrels and rocks break and drop pickups; the mirror cracks and heals.
+- **Reset:** **Right Shift + R** resets saved progress. **Left Shift + R** keeps running while swapping magazines.
 - **Jetpack:** **J** puts it on; hold **Space** to climb.
 
 Roster colours show activity across every OogaBoogaX repo: yellow worked in the last hour, orange in the last day, gray asleep. Working Oogas load bananas at the pile and shoot them into their project's cave, where their gorilla companions build. HQ's ramps lead down to a basement of beds.
@@ -35,7 +36,7 @@ Sani's hangout: a walk-in sphere whose six inner walls show live [Timechain Inde
 - **Ooga Drop:** jump from the plane, fly through eight hoops (**W S** pitch, **A D** roll, **Q E** turn), **Space** pulls the chute, land on the pile.
 - **Ooga Orbit:** build a rocket, launch, reach the Sky Top at 500 up, spacewalk to measure the space rock (**V**), then fall home shield first and chute onto the pad.
 - **Ooga Mine:** a mining tycoon about margin. Place gear, watch power, heat and the halving, put out fires, and mine 21 coin within the hour. **W A S D** walk, **Space** works, **V** looks round, **P** pauses; the run saves as you go.
-- **The Agent:** double-click it to play; **Shift** gallops, **Space** jumps, **C** beats its chest.
+- **The Agent:** double-click it to play; **Left Shift** gallops, **Space** jumps, and a second press while airborne adds a double jump. Each jump is 50% higher than an Ooga's. **C** beats its chest. **Right Shift + A** summons or releases it in scenes with an Agent.
 
 ## Weather
 
@@ -44,6 +45,10 @@ The mempool is the weather over the Mempool island: the fee-paying backlog sets 
 ## Debug
 
 Each game and cave has an address to share, with its own preview card: `/oogarally`, `/oogadrop`, `/oogaorbit`, `/oogamine`, `/mempool`, `/dsb`, `/entropylab`, `/lightning` and `/sphere`. They work on the site and under `npm run serve`, and as `oogaboogaland.html#/oogarally` when the file is opened from disk; routes live in `src/js/routes.js`, and `npm run cards` recaptures the cards. `?scene=lab`, `race`, `drop`, `orbit`, `mine` or `dsb` opens that scene; `?nosim=1` silences the simulator and every feed; `?canvas2d=1` forces the Canvas 2D fallback; `?debug=1` exposes `window.__ooga`. AGENTS.md lists every flag and fixture.
+
+In the hub, `?debug=1&character=gorilla-SaniExp` starts controlling SaniExp's gorilla. `clanker-SaniExp` is an equivalent selection, and both prefixes work with `solo=1`. A sleeping selected contributor is woken for this debug visit. Click the canvas to focus combat controls.
+
+While controlling a gorilla, **Space** jumps immediately; press it again in the air for the optional second jump. Holding does not charge or repeat. Walk toward a nearby climbable wall or edge to mount it. On the wall, **W/S** climb up/down and **A/D** move sideways; combine them for diagonal climbing. Automatic mounting and dismounting preserve the camera's position; look and zoom remain available, and camera following resumes smoothly when you move again.
 
 With `?debug=1&gorillamove=1`, use detached mode to click a gorilla, then click its destination on the ground, a ledge or a wall. The selected gorilla stays highlighted and plans walking and climbing from its current position. Wall routes can move sideways or diagonally while keeping the gorilla facing the stone. Click another destination to redirect it; **Escape** deselects it. A marker and status show its progress, and a blocked climb stays in place for inspection. The former `climbers=1` flag is an alias for this mode.
 

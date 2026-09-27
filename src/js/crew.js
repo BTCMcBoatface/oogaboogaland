@@ -4220,7 +4220,7 @@
         const heading = Math.atan2(steer.x, steer.z);
         if (!cave.weapon.aiming && Math.abs(steer.forward) > 0.05 && Math.abs(steer.strafe) <= 0.05) cave.root.rotation.y = heading;
         else if (!cave.weapon.aiming) cave.root.rotation.y += Math.atan2(Math.sin(heading - cave.root.rotation.y), Math.cos(heading - cave.root.rotation.y)) * Math.min(1, 12 * dt) * (1 - steer.view);
-        cave.act.phase += dt * 10 * (steer.view > 0 && steer.forward < -0.05 ? -1 : 1);
+        cave.act.phase += dt * 10 * steer.speed * (steer.view > 0 && steer.forward < -0.05 ? -1 : 1);
         const positionY = p.y;
         walkPose(cave, cave.act.phase);
         p.y = positionY;
@@ -5486,7 +5486,8 @@
       if (ctx.characterSupportAt) riding.support = ctx.characterSupportAt(cave);
       if (dt > 0 && cave.root.visible && (cave.state === "working" || cave.state === "chilling") && ctx.onBodyMove) ctx.onBodyMove(cave, x, y, z, dt);
       if (dt > 0) {
-        const s = cave.shoulder, continuous = Math.hypot(p.x - x, p.z - z) <= PLAYER_SPEED * dt + 1e-5;
+        const s = cave.shoulder, speed = PLAYER_SPEED * (cave === player ? steer.speed : 1);
+        const continuous = Math.hypot(p.x - x, p.z - z) <= speed * dt + 1e-5;
         s.motionX = continuous ? (p.x - x) / dt : 0; s.motionZ = continuous ? (p.z - z) / dt : 0;
       }
       updateCampEffects(cave, dt);
@@ -5495,7 +5496,7 @@
       if (wasInBananas && dt > 0 && cave.root.visible && (cave.state === "working" || cave.state === "chilling") && !inBananas(cave) && ctx.pile.spill) {
         const dx = p.x - x, dy = p.y - y, dz = p.z - z;
         // Respawns and scripted arrivals also move during update; only continuous movement carries fruit along.
-        if (Math.hypot(dx, dz) <= (JET_SPEED + WALK.ledgeSpeed) * dt + 1e-5 && Math.abs(dy) <= Math.abs(cave.hopV) * dt + STEP + 1e-5
+        if (Math.hypot(dx, dz) <= (Math.max(JET_SPEED, PLAYER_SPEED * (cave === player ? steer.speed : 1)) + WALK.ledgeSpeed) * dt + 1e-5 && Math.abs(dy) <= Math.abs(cave.hopV) * dt + STEP + 1e-5
           && Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 1e-7) {
           const feet = p.y - cave.baseY;
           // Upward exits shed fruit at the feet crossing the top; side exits scatter it along the whole body.
@@ -5510,7 +5511,7 @@
       if (cave.jetFuel > JET_LAUNCH_FUEL) cave.jetRecovering = false;
       // Check only this actor's own motion: a stack can add several legitimate walking velocities.
       // Keep the old fall speed when landing zeros hopV; respawns must never teleport passengers.
-      riding.continuous = dt > 0 && Math.hypot(p.x - ownX, p.z - ownZ) <= (Math.max(PLAYER_SPEED, JET_SPEED) + WALK.ledgeSpeed) * dt + 1e-5
+      riding.continuous = dt > 0 && Math.hypot(p.x - ownX, p.z - ownZ) <= (Math.max(PLAYER_SPEED * (cave === player ? steer.speed : 1), JET_SPEED) + WALK.ledgeSpeed) * dt + 1e-5
         && Math.abs(p.y - ownY) <= Math.max(Math.abs(riding.vy), Math.abs(cave.hopV)) * dt + STEP + WALK.gravity * dt * dt + 1e-5;
       riding.updated = true;
     };

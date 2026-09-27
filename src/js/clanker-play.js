@@ -3,15 +3,36 @@
   const BL = window.BL = window.BL || {};
   const { clamp, damp } = BL.math;
   const SHOULDER_DISTANCE = 3.8, POUND_CHARGE_TIME = 1;
-  const CONTROL_ENABLED = false;
-  const create = ({ canvas, camera, pilot, hud, clankers, input = null, constrainCamera = null }) => {
+  const create = ({ canvas, camera, pilot, hud, clankers, input = null, constrainCamera = null, controlEnabled = false }) => {
     const orbit = pilot.orbit, target = { x: 0, y: 0, z: 0 };
-    const command = { x: 0, z: 0, climbAxis: 0, heading: NaN, jumpHeld: false, jumpPressed: false, run: false };
+    const command = { x: 0, z: 0, climbAxis: 0, climbSide: 0, heading: NaN, jumpHeld: false, jumpPressed: false, run: false };
+    const followOffset = { x: 0, y: 0, z: 0 };
+    const previousEye = { x: 0, y: 0, z: 0 };
     const listeners = [];
     let player = null, view = "orbit", combat = false, disposed = false, jumpKey = false, jumpTap = false, run = false;
     let actPointer = -1, smashPointer = -1, smashCharge = 0, shownCharge = -1, mouseButtons = 0, blockedButtons = 0, shoulder = 0;
     let focused = false, lockPending = false, wasLocked = false, unlockedAt = -Infinity, focusVersion = 0;
-    let actMode = -1, actPower = -1, climbPress = false;
+    let actMode = -1, climbPress = false;
+    let handoffBefore = false, holdingFollow = false, pinnedFollow = false, viewChanged = false, moving = false;
+    const climbHandoff = () => {
+      const c = player.climb;
+      return c.active && !c.free && (c.handoffDirection || c.autoTo >= 0 || c.progress <= c.lowerGroundDistance + 0.001
+        || c.progress >= c.mantleStart - 0.001);
+    };
+    // Anchor transitions to the displayed view, including an already shortened
+    // collision boom. Automatic body motion must not re-orbit the camera.
+    const holdCamera = (preserveInput) => {
+      const a = camera.target, b = camera.position;
+      const yawDelta = preserveInput ? orbit.tYaw - orbit.yaw : 0;
+      const pitchDelta = preserveInput ? orbit.tPitch - orbit.pitch : 0;
+      const distanceDelta = preserveInput ? orbit.tDist - orbit.dist : 0;
+      const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+      orbit.yaw = Math.atan2(dx, dz); orbit.tYaw = orbit.yaw + yawDelta;
+      orbit.pitch = Math.atan2(dy, Math.hypot(dx, dz)); orbit.tPitch = orbit.pitch + pitchDelta;
+      orbit.dist = Math.max(0.01, Math.hypot(dx, dy, dz)); orbit.tDist = Math.max(0.01, orbit.dist + distanceDelta);
+      orbit.tx = a.x - Math.cos(orbit.yaw) * shoulder; orbit.ty = a.y;
+      orbit.tz = a.z + Math.sin(orbit.yaw) * shoulder;
+    };
     const on = (node, type, callback, options) => {
       node.addEventListener(type, callback, options);
       listeners.push(() => node.removeEventListener(type, callback, options));
@@ -51,6 +72,7 @@
       if (input) input.reset();
       pilot.controls.clearPointer();
       clankers.cancelInput();
+      moving = false;
     };
     const blurCombat = () => {
       focused = false; lockPending = false; focusVersion++;
@@ -90,26 +112,23 @@
     const showAct = () => {
       if (!player) return;
       if (hud.el.act.hidden) hud.el.act.hidden = false;
-      const climb = clankers.climbAction(player);
       const mode = player.climb.active ? 4 : player.fire.rolling ? 3 : player.fire.burning ? 2
-        : climb > 0 ? 5 : climb < 0 ? 6 : !climbPress && (jumpKey || actPointer >= 0 || jumpTap) ? 1 : 0;
-      const power = mode === 1 ? Math.round(player.motion.charge * 100) : -1;
-      if (mode === actMode && power === actPower) return;
-      actMode = mode; actPower = power;
-      hud.setAct(mode === 6 ? "CLIMB DOWN" : mode === 5 ? "CLIMB UP" : mode === 4 ? "W ↑ · S ↓" : mode === 3 ? "ROLLING!" : mode === 2 ? "DROP & ROLL" : mode === 1 ? `RELEASE ${power}%` : "HOLD TO JUMP");
+        : player.drive.airborne ? player.drive.jumps < 2 ? 1 : 5 : 0;
+      if (mode === actMode) return;
+      actMode = mode;
+      hud.setAct(mode === 5 ? "IN AIR" : mode === 4 ? "WASD · CLIMB" : mode === 3 ? "ROLLING!" : mode === 2 ? "DROP & ROLL" : mode === 1 ? "DOUBLE JUMP" : "JUMP");
     };
     const beginJump = () => {
       if (player.fire.burning) {
         jumpTap = false;
         clankers.cancelInput();
         clankers.dropRoll();
-      } else if (player.climb.active || clankers.startClimb(player)) {
-        // This whole press belongs to the climb, even if the mantle finishes
-        // before Space/the touch button is released. Never charge a jump then.
+      } else if (player.climb.active) {
+        // A press on the wall stays with that climb if the handoff finishes
+        // before Space/the touch button is released.
         jumpTap = false; climbPress = true;
       } else {
-        // Preserve a down/up pair that both arrive before the next simulation
-        // frame: it becomes one held frame followed by a release.
+        // Preserve even a down/up pair between simulation frames as one jump.
         jumpTap = true;
       }
       showAct();
@@ -119,14 +138,16 @@
       blurCombat();
       clankers.release();
       player = null; combat = false; wasLocked = false;
+      holdingFollow = handoffBefore = pinnedFollow = viewChanged = moving = false;
+      followOffset.x = followOffset.y = followOffset.z = 0;
       pilot.setExternalControl(false);
       rebasePilot();
       hud.setGorilla(null);
       hud.el.act.hidden = true;
       return true;
     };
-    const possess = (entry) => {
-      if (!CONTROL_ENABLED || disposed || !entry || !entry.active || !entry.root.visible) return false;
+    const possess = (entry, atBoot = false) => {
+      if (!controlEnabled || disposed || !entry || !entry.active || !entry.root.visible) return false;
       if (entry === player) return true;
       if (player) blurCombat();
       if (!clankers.possess(entry)) return false;
@@ -135,16 +156,24 @@
       player = entry;
       pilot.setExternalControl(true);
       combat = true; focused = wasLocked = false;
-      view = "shoulder"; shoulder = 0; actMode = actPower = -1;
+      view = "shoulder"; shoulder = 0; actMode = -1;
+      holdingFollow = handoffBefore = pinnedFollow = viewChanged = false;
+      followOffset.x = followOffset.y = followOffset.z = 0;
       cancelInput();
       const p = player.root.position;
       target.x = orbit.tx = p.x; target.y = orbit.ty = p.y + 1.25; target.z = orbit.tz = p.z;
       orbit.tPitch = clamp(orbit.pitch, -0.25, 1.15);
       orbit.tDist = SHOULDER_DISTANCE;
+      if (atBoot) {
+        orbit.yaw = orbit.tYaw; orbit.pitch = orbit.tPitch; orbit.dist = orbit.tDist;
+        shoulder = 0.75;
+      }
       hud.setGorilla(player, view, combat);
       hud.tooltip.hide();
       showAct();
-      focusCombat();
+      // A URL selection has no activating gesture. Its first canvas click
+      // focuses combat and requests pointer lock through the ordinary path.
+      if (!atBoot) focusCombat();
       return true;
     };
     const action = (name) => {
@@ -173,7 +202,7 @@
         if (focused || document.pointerLockElement === canvas || performance.now() - unlockedAt < 100) blurCombat();
         else if (key === "escape") release();
       }
-      else if (key === "shift") { run = true; consume(event); }
+      else if (key === "shift" && event.code !== "ShiftRight" && event.location !== 2) { run = true; consume(event); }
       else if (key === "1" || key === "2") {
         consume(event);
         if (!event.repeat) action(key === "1" ? "gorilla-smash" : "gorilla-drag");
@@ -187,7 +216,7 @@
       // Shared controls may have seen the press before possession. Let their
       // keyup listener clear it as well; releasing a key triggers no action.
       if (event.key === " ") { jumpKey = false; event.preventDefault(); }
-      else if (event.key === "Shift") { run = false; event.preventDefault(); }
+      else if (event.key === "Shift" && event.code !== "ShiftRight" && event.location !== 2) { run = false; event.preventDefault(); }
     };
     on(window, "keydown", onKeyDown, true);
     on(window, "keyup", onKeyUp, true);
@@ -215,12 +244,14 @@
     };
     const moveView = (dx, dy) => {
       if (!player) return false;
+      if (dx || dy) viewChanged = true;
       orbit.tYaw -= dx * 0.004;
       orbit.tPitch = clamp(orbit.tPitch + dy * 0.0035, -0.35, 1.3);
       return true;
     };
     const zoom = (factor) => {
       if (!player) return false;
+      if (factor !== 1) viewChanged = true;
       orbit.tDist = clamp(orbit.tDist * factor, 3.8, 32);
       const next = orbit.tDist <= 5 ? "shoulder" : "orbit";
       if (view !== next) { view = next; hud.setGorilla(player, view, combat); }
@@ -292,6 +323,7 @@
     on(document, "visibilitychange", () => { if (player && document.hidden) blurCombat(); });
     const readInput = (dt) => {
       if (!player) return;
+      handoffBefore = climbHandoff();
       if (smashPointer >= 0) {
         smashCharge = Math.min(1, smashCharge + dt / POUND_CHARGE_TIME);
         player.motion.poundCharge = smashCharge;
@@ -299,6 +331,8 @@
         if (charge !== shownCharge) { shownCharge = charge; hud.el.gorillaSmash.style.setProperty("--pound-charge", String(charge / 100)); }
       }
       const axes = pilot.controls.read();
+      if (axes.yaw || axes.pitch) viewChanged = true;
+      moving = Math.hypot(axes.x, axes.y) > 0.05;
       orbit.tYaw += axes.yaw * 1.7 * dt;
       orbit.tPitch = clamp(orbit.tPitch + axes.pitch * 1.1 * dt, -0.35, 1.3);
       const sy = Math.sin(orbit.yaw), cy = Math.cos(orbit.yaw);
@@ -306,9 +340,11 @@
       command.z = -axes.x * sy - axes.y * cy;
       command.heading = combat ? orbit.yaw + Math.PI : Math.hypot(command.x, command.z) > 0.01 ? Math.atan2(command.x, command.z) : NaN;
       command.climbAxis = axes.y;
+      command.climbSide = -axes.x;
       if (!jumpKey && actPointer < 0) climbPress = false;
       command.jumpHeld = !climbPress && (jumpKey || actPointer >= 0 || jumpTap);
       command.jumpPressed = !climbPress && jumpTap;
+      moving ||= command.jumpPressed;
       command.run = run;
       clankers.control(command);
       jumpTap = false;
@@ -317,15 +353,39 @@
       if (!player) return;
       if (clankers.player !== player || !player.active || !player.root.visible) { release(); return; }
       const p = player.root.position;
+      const hold = handoffBefore || climbHandoff();
+      if (hold && !holdingFollow) holdCamera(viewChanged);
+      holdingFollow = hold;
+      if (hold) pinnedFollow = true;
+      else if (moving) pinnedFollow = false;
+      const anchored = hold || pinnedFollow;
       target.x = p.x; target.y = p.y + (player.fire.rolling ? 0.7 : 1.25); target.z = p.z;
+      if (anchored) {
+        followOffset.x = orbit.tx - target.x; followOffset.y = orbit.ty - target.y; followOffset.z = orbit.tz - target.z;
+      } else if (moving) {
+        // Resume framing during deliberate travel, never by snapping back
+        // after the gorilla's automatic mount or dismount ends.
+        followOffset.x = damp(followOffset.x, 0, 4, dt);
+        followOffset.y = damp(followOffset.y, 0, 4, dt);
+        followOffset.z = damp(followOffset.z, 0, 4, dt);
+      }
+      const looking = viewChanged || Math.abs(orbit.tYaw - orbit.yaw) > 0.00001
+        || Math.abs(orbit.tPitch - orbit.pitch) > 0.00001 || Math.abs(orbit.tDist - orbit.dist) > 0.00001;
+      if (anchored && !looking) {
+        hud.setGorilla(player, view, combat); showAct();
+        return;
+      }
       orbit.yaw = damp(orbit.yaw, orbit.tYaw, 14, dt);
       orbit.pitch = damp(orbit.pitch, orbit.tPitch, 14, dt);
       orbit.dist = damp(orbit.dist, orbit.tDist, 9, dt);
-      orbit.tx = damp(orbit.tx, target.x, 10, dt);
-      orbit.ty = damp(orbit.ty, target.y, 10, dt);
-      orbit.tz = damp(orbit.tz, target.z, 10, dt);
-      shoulder = damp(shoulder, view === "shoulder" ? 0.75 : 0, 10, dt);
+      if (!anchored) {
+        orbit.tx = damp(orbit.tx, target.x + followOffset.x, 10, dt);
+        orbit.ty = damp(orbit.ty, target.y + followOffset.y, 10, dt);
+        orbit.tz = damp(orbit.tz, target.z + followOffset.z, 10, dt);
+        shoulder = damp(shoulder, view === "shoulder" ? 0.75 : 0, 10, dt);
+      }
       const sy = Math.sin(orbit.yaw), cy = Math.cos(orbit.yaw), cp = Math.cos(orbit.pitch);
+      previousEye.x = camera.position.x; previousEye.y = camera.position.y; previousEye.z = camera.position.z;
       camera.target.x = orbit.tx + cy * shoulder;
       camera.target.y = orbit.ty;
       camera.target.z = orbit.tz - sy * shoulder;
@@ -333,7 +393,14 @@
       camera.position.y = camera.target.y + Math.sin(orbit.pitch) * orbit.dist;
       camera.position.z = camera.target.z + cy * cp * orbit.dist;
       camera.up = null;
-      if (constrainCamera) constrainCamera(player, camera);
+      if (constrainCamera) constrainCamera(player, camera, anchored, previousEye);
+      if (anchored) {
+        // A user-driven look can hit stone during the handoff. Retain the
+        // resulting displayed boom instead of expanding it on the next frame.
+        holdCamera(true);
+        followOffset.x = orbit.tx - target.x; followOffset.y = orbit.ty - target.y; followOffset.z = orbit.tz - target.z;
+      }
+      viewChanged = false;
       hud.setGorilla(player, view, combat);
       showAct();
     };

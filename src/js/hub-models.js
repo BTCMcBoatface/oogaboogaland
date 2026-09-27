@@ -273,15 +273,23 @@
   // Variant 0 is the full frame, 1 the jambs and 2 the lintel alone.
   const caveMouthRim = variants((part) => {
     const rand = mulberry32(31);
-    const v = vox();
+    const v = vox(), climbBoxes = [];
+    const fill = (x0, x1, y0, y1, z0, z1, color) => {
+      v.fill(x0, x1, y0, y1, z0, z1, color);
+      climbBoxes.push(x0 * VOX, y0 * VOX, (z0 - 1) * VOX,
+        (x1 + 1) * VOX, (y1 + 1) * VOX, z1 * VOX);
+    };
     const stone = pick(rand, 0, 1, 0.3);
     const light = pick(rand, 2, 0, 0.5);
     if (part !== 2) {
-      v.fill(-6, -6, 0, 5, 0, 1, stone);
-      v.fill(5, 5, 0, 5, 0, 1, stone);
+      fill(-6, -6, 0, 5, 0, 1, stone);
+      fill(5, 5, 0, 5, 0, 1, stone);
     }
-    if (part !== 1) v.fill(-5, 4, 6, 6, 0, 1, light);
+    if (part !== 1) fill(-5, 4, 6, 6, 0, 1, light);
     const geo = voxGeo(v, { unit: VOX, palette: CLIFF, origin: { x: 0, y: 0, z: -VOX } });
+    // The grippable stone uses the same occupied slabs as the rendered voxels.
+    // Keeping this small table avoids triangle queries in every wall probe.
+    geo.climbBoxes = new Float32Array(climbBoxes);
     geo.jambCenterX = 2.75;
     geo.frontZ = 0.5;
     geo.openingBounds = { minX: -2.5, maxX: 2.5, floorY: 0, ceilingY: 3, minZ: -0.5, maxZ: 0.5 };
