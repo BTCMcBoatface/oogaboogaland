@@ -481,9 +481,9 @@
       route: null, routeIndex: 0, idleFor: 1 + Math.random() * 2, gaitFor: 0, beat: 0,
       pace: null, driven: false, walkStyle: "knuckle", inX: 0, inZ: 0, inRun: false,
       vy: 0, air: false, jumps: 0, revealFor: 0, pound: 0, chewing: 0, biped: false, lounge: "", hipHeight: HIP,
-      charge: 0, poundCharge: 0, dragging: false, takeoff: 0, landing: 0, crouch: 0, roll: 0, rollBlend: 0, rollAngle: 0, rollTarget: 0,
+      poundCharge: 0, dragging: false, takeoff: 0, landing: 0, crouch: 0, roll: 0, rollBlend: 0, rollAngle: 0, rollTarget: 0,
       smash: false, hipOffsetZ: 0, sideAngle: 0,
-      climb: 0, climbBlend: 0, climbPose: NaN, climbStride: 0, climbDirection: 0, climbSide: 0, mantle: 0,
+      climb: 0, climbBlend: 0, climbPose: NaN, climbStride: 0, climbDirection: 0, climbSide: 0,
       climbArmBaseL: 0, climbArmBaseR: 0, climbFitArms: 0,
       climbGripX: NaN, climbGripY: NaN, climbGripZ: NaN, climbGripRelease: 0,
       groom: 0, groomBlend: 0, groomSide: 1, groomTime: 0, sitLook: 0, sitShift: 0,
@@ -616,12 +616,12 @@
     };
     const feed = () => { state.chewing = CHEW_TIME; };
     const beat = () => {
-      if (!managed || state.pound > 0 || state.beat > 0 || state.speed > 0.1 || state.air || state.charge > 0 || state.crouch > 0.01 || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
+      if (!managed || state.pound > 0 || state.beat > 0 || state.speed > 0.1 || state.air || state.crouch > 0.01 || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
       state.beat = MANAGED_BEAT_TIME;
       return true;
     };
     const pound = () => {
-      if (!managed || state.pound > 0 || state.beat > 0 || state.air || state.charge > 0 || state.crouch > 0.01 || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
+      if (!managed || state.pound > 0 || state.beat > 0 || state.air || state.crouch > 0.01 || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
       state.pound = POUND_TIME;
       return true;
     };
@@ -674,14 +674,20 @@
       if (managed) {
         state.crouch = damp(state.crouch, state.air ? 0 : Math.min(1, state.landing * 2), state.air ? 24 : 20, dt);
         state.rollBlend = damp(state.rollBlend, state.roll, 9, dt);
-        state.rollAngle = damp(state.rollAngle, state.rollTarget * state.rollBlend, 18, dt);
+        // Follow the shortest angular step across full turns; multiplying by
+        // rollBlend here would spin the body backwards as the pose recovers.
+        const rollStep = Math.atan2(Math.sin(state.rollTarget - state.rollAngle), Math.cos(state.rollTarget - state.rollAngle));
+        state.rollAngle += rollStep * (1 - Math.exp(-18 * dt));
+        if (state.rollAngle > Math.PI) state.rollAngle -= Math.PI * 2;
+        else if (state.rollAngle < -Math.PI) state.rollAngle += Math.PI * 2;
         state.sideAngle = damp(state.sideAngle, onSide ? (lounge === "left" ? 1 : -1) * 1.32 : 0, 5, dt);
-        state.climbBlend = damp(state.climbBlend, Number.isFinite(state.climbPose) ? state.climbPose : state.climb * (1 - state.mantle), Number.isFinite(state.climbPose) ? 20 : 10, dt);
+        // Wall and ground rectangles select the pose directly, without a
+        // separate mount or over-the-edge animation.
+        state.climbBlend = Number.isFinite(state.climbPose) ? state.climbPose : state.climb;
         state.groomBlend = damp(state.groomBlend, state.groom, 8, dt);
         state.groomTime += dt;
       }
       const crouch = managed ? state.crouch : 0, rolling = managed ? state.rollBlend : 0, climbing = managed ? state.climbBlend : 0;
-      const cresting = managed && state.climb ? 4 * state.mantle * (1 - state.mantle) : 0;
       const grooming = lounge === "sit" ? state.groomBlend : 0, sitLook = lounge === "sit" ? state.sitLook : 0;
       const sitShift = lounge === "sit" ? state.sitShift : 0, climbPhase = managed ? state.climbStride / 1.2 : 0;
       // Seated rests have frequent, gentle glances and alternating hand lifts.
@@ -692,6 +698,7 @@
       const restCycle = ((restTime % restPeriod) + restPeriod) % restPeriod;
       const restMotion = lounge && restCycle > restPause ? Math.sin((restCycle - restPause) * Math.PI / 7) ** 2 * (1 - grooming) : 0;
       const jumping = managed && state.air, takeoff = managed ? state.takeoff : 0;
+      const groundPitch = state.groundPlane ? -Math.atan(state.groundZ) : 0;
       const laboratory = managed && state.lab && !state.labRunIn && !lounge && !jumping && rolling <= 0.001 && climbing <= 0.001 && state.pound <= 0 && !state.poundCharge;
       const labWork = laboratory ? state.labWork : "";
       const labSqueeze = laboratory && state.labSqueeze && !labWork && labFlask === labPlaceholder;
@@ -709,8 +716,8 @@
       }
       if (managed && state.pound > 0) {
         const t = 1 - state.pound / POUND_TIME;
-        // A controlled smash plants the feet, rears up with both fists overhead,
-        // then folds at the shoulders as the fists strike the floor. Workers keep
+        // A controlled smash rears up with both fists overhead, then folds at
+        // the shoulders as the fists strike the floor. Workers keep
         // their shorter equipment-pounding gesture.
         poundLift = state.smash ? t < 0.34 ? t / 0.34 : t < 0.46 ? 1 : t < 0.66 ? 1 - (t - 0.46) / 0.2 : 0
           : t < 0.28 ? t / 0.28 : t < 0.58 ? 1 - (t - 0.28) / 0.3 : 0;
@@ -721,12 +728,12 @@
       // Takeoff extends the limbs before the airborne tuck; landing compresses them.
       if (crouch > 0) { pitch += (1.12 - pitch) * crouch; bob *= 1 - crouch; }
       if (jumping) { pitch += (0.82 - pitch) * takeoff; bob = 0; }
-      if (rolling > 0) { pitch *= 1 - rolling; bob *= 1 - rolling; }
+      if (rolling > 0) { pitch += (Math.PI / 2 - pitch) * rolling; bob *= 1 - rolling; }
       if (climbing > 0) { pitch += (0.18 - pitch) * climbing; bob *= 1 - climbing; }
       state.pitch = managed && Number.isFinite(state.climbPose) ? pitch : damp(state.pitch, pitch, 6, dt);
       chest.rotation.x = state.pitch;
       if (managed) {
-        const tilt = -0.4 * climbing;
+        const tilt = -0.22 * climbing;
         torso.rotation.x = tilt;
         torso.position.y = SHOULDER_Y * (1 - Math.cos(tilt));
         torso.position.z = -SHOULDER_Y * Math.sin(tilt);
@@ -734,7 +741,8 @@
         // whole torso above them on straight arms. A one-hand lean also moves
         // its weight toward that hand; the other hand stays near the lap.
         chest.position.x = damp(chest.position.x, sitShift * 0.035, 5, dt);
-        chest.position.y = damp(chest.position.y, lounge === "sit" ? -0.324 + Math.abs(sitShift) * 0.018 : leaning ? -0.35 : -0.08 * cresting, cresting ? 16 : 6, dt);
+        chest.position.y = damp(chest.position.y, lounge === "sit" ? -0.324 + Math.abs(sitShift) * 0.018 : leaning ? -0.35 : 0, 6, dt);
+        chest.position.z = damp(chest.position.z, 0.13 * climbing, 16, dt);
         chest.rotation.z = damp(chest.rotation.z, leaning ? -leanSide * 0.08 : -sitShift * 0.065, 6, dt);
       }
       const o = OFFSETS[state.gait];
@@ -763,7 +771,10 @@
         let legAngle = lounge ? onSide ? -0.42 : reclining ? 0.1 : leaning ? leanSide ? -1.1 : -1.14 : -1.28 + l.side * sitShift * 0.1 : jumping ? 0.7 - takeoff * 0.85 : o ? -(squeeze ? 0.1 : labSqueeze ? 0.16 : g.legs) * moving * wave(state.phase, o[l.leg]) : 0;
         legAngle += (-1.2 - legAngle) * crouch;
         legAngle += (-0.6 - legAngle) * rolling;
-        legAngle += (-0.28 + 0.06 * climbStroke - legAngle) * climbing;
+        legAngle += (-0.16 + 0.06 * climbStroke - legAngle) * climbing;
+        // The pelvis follows the rectangle's front-to-back grade. Keep the
+        // rear feet beneath it while the front knuckles reach the higher pad.
+        legAngle -= groundPitch;
         limb(leg, legAngle, dt, managed && state.landing > 0 ? 32 : 18);
         if (rolling > 0.001) {
           limb(arm, -state.pitch - 0.7 * rolling, dt);
@@ -829,7 +840,7 @@
           const reach = l.side * 0.14 + state.climbSide * climbStroke * 0.1;
           arm.rotation.z = damp(arm.rotation.z, rest + (reach - rest) * climbing, 18, dt);
         } else {
-          let armAngle = -state.pitch - (jumping ? state.biped ? 0.2 : 0.7 - takeoff * 0.85 : o && !squeeze ? (labSqueeze ? 0.08 : labWalking ? 0.1 : g.arms) * moving * wave(state.phase, o[l.arm]) : 0);
+          let armAngle = -state.pitch - groundPitch - (jumping ? state.biped ? 0.2 : 0.7 - takeoff * 0.85 : o && !squeeze ? (labSqueeze ? 0.08 : labWalking ? 0.1 : g.arms) * moving * wave(state.phase, o[l.arm]) : 0);
           armAngle += (-state.pitch - 1 - armAngle) * crouch;
           limb(arm, armAngle, dt, managed && state.landing > 0 ? 32 : 18);
           arm.rotation.z = damp(arm.rotation.z, state.gait === "hunch" ? l.side * 0.12 : 0, 8, dt);
@@ -880,18 +891,16 @@
         parts.jaw.rotation.x = chew * 0.16;
       }
       if (managed) {
-        const hipHeight = (lounge ? reclining ? 0 : 0.12 : HIP - 0.17 * crouch + 0.08 * takeoff) * (1 - rolling);
+        const hipHeight = (lounge ? reclining ? 0 : 0.12 : HIP - 0.17 * crouch + 0.08 * takeoff) * (1 - rolling) + 0.4 * rolling;
         state.hipHeight = damp(state.hipHeight, hipHeight, crouch > 0 || jumping ? 14 : 6, dt);
-        const groundPitch = state.groundPlane ? -Math.atan(state.groundZ) : 0;
         const groundRoll = state.groundPlane ? Math.atan(state.groundX / Math.hypot(1, state.groundZ)) : 0;
-        hips.rotation.x = damp(hips.rotation.x, reclining ? -Math.PI / 2 : rolling ? -Math.PI / 2 * rolling : groundPitch, rolling > 0.0001 ? 9 : 6, dt);
+        hips.rotation.x = damp(hips.rotation.x, reclining ? -Math.PI / 2 : groundPitch, rolling > 0.0001 ? 9 : 6, dt);
         hips.rotation.z = damp(hips.rotation.z, groundRoll, 6, dt);
-        state.hipOffsetZ = damp(state.hipOffsetZ, reclining ? 0.5 : 0.45 * rolling - 0.12 * climbing
-          + 0.18 * cresting * state.climbDirection, cresting ? 18 : 6, dt);
+        state.hipOffsetZ = damp(state.hipOffsetZ, reclining ? 0.5 : 0, 6, dt);
         hips.position.z = state.hipOffsetZ;
         hips.position.y = state.hipHeight + bob;
-        // Roll around the body's long axis after lying back. Euler YXZ would
-        // roll the standing spine first, which sweeps the head through the floor.
+        // The chest points its long axis forward while rolling. Turn around
+        // that axis so the face points up without reversing head and feet.
         if (rolling > 0.0001 || Math.abs(state.rollAngle) > 0.0001 || Math.abs(state.sideAngle) > 0.0001) {
           const sx = Math.sin(hips.rotation.x * 0.5), cx = Math.cos(hips.rotation.x * 0.5);
           const angle = state.rollAngle + state.sideAngle, sz = Math.sin(angle * 0.5), cz = Math.cos(angle * 0.5);
@@ -1128,7 +1137,7 @@
       return out;
     };
     // Managed motion adds climb (0..1 wall grip), signed climbStride in metres,
-    // climbDirection/climbSide (vertical/lateral travel) and mantle (0..1 over the top edge).
+    // climbDirection/climbSide describe vertical/lateral travel on the wall.
     // Seated grooming uses groom (0..1), groomSide (-1 left/+1 right), and an
     // optional groomPhase in seconds. All transitions reuse the existing rig.
     const poseManaged = (dt, px, py, pz, facing, speed, airborne = false, biped = false, lounge = "", motion = null) => {
@@ -1148,8 +1157,9 @@
         const dx = px - coatClip.mouth.x, dz = pz - coatClip.mouth.z;
         const along = dx * coatClip.sr + dz * coatClip.cr - 0.5;
         const across = dx * coatClip.cr - dz * coatClip.sr;
-        coatSplit = Math.abs(along) < coatClip.reach && Math.abs(across) < 2.5 + MANAGED_MOTION_RADIUS
-          && py > coatClip.mouth.floorY - 1.5 && py < coatClip.mouth.floorY + coatClip.mouth.room.h + 1.5;
+        coatSplit = !(motion && (motion.climb > 0 || motion.openingSettle > 0))
+          && Math.abs(along) < coatClip.reach && Math.abs(across) < 2.5
+          && py > coatClip.mouth.floorY - 0.5 && py < coatClip.mouth.floorY + 1.5;
       }
       const labChanged = state.lab !== lab, coatChanged = state.coatSplit !== coatSplit;
       if (labChanged || coatChanged) {
@@ -1172,14 +1182,15 @@
       state.labDie = !!(motion && motion.labDie);
       state.labRoll = state.labDie && motion ? clamp(motion.labRoll || 0, 0, 1) : 0;
       state.biped = lab && !state.labRunIn || biped;
-      state.charge = motion ? clamp(motion.charge || 0, 0, 1) : 0;
       state.poundCharge = motion ? clamp(motion.poundCharge || 0, 0, 1) : 0;
       state.takeoff = motion ? clamp(motion.takeoff || 0, 0, 1) : 0;
       state.landing = motion ? clamp(motion.landing || 0, 0, 1) : 0;
       state.roll = motion ? clamp(motion.roll || 0, 0, 1) : 0;
       state.rollTarget = motion && Number.isFinite(motion.rollAngle) ? motion.rollAngle : 0;
-      state.climb = motion && !airborne && !state.roll ? clamp(motion.climb || 0, 0, 1) : 0;
-      state.climbPose = state.climb && motion && Number.isFinite(motion.climbBlend) ? clamp(motion.climbBlend, 0, 1) : NaN;
+      state.climb = motion && !airborne && !state.roll
+        ? clamp(Math.max(motion.climb || 0, motion.openingSettle || 0), 0, 1) : 0;
+      state.climbPose = motion && Number.isFinite(motion.climbBlend)
+        ? clamp(motion.climbBlend, 0, 1) : state.climb || NaN;
       state.climbStride = motion ? motion.climbStride || 0 : 0;
       state.climbDirection = motion ? clamp(motion.climbDirection || 0, -1, 1) : 0;
       state.climbSide = motion ? clamp(motion.climbSide || 0, -1, 1) : 0;
@@ -1195,7 +1206,6 @@
         state.climbDirection = motion.climbGripDirection;
         state.climbSide = motion.climbGripSide;
       }
-      state.mantle = motion ? clamp(motion.mantle || 0, 0, 1) : 0;
       state.groom = motion && lounge === "sit" && state.speed <= 0.1 && !airborne && !state.roll && !state.climb ? clamp(motion.groom || 0, 0, 1) : 0;
       state.sitLook = motion && lounge === "sit" ? clamp(motion.sitLook || 0, -1, 1) : 0;
       state.sitShift = motion && lounge === "sit" ? clamp(motion.sitShift || 0, -1, 1) : 0;
@@ -1209,15 +1219,15 @@
         else state.groomSide = groomSide;
       }
       if (motion && Number.isFinite(motion.groomPhase)) state.groomTime = motion.groomPhase;
-      state.smash = !!(motion && motion.smash && !airborne && !state.roll && !state.charge);
+      state.smash = !!(motion && motion.smash && !airborne && !state.roll);
       state.dragging = !!(motion && motion.dragging && !airborne && !state.roll);
       state.lounge = !airborne && state.speed <= 0.1 && (lounge === "sit" || lounge === "back" || lounge === "left" || lounge === "right"
         || lounge === "lean-left" || lounge === "lean-right" || lounge === "lean-back") ? lounge : "";
-      if (state.roll > 0 || state.charge > 0 || airborne || state.climb > 0) state.lounge = "";
-      if (state.lounge || state.roll > 0 || state.charge > 0 || airborne || state.climb > 0) state.pound = state.beat = state.chewing = 0;
+      if (state.roll > 0 || airborne || state.climb > 0) state.lounge = "";
+      if (state.lounge || state.roll > 0 || airborne || state.climb > 0) state.pound = state.beat = state.chewing = 0;
       if (state.speed > 0.1 || airborne) state.beat = 0;
       state.groundPlane = !!(groundPlaneAt && !airborne && !lab && !lounge && !state.climb && !state.roll
-        && !state.beat && !state.pound && groundPlaneAt(px, py, pz, facing, state));
+        && !state.beat && !state.pound && groundPlaneAt(px, py, pz, facing, state, motion));
       state.gait = state.beat > 0 ? "beat" : state.biped ? "upright" : state.speed > 1.7 ? "gallop" : state.speed > 0.01 ? "knuckle" : "idle";
       pose(Math.max(0, dt));
       if (state.climbFitArms) {
@@ -1230,7 +1240,7 @@
       measureBody();
       // Support changes immediately for collision, while the visible rig
       // eases onto and off low props without changing its running pose.
-      if (!state.groundPlane && motion && Number.isFinite(motion.supportOffset)) hips.position.y += motion.supportOffset / scale;
+      if (motion && Number.isFinite(motion.supportOffset)) hips.position.y += motion.supportOffset / scale;
     };
     const pointToWorld = (matrix, x, y, z, out) => {
       const px = (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) * scale;
@@ -1299,11 +1309,18 @@
           if (clear) { safe = angle; found = true; }
           else if (!found) break;
           else unsafe = angle;
+          // Keep the first higher palm grip instead of lowering both arms to
+          // the last clear angle. The ordinary search remains the fallback.
+          if (clear && blend > 0.9 && !(state.climbGripRelease & 1 << side)
+            && (attempt === 0 || attempt === 4 || attempt === 7)
+            && climbArmContact(arm, side, preparing, dx, dy, dz) === 1) break;
           if (clear && (angle === -1.9 || state.climbGripRelease & 1 << side) || unsafe > safe && unsafe - safe < 0.0125) break;
         }
         const pitch = base + (safe - base) * blend;
         arm.rotation.x = pitch;
-        let yaw = blend > 0.98 ? previousYaw : 0;
+        // Keep the wall grip's shoulder turn while the hand follows the
+        // rectangle onto the floor, then release it continuously.
+        let yaw = previousYaw * clamp((blend - 0.7) / 0.3, 0, 1);
         if (blend > 0.98 && !(state.climbGripRelease & 1 << side)) {
           arm.rotation.y = 0;
           if (climbArmContact(arm, side, preparing, dx, dy, dz) === 1) yaw = 0;
@@ -1489,14 +1506,15 @@
         if (q) for (let j = 0; j < 4; j++) previewTransforms[at + 6 + j] = q[j];
       }
       const lab = !!(motion && motion.lab);
-      const sceneHull = !!(clearAt && clearAt.needsHull && motion && motion.climb);
+      const flexibleClimb = !!(motion && motion.climb && !lab);
+      const sceneHull = !!(clearAt && clearAt.needsHull && motion && motion.climb && !flexibleClimb);
       const hulls = !!hullAt || sceneHull;
       const passArms = lab && !motion.labWork && labFlask === labPlaceholder;
       if (fromLounge !== null) poseManaged(2, px, py, pz, facing, 0, false, false, fromLounge, motion);
       if (fromWalk && fromWalk.planning) poseManaged(2, fromWalk.x, fromWalk.y, fromWalk.z, fromWalk.heading, speed, false, false, "", motion);
       if (hulls) previewHulls(previewHullFrom, !sceneHull);
       let fromVisible = 0;
-      if (clearAt && (!staticPose || fromLounge !== null)) {
+      if (!flexibleClimb && clearAt && (!staticPose || fromLounge !== null)) {
         for (let i = 0; i < envelopeParts.length; i++) if (envelopeParts[i].visible) fromVisible |= 1 << i;
         previewBounds(previewFrom, lab);
       }
@@ -1519,10 +1537,16 @@
         }
         const sine = Math.sin(facing), cosine = Math.cos(facing);
         poseManaged(step, px, py, pz, facing, speed, false, false, lounge, motion);
-        previewBounds(previewTo, lab);
+        if (!flexibleClimb) previewBounds(previewTo, lab);
         if (hulls) previewHulls(previewHullTo, !sceneHull);
         if (sequenceStep > 0 && clearAt && clearAt.beginPose) clearAt.beginPose(entry);
-        for (let i = 0; i < envelopeParts.length && clear; i++) {
+        // Wall travel is admitted by its centre sweep, the projected ground
+        // rectangle and an actual hand grip. Limb and head voxels may overlap
+        // jagged stone without rejecting an otherwise clear climb.
+        if (flexibleClimb && (solidAt(px, py + 1.1, pz)
+          || clearAt && !clearAt(entry, px, py + 0.85, pz, px, py + 0.85, pz,
+            0.42, 0.5, true, false))) clear = false;
+        for (let i = 0; i < envelopeParts.length && clear && !flexibleClimb; i++) {
           if (!envelopeParts[i].visible || passArms && (i === 3 || i === 4)) continue;
           const vertices = previewVertices[i], offset = i * 16, m = previewMatrices;
           const from = (fromVisible & (1 << i)) ? previewFrom : previewTo;
@@ -1563,7 +1587,7 @@
         }
         if (clear && remaining > 1e-8) {
           if (hulls) previewHullFrom.set(previewHullTo);
-          if (clearAt) {
+          if (clearAt && !flexibleClimb) {
             previewFrom.set(previewTo); fromVisible = 0;
             for (let i = 0; i < envelopeParts.length; i++) if (envelopeParts[i].visible) fromVisible |= 1 << i;
           }

@@ -347,6 +347,7 @@
     const geo = merge(...parts);
     geo.frontZ = frontZ;
     geo.sealBounds = { minX: -2.5, maxX: 2.5, minY: 0, maxY: 3, minZ: backZ, maxZ: stoneFront };
+    geo.climbBoxes = new Float32Array([-2.5, 0, backZ, 2.5, 3, stoneFront]);
     return geo;
   });
   const matrixLeverPlate = cached(() => merge(

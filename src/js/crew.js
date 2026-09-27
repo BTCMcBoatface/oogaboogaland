@@ -554,7 +554,7 @@
         sleepParts: { armLX: cave.parts.armL.position.x, armRX: cave.parts.armR.position.x, headX: cave.parts.head.position.x, headY: cave.parts.head.position.y, headZ: cave.parts.head.position.z, equipment: cave.root.children.filter((node) => !BODY_PARTS.some((key) => cave.parts[key] === node)) },
         phase: i * 1.37,
         baseY: cave.root.position.y,
-        camp: { seat: null, burning: false, rolling: false, burnAge: 0, reactionDelay: 0, ignitions: 0, contactBurning: false, contactBounds: new Float64Array(6), panic: { active: false, threat: null, remembered: false, memory: new Float64Array(contributors.roster.length * 4), speed: 0, heading: 0, turnAt: 0, phase: 0, escapeX: 0, escapeZ: 0, resumeSleep: false, resumeWalk: null, rand: math.mulberry32(math.fnv1a(contributor.name + "/panic")) }, rollTime: 0, soot: 0, fadeTime: 0, puff: 0, smokeTime: 0, cooldown: 0, spread: new Float32Array(BODY_PARTS.length), burnTime: new Float32Array(BODY_PARTS.length), scorch: new Float32Array(BODY_PARTS.length), rollScorch: new Float32Array(BODY_PARTS.length), x: 0, z: 0, floor: 0, heading: 0, rotation: math.quat.create(), base: math.quat.create(), turn: math.quat.create() },
+        camp: { seat: null, burning: false, rolling: false, burnAge: 0, reactionDelay: 0, ignitions: 0, contactBurning: false, contactBounds: new Float64Array(6), panic: { active: false, threat: null, remembered: false, memory: new Float64Array(contributors.roster.length * 4), gorillaMemory: new Float64Array(contributors.roster.length * 4), speed: 0, heading: 0, turnAt: 0, phase: 0, escapeX: 0, escapeZ: 0, resumeSleep: false, resumeWalk: null, rand: math.mulberry32(math.fnv1a(contributor.name + "/panic")) }, rollTime: 0, soot: 0, fadeTime: 0, puff: 0, smokeTime: 0, cooldown: 0, spread: new Float32Array(BODY_PARTS.length), burnTime: new Float32Array(BODY_PARTS.length), scorch: new Float32Array(BODY_PARTS.length), rollScorch: new Float32Array(BODY_PARTS.length), x: 0, z: 0, floor: 0, heading: 0, rotation: math.quat.create(), base: math.quat.create(), turn: math.quat.create() },
         bodyHeight: bodyHeightOf(cave),
         bodyRadius: bodyRadiusOf(cave),
         shoulder: { phase: 0, other: null, rear: false, prop: false, side: 1, dodge: 1, amount: 0, yaw: 0, targetYaw: 0, attempted: false, originX: 0, originZ: 0, forwardX: 0, forwardZ: 1, heading: 0, snapX: 0, snapZ: 0, motionX: 0, motionZ: 0, snapVX: 0, snapVZ: 0, propOffset: 0, obstacle: { node: null, minAlong: 0, maxAlong: 0, minAcross: 0, maxAcross: 0, minContactAcross: 0, maxContactAcross: 0 } },
@@ -2687,13 +2687,14 @@
       return true;
     };
     const updateFireThreats = () => {
+      const gorillas = ctx.fireThreats ? ctx.fireThreats() : null;
       for (let caveIndex = 0; caveIndex < crewList.length; caveIndex++) {
         const cave = crewList[caveIndex];
-        const panic = cave.camp.panic, memory = panic.memory, p = cave.root.position;
+        const panic = cave.camp.panic, memory = panic.memory, gorillaMemory = panic.gorillaMemory, p = cave.root.position;
         panic.threat = null;
         panic.remembered = false;
         panic.escapeX = panic.escapeZ = 0;
-        if (cave === player || !cave.root.visible || cave.state === "away") { memory.fill(0); continue; }
+        if (cave === player || !cave.root.visible || cave.state === "away") { memory.fill(0); gorillaMemory.fill(0); continue; }
         if (cave.camp.rolling) continue;
         const reach = panic.active ? FIRE_FLEE_CLEAR : FIRE_FLEE_REACH, feet = p.y - cave.baseY;
         let nearest = Infinity;
@@ -2716,6 +2717,26 @@
           panic.remembered = true;
           const dx = p.x - memory[at], dz = p.z - memory[at + 1], rememberedDistance = Math.hypot(dx, dz);
           if (rememberedDistance >= FIRE_FLEE_CLEAR || Math.abs(feet - memory[at + 2]) > floorReach) continue;
+          if (rememberedDistance < nearest) { nearest = rememberedDistance; panic.threat = other; }
+          const weight = (FIRE_FLEE_CLEAR - rememberedDistance) / Math.max(0.04, rememberedDistance * rememberedDistance);
+          panic.escapeX += dx * weight; panic.escapeZ += dz * weight;
+        }
+        if (gorillas) for (let otherIndex = 0; otherIndex < gorillas.length; otherIndex++) {
+          const other = gorillas[otherIndex], at = otherIndex * 4;
+          if (!other.active || !other.root.visible || !other.fire.burning) { gorillaMemory[at + 3] = 0; continue; }
+          const q = other.root.position, floor = q.y;
+          const floorReach = Math.max(0.8, Math.min(cave.bodyHeight, other.height) * 0.65);
+          if (Math.abs(feet - floor) > floorReach) { gorillaMemory[at + 3] = 0; continue; }
+          const distance = Math.hypot(p.x - q.x, p.z - q.z);
+          const y = Math.max(feet, floor) + Math.min(cave.bodyHeight, other.height) * 0.35;
+          if (distance < reach && (!ctx.fireReachable || ctx.fireReachable(p.x, y, p.z, q.x, y, q.z))) {
+            gorillaMemory[at] = q.x; gorillaMemory[at + 1] = q.z; gorillaMemory[at + 2] = floor; gorillaMemory[at + 3] = 1;
+          } else if (gorillaMemory[at + 3] && distance >= Math.max(FIRE_FLEE_CLEAR + FIRE_MEMORY_RELEASE,
+            Math.hypot(p.x - gorillaMemory[at], p.z - gorillaMemory[at + 1]) + FIRE_MEMORY_RELEASE)) gorillaMemory[at + 3] = 0;
+          if (!gorillaMemory[at + 3]) continue;
+          panic.remembered = true;
+          const dx = p.x - gorillaMemory[at], dz = p.z - gorillaMemory[at + 1], rememberedDistance = Math.hypot(dx, dz);
+          if (rememberedDistance >= FIRE_FLEE_CLEAR || Math.abs(feet - gorillaMemory[at + 2]) > floorReach) continue;
           if (rememberedDistance < nearest) { nearest = rememberedDistance; panic.threat = other; }
           const weight = (FIRE_FLEE_CLEAR - rememberedDistance) / Math.max(0.04, rememberedDistance * rememberedDistance);
           panic.escapeX += dx * weight; panic.escapeZ += dz * weight;
@@ -4825,6 +4846,7 @@
       cave.camp.panic.threat = cave.camp.panic.resumeWalk = null;
       cave.camp.panic.remembered = false;
       cave.camp.panic.memory.fill(0);
+      cave.camp.panic.gorillaMemory.fill(0);
       cave.camp.panic.resumeSleep = false;
       releaseBuild(cave);
       cave.avoidance.navigation.mode = 0; cave.avoidance.tx = NaN;

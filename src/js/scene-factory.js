@@ -124,10 +124,9 @@
   // out. One set, built once for the page.
   const dressing = models.cached(() => {
     const set = BL.dressing.set(), L = LAYOUT;
-    const [c0, c1, c2, c3, c4] = FM.FORGE_STORES;
+    const [c0, c1, c2, c3] = FM.FORGE_STORES;
     set.put("coalCrate", c0[0], 0, c0[1], 1, 1); set.put("coalCrate", c1[0], 0, c1[1], 0, 2);
     set.put("crate", c2[0], 0, c2[1], 0, 0); set.put("crate", c2[0], 0.75, c2[1], 1, 1); set.put("barrel", c3[0], 0, c3[1], 0, 1);
-    set.put("sack", c4[0], 0, c4[1], 1, 0);
     set.put("gauge", L.switchboard.x + 3.1, L.switchboard.y, L.switchboard.z - 0.4, 0, 0);
     const my = L.entrance.y, mz = FM.EXIT_Z;
     set.put("vine", -3.0, my + 3.5, mz + 1.06, 0, 0);

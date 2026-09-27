@@ -1,6 +1,6 @@
 // The one set-dressing kit every scene draws from. `KIT` pieces are voxel functions on a 1/16 grid, each
 // writing through `box` and `put` into the three layers: general (`lanternPost`, `crate`, `coalCrate`,
-// `barrel`, `cart`, `rails`, `banner`, `gauge`, `rubble`, `sack`, `bracket`, `hanging`, `bulb`), garage
+// `barrel`, `cart`, `rails`, `banner`, `gauge`, `rubble`, `bracket`, `hanging`, `bulb`), garage
 // (`toolWall`, `workbench`, `tireRack`, `oilDrum`, `checkerMat`), lab (`die`, `flaskBench`, `terminal`,
 // `chalkboard`), rally (`tireStack`, `flag`, `cone`, `barrier`, `fuelPump`, `startLights`, the `pennant`
 // string), mine (`pickRack`, `dynamiteCrate`, `oreHeap`), the mirror (`monolith`, `runeStone`), lightning
@@ -416,13 +416,6 @@
         box(SOLID, x0, x0 + w, y0, y0 + h, z0, z0 + d, (x, y) => y === y0 + h && rand() < 0.55 ? (rand() < 0.5 ? 23 : 24) : rand() < 0.25 ? 21 : rand() < 0.2 ? 22 : 20);
       }
     }),
-    sack: (v) => author((put) => {
-      for (let x = -5; x <= 4; x++) for (let y = 0; y <= 10; y++) for (let z = -4; z <= 3; z++) {
-        const e = ((x + 0.5) / 5) ** 2 + ((y - 4.5) / 5.8) ** 2 + ((z + 0.5) / 4) ** 2;
-        if (e <= 1 && e > 0.55) put(SOLID, x, y, z, (x + y + v) % 5 === 0 ? 26 : 25);
-      }
-      for (let y = 10; y <= 12; y++) put(SOLID, -1, y, -1, y === 10 ? 7 : 26);
-    }),
     // A plain pole the cables start from on walls; it carries a small lantern of its own.
     bracket: () => author((put, box) => {
       box(HANG, -1, 0, 0, 1, -1, 6, 2);
@@ -471,6 +464,37 @@
     dynamiteCrate: { build: () => BL.hubModels.woodCrate(1), scale: [CRATE_SCALE, OPEN_SCALE, CRATE_SCALE], keep: filled },
     barrel: { build: () => BL.hubModels.barrel(), scale: [0.8, 1.04, 0.8], keep: null }
   };
+  const stepBounds = new Map();
+  const boundsForStep = (kind, variant) => {
+    const key = `${kind}:${variant}`;
+    if (stepBounds.has(key)) return stepBounds.get(key);
+    const piece = pieceOf(kind, variant), mesh = MESHES[kind];
+    const box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    const solid = piece[SOLID];
+    for (let i = 0; i < solid.length; i += 4) {
+      const x = solid[i], y = solid[i + 1], z = solid[i + 2];
+      if (mesh && (!mesh.keep || !mesh.keep(SOLID, x, y, z))) continue;
+      box[0] = Math.min(box[0], x * U); box[1] = Math.min(box[1], y * U); box[2] = Math.min(box[2], z * U);
+      box[3] = Math.max(box[3], (x + 1) * U); box[4] = Math.max(box[4], (y + 1) * U); box[5] = Math.max(box[5], (z + 1) * U);
+    }
+    if (mesh) {
+      let geometry = mesh.variants ? mesh.variants.get(variant) : mesh.geometry;
+      if (!geometry) {
+        geometry = mesh.build(variant);
+        if (mesh.variants) mesh.variants.set(variant, geometry);
+        else mesh.geometry = geometry;
+      }
+      const [sx, sy, sz] = mesh.scale;
+      for (let i = 0; i < geometry.verts.length; i += 3) {
+        const x = geometry.verts[i] * sx, y = geometry.verts[i + 1] * sy, z = geometry.verts[i + 2] * sz;
+        box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], y); box[2] = Math.min(box[2], z);
+        box[3] = Math.max(box[3], x); box[4] = Math.max(box[4], y); box[5] = Math.max(box[5], z);
+      }
+    }
+    const result = Number.isFinite(box[0]) && box[4] - box[1] <= 1.16 && box[1] >= -0.01 ? box : null;
+    stepBounds.set(key, result);
+    return result;
+  };
   // A mesh piece's geometry scaled, turned by quarter turns q and moved to (ox, oy, oz) in kit cells.
   const meshAt = (kind, ox, oy, oz, q, variant) => {
     const m = MESHES[kind];
@@ -497,6 +521,7 @@
     const layers = [new Map(), new Map(), new Map(), new Map(), new Map()], lights = [];
     // What was placed, for poking: kind, variant, then the pick sphere's centre x, y, z and radius in metres.
     const picks = [];
+    const steps = [];
     // Each light is x, y, z and its colour's index in LIGHT_RGB.
     const light = (kind, ox, oy, oz, q, variant) => {
       const p = LIGHTS[kind];
@@ -514,6 +539,15 @@
     const put = (kind, x, y, z, turns = 0, variant = 0) => {
       const piece = pieceOf(kind, variant), mesh = MESHES[kind];
       const ox = Math.round(x / U), oy = Math.round(y / U), oz = Math.round(z / U), q = ((turns % 4) + 4) % 4;
+      const step = boundsForStep(kind, variant);
+      if (step) {
+        const x0 = q & 1 ? step[2] : step[0], x1 = q & 1 ? step[5] : step[3];
+        const z0 = q & 1 ? step[0] : step[2], z1 = q & 1 ? step[3] : step[5];
+        steps.push([(ox * U) + (q === 2 || q === 3 ? -x1 : x0), (oy * U) + step[1],
+          (oz * U) + (q === 1 || q === 2 ? -z1 : z0),
+          (ox * U) + (q === 2 || q === 3 ? -x0 : x1), (oy * U) + step[4],
+          (oz * U) + (q === 1 || q === 2 ? -z0 : z1)]);
+      }
       if (mesh) meshes.push(kind, ox, oy, oz, q, variant);
       for (let layer = 0; layer < 3; layer++) {
         const list = piece[layer];
@@ -586,9 +620,25 @@
         solid = merge(...parts);
         meshes.length = 0;
       }
+      if (solid && steps.length) {
+        solid.gorillaSteps = steps.slice();
+        for (const face of solid.faces) {
+          const vertices = solid.verts;
+          for (const step of steps) {
+            let within = true;
+            for (const index of face.i) {
+              const at = index * 3;
+              if (vertices[at] < step[0] - 1e-6 || vertices[at] > step[3] + 1e-6
+                || vertices[at + 1] < step[1] - 1e-6 || vertices[at + 1] > step[4] + 1e-6
+                || vertices[at + 2] < step[2] - 1e-6 || vertices[at + 2] > step[5] + 1e-6) { within = false; break; }
+            }
+            if (within) { face.gorillaStep = true; break; }
+          }
+        }
+      }
       const out = { solid, hang: bake(HANG), glow: bake(GLOW), swing: bake(3), swingGlow: bake(4), lights: Float32Array.from(lights), picks: picks.splice(0) };
       for (const layer of layers) layer.clear();
-      lights.length = 0;
+      lights.length = steps.length = 0;
       return out;
     };
     const set = { put, cable, build };

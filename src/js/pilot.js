@@ -208,7 +208,7 @@
       zoomTilt = false;
       zoomPitchVelocity = 0;
     };
-    let lockPending = false, aimLocked = false, softAimFocused = false, externalControl = false, unlockedAt = -Infinity, cursorUnlockedAt = -Infinity;
+    let lockPending = false, aimLocked = false, softAimFocused = false, externalControl = false, externalCombat = null, unlockedAt = -Infinity, cursorUnlockedAt = -Infinity;
     let savedPitch = 0, savedDist = 0, savedNear = camera.near, sightClear = null, cursorClear = null, aimSurface = null;
     const weaponViewReady = (cave) => active && !!cave && !cave.health.stunned && !crew.sleeping && (closeWanted || !cave.camp.seat && !cave.bedTravel.mode);
     const shoulderBoomPitch = (pitch) => Math.max(pitch, Math.min(0, pitch + 0.22));
@@ -315,8 +315,9 @@
     };
     // Another playable actor shares the canvas and controls, but owns its own
     // aim events and pointer lock until it hands the pilot control back.
-    const setExternalControl = (active) => {
+    const setExternalControl = (active, combat = null) => {
       externalControl = !!active;
+      externalCombat = active ? combat : null;
       aimLocked = false;
       unlockedAt = cursorUnlockedAt = -Infinity;
       if (!externalControl) return;
@@ -1827,7 +1828,7 @@
       return cave ? crew.playerAction() : !!ctx.onFreeAction && ctx.onFreeAction();
     };
     // Held it climbs, clicked it acts; both mouse buttons on the canvas walk
-    const controls = createControls({ move: document.getElementById("joy-move"), look: document.getElementById("joy-look"), boost: hud.el.act, chord: canvas, onAction: action, pressActions: true, shooter: armed, canDescend: () => !player() });
+    const controls = createControls({ move: document.getElementById("joy-move"), look: document.getElementById("joy-look"), boost: hud.el.act, chord: canvas, onAction: action, pressActions: true, shooter: () => externalCombat ? externalCombat() : armed(), canDescend: () => !player() });
     // A wheel gesture that crosses a mode boundary is held there so its momentum cannot carry on into the next
     // mode; the hold lasts ZOOM_HOLD seconds. A mouse or trackpad that keeps scrolling extends one gesture for as
     // long as it scrolls, so an unbounded hold left the view stuck in shoulder or first person.

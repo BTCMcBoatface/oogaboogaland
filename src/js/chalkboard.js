@@ -5,13 +5,13 @@
   const KEY = "ooga-chalkboard-v2", OLD_KEY = "ooga-chalkboard-v1", MAX_STROKES = 550, MAX_POINTS = 10000;
   const W = 800, H = 500, BOARD_W = 1.5, BOARD_H = 0.875, BOARD_FACE_Z = -1 / 16 + 0.002;
   const GRID_W = 160, GRID_H = 100, WASH_MS = 650, DRAW_MS = 700, WASH_BANDS = 6, WORLD_UPDATE_MS = 100;
-  const TEXT_FONT = "31px 'Bradley Hand', 'Marker Felt', cursive", TEXT_SIZE = 32, TEXT_LINE = 45, TEXT_MARGIN = 32;
+  const TEXT_FONT = "38.75px 'Bradley Hand', 'Marker Felt', cursive", TEXT_SIZE = 40, TEXT_LINE = 56.25, TEXT_MARGIN = 32;
   const clamp = (v) => Math.max(0, Math.min(1, v));
   const initial = () => {
     const marks = [];
     for (const [row, text] of ["01101010110", "11111101101"].entries()) {
       for (let i = 0; i < text.length; i++) {
-        const x = 0.5 + (i - (text.length - 1) / 2) * 0.075, y = 0.39 + row * 0.22, size = 1.4;
+        const x = 0.5 + (i - (text.length - 1) / 2) * 0.075, y = 0.39 + row * 0.22, size = 1.75;
         const wobble = Math.sin(i * 8.1 + row * 3.2) * 0.003 * size;
         if (text[i] === "0") marks.push({ t: "c", p: [x - 0.011 * size, y - 0.041 * size, x + wobble, y - 0.047 * size,
           x + 0.014 * size, y - 0.027 * size, x + 0.016 * size, y + 0.021 * size, x + 0.008 * size, y + 0.046 * size,

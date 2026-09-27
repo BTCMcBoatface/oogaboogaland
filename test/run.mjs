@@ -5114,7 +5114,7 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
       S.addChild(root, node); solids.add(node); S.updateWorld(root); solids.sync(); setup(7, 0);
       let maxY = e.root.position.y, airborne = 0, stopped = 0, previousX = e.root.position.x, maxVisibleStep = 0;
       const hips = e.gorilla.root.children[0]; let previousVisibleY = e.root.position.y + hips.position.y;
-      advance({ x: 1, z: 0, heading: Math.PI / 2, run: true, jumpHeld: false }, 2.2, () => {
+      advance({ x: 1, z: 0, heading: Math.PI / 2, run: true, jumpHeld: false }, 4, () => {
         const visibleY = e.root.position.y + hips.position.y;
         maxY = Math.max(maxY, e.root.position.y); maxVisibleStep = Math.max(maxVisibleStep, Math.abs(visibleY - previousVisibleY)); previousVisibleY = visibleY;
         if (e.drive.airborne || e.jump.active) airborne++;
@@ -5151,8 +5151,13 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
     for (const run of [false, true]) {
       // Reuse the clear corridor exercised above after removing its temporary prop.
       setup(7, 0);
+      const startX = e.root.position.x;
+      advance({ x: 1, z: 0, heading: Math.PI / 2, run, jumpHeld: false }, 1 / 60);
+      const startSpeed = (e.root.position.x - startX) * 60, switchX = e.root.position.x;
+      advance({ x: 1, z: 0, heading: Math.PI / 2, run: !run, jumpHeld: false }, 1 / 60);
+      const switchSpeed = (e.root.position.x - switchX) * 60;
       advance({ x: 1, z: 0, heading: Math.PI / 2, run, jumpHeld: false }, 0.35);
-      const floor = e.root.position.y, takeoffX = e.root.position.x, beforeJumps = e.jumps;
+      const floor = e.root.position.y, takeoffX = e.root.position.x, beforeJumps = e.jumps, gait = e.gorilla.debug.gait;
       let stopped = 0, lastX = e.root.position.x, firstAir = false, peak = 0;
       for (let frame = 0; frame < 39; frame++) {
         C.control({ x: 1, z: 0, heading: Math.PI / 2, run, jumpHeld: true, jumpPressed: frame === 0 }); B.advance(1 / 60, 1 / 60);
@@ -5182,13 +5187,13 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
       C.control({ x: 0, z: 0, jumpHeld: true, jumpPressed: true }); B.advance(1 / 60, 1 / 60);
       const nextJump = e.drive.airborne && e.drive.jumps === 1;
       advance({ x: 0, z: 0, jumpHeld: false }, 2);
-      jumps.push({ run, firstAir, heldTravel, stopped, vx, peak, heldJumps, heldLanded, releaseJumps,
+      jumps.push({ run, gait, startSpeed, switchSpeed, firstAir, heldTravel, stopped, vx, peak, heldJumps, heldLanded, releaseJumps,
         secondCount, secondVelocity, thirdCount, thirdVelocity, secondLift, landed, nextJump });
     }
     const tree = B.props.find(prop => prop.prop === "tree"); tree.node.visible = true; S.updateWorld(root); solids.sync();
     const q = tree.node.position; setup(q.x - 2.8, q.z, Math.PI / 2);
     let lowFrames = 0, bipedFrames = 0, movingFrames = 0, previous = e.root.position.x;
-    advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.2, () => {
+    advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.5, () => {
       if (e.lowCover) lowFrames++; if (e.biped) bipedFrames++;
       if (Math.abs(e.root.position.x - previous) > 1e-5) movingFrames++;
       previous = e.root.position.x;
@@ -5198,11 +5203,92 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
   const props = state.traversals.every(row => row.x > 16 && row.maxY >= 0.75 && row.maxY <= 1.05 && !row.airborne && !row.stopped && row.maxVisibleStep < 0.25);
   const raisedProp = state.raisedProp.rockY > 0.8 && state.raisedProp.assignedExit && state.raisedProp.y < 0.05
     && Math.abs(state.raisedProp.x - 12) > 1.5 && !state.raisedProp.airborne && state.raisedProp.stuck < 0.65;
-  const jump = state.jumps.every(row => row.firstAir && row.heldTravel > 3 && !row.stopped && row.vx > 5
-    && row.heldJumps === 1 && row.heldLanded && row.releaseJumps === 1 && row.secondCount === 2 && row.thirdCount === 2
-    && row.thirdVelocity < row.secondVelocity && row.secondLift > row.peak * 0.98 && row.secondLift < row.peak * 1.02 && row.landed && row.nextJump);
+  const jump = state.jumps.every(row => {
+    const speed = row.run ? 2.7 : 0.9, travel = speed * 39 / 60;
+    return row.gait === (row.run ? "gallop" : "knuckle") && row.firstAir && !row.stopped
+      && Math.abs(row.startSpeed - speed) < 1e-5 && Math.abs(row.switchSpeed - (row.run ? 0.9 : 2.7)) < 1e-5
+      && Math.abs(row.heldTravel - travel) < travel * 0.01 && Math.abs(row.vx - speed) < speed * 0.01
+      && row.heldJumps === 1 && row.heldLanded && row.releaseJumps === 1 && row.secondCount === 2 && row.thirdCount === 2
+      && row.thirdVelocity < row.secondVelocity && row.secondLift > row.peak * 0.98 && row.secondLift < row.peak * 1.02 && row.landed && row.nextJump;
+  });
   const canopy = state.canopy.lowFrames > 0 && !state.canopy.bipedFrames && state.canopy.movingFrames > 10 && state.canopy.endX < state.canopy.startX - 1;
   record("gorilla traversal: crates, barrels and rocks keep a continuous grounded gallop, an autonomous gorilla leaves a destroyed raised prop, fresh presses jump immediately and once more in air without held repeats or cancellation exploits, and low cover permits an all-fours retreat", props && raisedProp && jump && canopy, JSON.stringify(state));
+} }, { name: "gorilla camera modes", why: "regression: controlled gorillas lacked first-person and birds-eye cameras, carry/combat camera controls, and a combat crosshair", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, P = B.clankerPlay, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl");
+    const canvas = document.getElementById("scene"), reticle = document.getElementById("weapon-reticle"), button = document.getElementById("mode-hud");
+    P.release(); C.release(); C.cancelDebugMove(e);
+    for (const prop of B.props) prop.node.visible = false;
+    Object.assign(e.root.position, { x: 7, y: B.island.surfaceAt(7, 0), z: 0 });
+    Object.assign(e, { active: true, controlled: false, recover: 0, lounge: "", parked: false, biped: false,
+      heading: Math.PI / 2, speed: 0, lowCover: false, pound: 0, beat: 0, stand: 0 });
+    Object.assign(e.drive, { airborne: false, passiveFall: false, grounded: true, resume: false, vx: 0, vy: 0, vz: 0, motionRecover: 0, motionEnvelope: false });
+    e.climb.active = e.jump.active = e.fire.burning = e.fire.rolling = false; e.root.visible = true;
+    e.gorilla.poseManaged(2, 7, e.root.position.y, 0, e.heading, 0, false, false, "", e.motion);
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+    const originalHeadHidden = !!e.gorilla.parts.head.cameraHidden, near = B.camera.near;
+    reticle.dataset.sight = reticle.dataset.close = reticle.dataset.occluded = "true";
+    reticle.dataset.hit = "object"; reticle.style.left = "31px"; reticle.style.top = "47px"; reticle.style.setProperty("--reticle-hit", "1");
+    const possessed = P.possess(e, true), rows = [];
+    canvas.focus();
+    const key = (type, value, code = "Key" + value.toUpperCase(), location = 0) => window.dispatchEvent(new KeyboardEvent(type,
+      { key: value, code, location, bubbles: true, cancelable: true }));
+    const tap = (value, code, location) => { key("keydown", value, code, location); key("keyup", value, code, location); };
+    const wheel = deltaY => canvas.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
+    const sample = name => {
+      B.advance(1, 1 / 60);
+      const camera = B.camera, p = e.root.position, orbit = B.pilot.orbit;
+      const row = { name, view: P.view, combat: P.combat, hidden: reticle.hidden,
+        visible: getComputedStyle(reticle).visibility, stroke: getComputedStyle(reticle.querySelector("svg")).stroke,
+        headHidden: !!e.gorilla.parts.head.cameraHidden, mix: camera.orthoMix, cutaway: B.renderOpts.birdsEyeCutaway,
+        hudView: button.dataset.view, hudCombat: button.dataset.combat,
+        side: (camera.target.x - p.x) * Math.cos(orbit.yaw) - (camera.target.z - p.z) * Math.sin(orbit.yaw),
+        yaw: orbit.yaw, finite: [camera.position.x, camera.position.y, camera.position.z,
+          camera.target.x, camera.target.y, camera.target.z].every(Number.isFinite) };
+      rows.push(row); return row;
+    };
+    try {
+      const shoulder = sample("combat shoulder");
+      const reset = reticle.dataset.sight === "false" && reticle.dataset.close === "false" && reticle.dataset.occluded === "false"
+        && reticle.dataset.hit === "none" && !reticle.style.left && !reticle.style.top && !reticle.style.getPropertyValue("--reticle-hit");
+      tap("Shift", "ShiftRight", 2); const swapped = sample("other shoulder");
+      tap("x"); sample("carry shoulder");
+      wheel(-120); sample("carry first-person");
+      tap("x"); sample("combat first-person");
+      wheel(120); sample("combat shoulder again");
+      // A fresh wheel gesture may cross the next stop; one gesture cannot skip both close views.
+      P.zoom(2, "overhead"); const overhead = sample("combat birds-eye");
+      key("keydown", "q"); B.advance(0.3, 1 / 60); key("keyup", "q");
+      const turned = sample("rotated birds-eye");
+      tap("n"); const north = sample("north birds-eye");
+      tap("x"); sample("carry orbit");
+      tap("x"); sample("combat birds-eye again");
+      P.zoom(0.01, "inward"); sample("combat shoulder from overhead");
+      P.zoom(0.5, "first-person"); sample("first-person before release");
+      const eye = { ...B.camera.position }, target = { ...B.camera.target };
+      P.release();
+      const released = { active: P.active, controlled: e.controlled, headHidden: !!e.gorilla.parts.head.cameraHidden,
+        hidden: reticle.hidden, target: reticle.dataset.target, hit: reticle.dataset.hit,
+        positionCleared: !reticle.style.left && !reticle.style.top, near: B.camera.near,
+        eyeDelta: Math.hypot(B.camera.position.x - eye.x, B.camera.position.y - eye.y, B.camera.position.z - eye.z),
+        targetDelta: Math.hypot(B.camera.target.x - target.x, B.camera.target.y - target.y, B.camera.target.z - target.z) };
+      return { possessed, reset, rows, swap: shoulder.side * swapped.side < 0,
+        turn: Math.abs(turned.yaw - overhead.yaw), north: Math.atan2(Math.sin(north.yaw), Math.cos(north.yaw)), originalHeadHidden, near, released };
+    } finally { key("keyup", "q"); key("keyup", "Shift", "ShiftRight", 2); P.release(); }
+  })()`);
+  const views = ["shoulder", "shoulder", "shoulder", "first-person", "first-person", "shoulder", "birds-eye", "birds-eye", "birds-eye", "orbit", "birds-eye", "shoulder", "first-person"];
+  const modes = [true, true, false, false, true, true, true, true, true, false, true, true, true];
+  const cameras = state.rows.length === views.length && state.rows.every((row, i) => row.finite && row.view === views[i] && row.combat === modes[i]
+    && row.hudView === row.view && row.hudCombat === String(row.combat) && row.hidden === !row.combat
+    && (!row.combat || row.visible === "visible" && row.stroke === "rgb(255, 255, 255)")
+    && row.headHidden === (row.view === "first-person") && row.mix === (row.view === "birds-eye" ? 1 : 0)
+    && row.cutaway === (row.view === "birds-eye"));
+  const released = state.released;
+  record("gorilla camera: carry and combat share first-person, shoulder and distant views; Right Shift swaps shoulder, Q rotates birds-eye and N faces north; combat has a white-ring crosshair and release restores the head without moving the camera",
+    state.possessed && state.reset && cameras && state.swap && state.turn > 0.2 && Math.abs(state.north) < 0.001
+    && !released.active && !released.controlled && released.headHidden === state.originalHeadHidden && released.hidden
+    && released.target === "none" && released.hit === "none" && released.positionCleared && released.near === state.near
+    && released.eyeDelta < 1e-6 && released.targetDelta < 1e-6, JSON.stringify(state));
 } }, { name: "gorilla wall destination", why: "regression: commanding a roof gorilla to a lower point farther along the cave face stalled at the crest instead of reaching the clicked wall", run: async (b) => {
   const state = await b.evaluate(`(() => {
     const B = __ooga, S = BL.scene, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), root = BL.scenes.hub.root;
