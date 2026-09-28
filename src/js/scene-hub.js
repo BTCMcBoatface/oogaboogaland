@@ -3643,7 +3643,9 @@
   const updateBirdsEyeCutaway = (dt) => {
     clearCutawayHidden();
     const gorilla = clankerPlay && clankerPlay.active, player = gorilla ? clankerPlay.player : pilot.player;
-    const cameraMix = gorilla ? clankerPlay.birdsEyeMix : player && pilot.birdsEye ? pilot.birdsEyeMix : 0;
+    const cameraMix = player ? gorilla ? clankerPlay.birdsEyeMix : pilot.birdsEyeMix : 0;
+    const overhead = player && (gorilla ? clankerPlay.birdsEye : pilot.birdsEye);
+    const subterranean = player && player.root.position.y - (gorilla ? 0 : player.baseY) < -STEP_MAX;
     const showRampMarkers = cameraMix > 0.5;
     for (const lintel of headquartersRimLintels) lintel.visible = !showRampMarkers;
     for (const marker of headquarters.rampMarkers) {
@@ -3657,11 +3659,17 @@
       const z = up.x * downhill.x + up.y * downhill.y + up.z * downhill.z;
       marker.node.rotation.y = Math.atan2(-x, -z);
     }
-    const mix = cameraMix, active = mix > 0;
-    // Scan through the full camera blend in both directions, including reversals.
-    const rockMix = mix;
+    const mix = cameraMix;
+    // A perspective handoff can finish its projection blend before the eye
+    // clears the ceiling. Keep the cut until the actual camera is inside again.
+    const active = !!player && (overhead || mix > 0
+      || subterranean && camera.position.y > birdsEyeCeiling(player, gorilla));
+    // Below ground, camera interpolation must never restore upstairs rock or
+    // props. Floor/ramp progress still moves the cut as the character travels.
+    const rockMix = active && subterranean ? 1 : mix;
     RENDER_OPTS.birdsEyeCutaway = active;
-    RENDER_OPTS.cutawayFade = RENDER_OPTS.cutawayCloudMix = mix;
+    RENDER_OPTS.cutawayFade = rockMix;
+    RENDER_OPTS.cutawayCloudMix = mix;
     RENDER_OPTS.cutawayRockMix = rockMix;
     RENDER_OPTS.cutawayRegionCount = 0;
     if (!active) {
@@ -3673,7 +3681,7 @@
       return;
     }
     const hq = island.headquarters;
-    if (cameraMix > 0) {
+    if (active) {
       const p = player.root.position, fresh = player !== cutawayPlayer || !Number.isFinite(cutawayProgress);
       // Hop is relative to the next supporting floor, including the abyss
       // sentinel. Only world-space feet describe the level actually on screen.
@@ -3704,7 +3712,7 @@
     // Scan between floor ceilings across the ramp's travel so upper levels
     // peel away progressively instead of switching in a narrow midpoint band.
     // Head clearance remains authoritative during a jump, jet flight or fall.
-    if (cameraMix > 0) {
+    if (active) {
       let target = cutawayLevel <= 1 ? lerp(CUTAWAY_TOP, hq.ceiling - 0.06, cutawayLevel)
         : lerp(hq.ceiling - 0.06, hq.basement.ceiling - 0.06, cutawayLevel - 1);
       if (feet < hq.basement.floor - STEP_MAX) target = Math.min(target, birdsEyeCeiling(player, gorilla));
@@ -5494,11 +5502,13 @@
     } else if (name === "lab" || name === "mirror" || name === "factory") {
       const id = name === "lab" ? "c11" : name === "factory" ? "c2" : "c1", m = island.mouths.find((mouth) => mouth.id === id);
       yaw = m.ry;
-      const approach = close ? 6 : 4;
+      // Leave enough distance to frame the sign above the mouth, including
+      // arrivals viewed from the controlled character's first-person eye.
+      const approach = close ? 10 : 8;
       x = m.x + Math.sin(yaw) * approach; z = m.z + Math.cos(yaw) * approach;
       setVec(target, m.x, m.floorY + (close ? 2.5 : 2.1), m.z);
       pitch = player ? 0.06 : 0.16;
-      dist = player ? 8 : 9;
+      dist = player ? 8 : 12;
     } else if (name === "timechain" && timechainIsland) {
       const site = timechainIsland.place;
       yaw = site.ry;
@@ -8187,20 +8197,29 @@
     for (const cave of crew.list) cave.clankerRide = { entry: null, node: null, x: 0, y: 0, z: 0, nextJumpAt: 0,
       carrierX: 0, carrierY: 0, carrierZ: 0, heading: 0, localX: 0, localY: 0, localZ: 0 };
     headquarters.solids.companions = clankerMeshes;
-    const loungeRoofs = [], climbRoofs = [];
+    const loungeRoofs = [], climbRoofs = [], chillZones = [];
     for (const mouth of island.mouths) {
+      const slot = caves.slots.find(slot => slot.id === mouth.id);
+      const site = shared.workSites.find(site => site.mouth === mouth), room = site?.room || mouth.room;
+      const sr = Math.sin(mouth.ry), cr = Math.cos(mouth.ry);
+      // Reserve cave interiors at every lower level, leaving the roof above
+      // the room ceiling available. Working and controlled gorillas bypass it.
+      chillZones.push({ x: mouth.x, z: mouth.z, sr, cr, half: room.w / 2 + 0.6,
+        from: -room.to - 0.6, to: 0.5, top: mouth.floorY + room.h - 0.1 });
+      if (slot.status !== "dark") chillZones.push({ x: mouth.x, z: mouth.z, sr, cr,
+        half: 3.5, from: -0.5, to: 6.5, top: mouth.floorY + 2.6 });
       const x = mouth.x - Math.sin(mouth.ry) * 4.8, z = mouth.z - Math.cos(mouth.ry) * 4.8;
       const y = island.surfaceAt(x, z);
       if (!Number.isFinite(y)) continue;
       const roof = { x, y, z, angle: mouth.ry };
       climbRoofs.push(roof);
-      if (caves.slots.find(slot => slot.id === mouth.id)?.status === "dark") loungeRoofs.push(roof);
+      if (slot.status === "dark") loungeRoofs.push(roof);
     }
     const labSiteIndex = shared.workSites.findIndex(site => site.mouth === entropyLab.mouth);
     const debugLabShuttle = DEBUG && !contributors.solo && !contributors.debugState && labSiteIndex >= 0
       ? crew.list.find(cave => cave.state === "working" && cave.work.site === labSiteIndex) || crew.list[0] : null;
     if (debugLabShuttle) debugLabShuttle.override = "working";
-    clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, climbRoofs,
+    clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, climbRoofs, chillZones,
       debugMovement: DEBUG_GORILLA_MOVE, debugMinY: ABYSS_RESPAWN_Y,
       labSite: labSiteIndex,
       labInside: entropyLab.phase.inside, labStations: entropyLab.stations,

@@ -1,13 +1,13 @@
 // The roster, built from the character registry, with bounded repository activity from oogatron snapshots
 // (schemas 1-3; a schema-3 snapshot's `repos[].contributors` fans last-seen onto per-repository keys so
-// work routes pick the matching cave). It gives each contributor a working (<1h), chilling (<24h) or
+// work routes pick the matching cave). It gives each contributor a working (<2h), chilling (<24h) or
 // sleeping state, the active solo roster, and hashed traits with each character's `look` laid over them.
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  // Clanking (working) within the hour, chillin until a day has passed,
+  // Clanking (working) within two hours, chillin until a day has passed,
   // asleep after that. The 60s hub interval re-samples these thresholds.
-  const MINUTE = 60 * 1e3, HOUR = 60 * MINUTE, WORK_WINDOW = 1 * HOUR, CHILL_WINDOW = 24 * HOUR;
+  const MINUTE = 60 * 1e3, HOUR = 60 * MINUTE, WORK_WINDOW = 2 * HOUR, CHILL_WINDOW = 24 * HOUR;
   const ENTROPY = "oogaboogax/entropylab", MAX_REPOS = 64;
   const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
   // Historical EntropyLab activity; a backend can refresh it with applyActivity.

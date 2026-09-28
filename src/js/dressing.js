@@ -906,10 +906,13 @@
       for (const geometry of boatGeometry[i % 3]) BL.scene.addChild(node, BL.scene.createNode({ geometry, sightHidden: true }));
       const seated = (i & 1) === 0;
       const passenger = BL.models.caveman(BL.contributors.traitsFor(`boat-ooga-${i % 2}`));
-      const figure = passenger.root, size = 0.78, deck = 3 * U;
-      figure.scale.x = figure.scale.y = figure.scale.z = size;
+      const figure = passenger.root, size = 1 / s, deck = 3 * U;
+      // Horizon rafts are enlarged scenery; their passengers retain the
+      // same world scale and proportions as the Oogas on the island.
+      figure.scale.x = figure.scale.z = size;
+      figure.scale.y = size / 0.85;
       figure.position.x = seated ? -0.3 : 0.3;
-      figure.position.y = deck + size * passenger.traits.height * 5 / 16 * (seated ? 0.4 : 1);
+      figure.position.y = deck + figure.scale.y * passenger.traits.height * 5 / 16 * (seated ? 0.4 : 1);
       figure.position.z = -0.65;
       figure.rotation.y = seated ? -0.12 : 0.12;
       passenger.parts.club.visible = false;

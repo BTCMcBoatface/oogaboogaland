@@ -2654,6 +2654,43 @@
       previousAnchor.x = motionAnchor.x; previousAnchor.y = motionAnchor.y; previousAnchor.z = motionAnchor.z;
       eyeMotionValid = true;
     };
+    // A connected doorway changes the world frame, not the control mode or
+    // camera blend. Keep its cached anchors and orientations in that frame too.
+    const portalPoints = [camera.position, camera.target, freeTarget, followTarget, entryPosition, previousEye,
+      previousAnchor, motionAnchor, overheadAim, aimEntryBody, aimEntry, aimPoint, cursorItem, cursorPoint, targetOrigin, buttonTarget];
+    const portalVectors = [headOrbitOffset, overheadEntry, eyeVelocity, dollyVelocity, anchorVelocity, sleepCameraUp, cursorUp];
+    const portalRotations = [orbitRotation, headRotation, cameraRotation, releaseRotation, overheadRotation,
+      overheadStartRotation, overheadViewRotation, carryStartRotation, aimEntryRotation, aimLookRotation, aimPanRotation];
+    const portalRotation = quat.create();
+    const transformView = (m, yaw) => {
+      for (const p of portalPoints) {
+        const x = p.x, y = p.y, z = p.z;
+        p.x = m[0] * x + m[4] * y + m[8] * z + m[12];
+        p.y = m[1] * x + m[5] * y + m[9] * z + m[13];
+        p.z = m[2] * x + m[6] * y + m[10] * z + m[14];
+      }
+      for (const v of portalVectors) {
+        const x = v.x, z = v.z;
+        v.x = m[0] * x + m[8] * z; v.z = m[2] * x + m[10] * z;
+      }
+      if (camera.up && camera.up !== sleepCameraUp && camera.up !== cursorUp) {
+        const x = camera.up.x, z = camera.up.z;
+        camera.up.x = m[0] * x + m[8] * z; camera.up.z = m[2] * x + m[10] * z;
+      }
+      const x = orbit.tx, z = orbit.tz, ex = exitBodyX, ez = exitBodyZ, gx = groundX, gz = groundZ;
+      orbit.tx = m[0] * x + m[8] * z + m[12]; orbit.ty += m[13]; orbit.tz = m[2] * x + m[10] * z + m[14];
+      exitBodyX = m[0] * ex + m[8] * ez + m[12]; exitBodyY += m[13]; exitBodyZ = m[2] * ex + m[10] * ez + m[14];
+      groundX = m[0] * gx + m[8] * gz + m[12]; groundZ = m[2] * gx + m[10] * gz + m[14];
+      groundView += m[13]; groundTarget += m[13]; groundValid = false;
+      orbit.yaw += yaw; orbit.tYaw += yaw; freeMoveYaw += yaw; lyingYaw += yaw;
+      overheadYaw += yaw; overheadTargetYaw += yaw; overheadEntryYaw += yaw; aimEntryYaw += yaw; aimBodyYaw += yaw;
+      aimWeaponYaw += yaw; overheadWeaponYaw += yaw;
+      quat.fromEuler(portalRotation, 0, yaw, 0);
+      for (const q of portalRotations) quat.multiply(q, portalRotation, q);
+      restoredPose = null;
+      clearFeedback();
+      assistedTargetActive = false; assistedTargetWait = 0;
+    };
     // The scene supplies a safe arrival and resets its collision history first.
     // navigate changes location only, never the visitor's mode or chosen Ooga.
     const navigate = (destination) => {
@@ -2907,7 +2944,7 @@
       get birdsEye() { return birdsEye(); }, get birdsEyeMix() { return camera.orthoMix || 0; }, get birdsEyeHeight() { return overheadHeight; }, get birdsEyeNorthUp() { return overheadNorthUp; },
       get birdsEyeCeiling() { return overheadCeiling; },
       get shoulderEntryMix() { return aimMix; },
-      bind, setActive, readInput, update, goPreset, navigate, enterClose, possess, release, action, modeAction, weaponAction, weaponMode, showAct, dispose, get player() {
+      bind, setActive, readInput, update, goPreset, navigate, transformView, enterClose, possess, release, action, modeAction, weaponAction, weaponMode, showAct, dispose, get player() {
       return player();
     }, get assistedTarget() {
       if (birdsEye() && assistedTargetActive) return assistedTargetHit;

@@ -143,6 +143,28 @@
       }
       return -1;
     };
+    const chillZones = ctx.chillZones || [];
+    const autonomousChill = (e) => e.mode === "chilling" && e.phase === "chill" && !e.controlled && !e.debugMove.active;
+    const chillCaveClear = (x, y, z, nx = x, ny = y, nz = z, escaping = false) => {
+      for (let i = 0; i < chillZones.length; i++) {
+        const zone = chillZones[i];
+        if (Math.min(y, ny) >= zone.top) continue;
+        const dx = x - zone.x, dz = z - zone.z;
+        const across = dx * zone.cr - dz * zone.sr, along = dx * zone.sr + dz * zone.cr;
+        const ax = (nx - x) * zone.cr - (nz - z) * zone.sr;
+        const az = (nx - x) * zone.sr + (nz - z) * zone.cr;
+        if (escaping) {
+          // A former worker or released player can already be inside a reserved
+          // approach. Allow planted turns and steps toward its nearest boundary.
+          const depth = Math.min(zone.half - Math.abs(across), along - zone.from, zone.to - along, zone.top - y);
+          const next = Math.min(zone.half - Math.abs(across + ax), along + az - zone.from, zone.to - along - az, zone.top - ny);
+          if (depth > 0 && (next < depth - 1e-9 || x === nx && y === ny && z === nz)) continue;
+        }
+        if (!BL.terrain.segmentBoxClear(across, y, along, ax, ny - y, az, 0, 0,
+          -zone.half, -Infinity, zone.from, zone.half, zone.top, zone.to)) return false;
+      }
+      return true;
+    };
     const peerShape = (x, y, z, bx, by, bz) => {
       return torso || footprint;
     };
@@ -176,6 +198,7 @@
       return true;
     };
     const grass = (x, y, z, foot = FOOT) => Number.isFinite(y) && Math.hypot(x, z) < roamRadius
+      && chillCaveClear(x, y, z)
       && (!ctx.restSurfaceClear || ctx.restSurfaceClear(x, y, z, foot))
       && (!ctx.onLand || ctx.onLand(x, z)) && (!ctx.isGrass || ctx.isGrass(x, z, y)
         && ctx.isGrass(x - foot, z, y) && ctx.isGrass(x + foot, z, y)
@@ -186,7 +209,8 @@
       // A real floor beneath the centre also admits their inward handoff.
       && (landing(x, y, z) || Number.isFinite(y) && Math.abs(pointSupportAt(x, z, y + 0.02) - y) < 0.05);
     const staticClear = (e, x, y, z, nx = x, ny = y, nz = z, fromHeading = e.heading, toHeading = fromHeading) =>
-      clear(x, y, z, nx, ny, nz, e.radius, e.height, e, null, fromHeading, toHeading);
+      (!autonomousChill(e) || chillCaveClear(x, y, z, nx, ny, nz, true))
+      && clear(x, y, z, nx, ny, nz, e.radius, e.height, e, null, fromHeading, toHeading);
     // Retained routes double as short-lived space/time reservations. Predict
     // from the actual position, so a late worker never leaves a phantom path
     // behind it. Unplanned, controlled and working actors keep their real spot.
@@ -1076,6 +1100,7 @@
         && staticClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.root.rotation.y, e.root.rotation.y);
     };
     const restSpace = (e, pose, x, y, z, heading) => {
+      if (!chillCaveClear(x, y, z)) return false;
       if (ctx.restSiteClear && !ctx.restSiteClear(e, x, y, z, heading)) return false;
       if (ctx.restPoseClear) {
         if (!ctx.restPoseClear(e, 2, pose, true, x, y, z, heading)) return false;
@@ -1427,7 +1452,7 @@
           if (stayLevel && Math.hypot(x - p.x, z - p.z) > 12) continue;
           // Worker assignments can change after the resting-spot cache was
           // built. Recheck the live firing lanes for cached candidates too.
-          if (trafficAt(x, y, z)) continue;
+          if (trafficAt(x, y, z) || !chillCaveClear(x, y, z)) continue;
           const distance = Math.hypot(x - p.x, z - p.z);
           if (roofTour && !pass && roof && roofAt(x, y, z) === currentRoof) continue;
           const tripLimit = roofTour && roof ? 24 : !stayLevel && roof !== onRoof ? 18 : 12;
@@ -1972,6 +1997,7 @@
       return fits;
     };
     const climbClear = (e, x, y, z, nx = x, ny = y, nz = z, heading = e.climb.active ? e.climb.heading : e.heading, actors = true, wallTravel = false) => {
+      if (autonomousChill(e) && !chillCaveClear(x, y, z, nx, ny, nz, true)) return false;
       if (!wallTravel && ctx.climbRidersClear && !ctx.climbRidersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
       if (!wallTravel && actors && !e.controlled && ctx.climbPeersClear
         && !ctx.climbPeersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
@@ -1983,6 +2009,7 @@
         : clear(x, y + 0.85, z, nx, ny + 0.85, nz, radius, 0.5, e);
     };
     const climbWalkClear = (e, x, y, z, nx, ny, nz, heading, actors = true) => {
+      if (autonomousChill(e) && !chillCaveClear(x, y, z, nx, ny, nz, true)) return false;
       if (ctx.climbRidersClear && !ctx.climbRidersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
       if (actors && ctx.climbPeersClear && !ctx.climbPeersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
       return ctx.climbClear ? ctx.climbClear(e, x, y + 0.65, z, nx, ny + 0.65, nz,
@@ -2804,7 +2831,7 @@
       e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
     };
     const openingLanding = (e, x, y, z, heading, platform = null, descending = false) => {
-      if (!ctx.climbOpeningClear) return false;
+      if (!ctx.climbOpeningClear || autonomousChill(e)) return false;
       const c = e.climb, sx = Math.sin(heading), sz = Math.cos(heading);
       // Balcony floors extend inward from a spherical overhang. Measure the
       // landing and outward clearance from that geometry, not the root.
@@ -2888,6 +2915,19 @@
       }
       const length = Math.max(1, Math.hypot(side, vertical)); side /= length; vertical /= length;
       const distance = CLIMB_SPEED * (e.controlled && d.run ? 2 : 1) * dt;
+      if (autonomousChill(e) && vertical < 0
+        && !chillCaveClear(p.x, p.y, p.z, p.x, p.y - Math.max(distance, 0.4), p.z, true)) {
+        // Cross above the entrance to the nearest corner before descending,
+        // rather than stopping at its reserved ceiling or entering the room.
+        vertical = 0;
+        for (let i = 0; i < chillZones.length; i++) {
+          const zone = chillZones[i], dx = p.x - zone.x, dz = p.z - zone.z;
+          const across = dx * zone.cr - dz * zone.sr, along = dx * zone.sr + dz * zone.cr;
+          if (p.y - 0.4 >= zone.top || Math.abs(across) >= zone.half || along <= zone.from || along >= zone.to) continue;
+          side = (across < 0 ? -1 : across > 0 ? 1 : e.turn) * (zone.cr * sz + zone.sr * sx < 0 ? -1 : 1);
+          break;
+        }
+      }
       m.climb = m.climbBlend = 1; m.openingSettle = 0; m.mantle = 0;
       m.climbDirection = vertical; m.climbSide = side;
       e.compact = false; e.footprintMode = "pound";
@@ -3935,6 +3975,11 @@
       const p = e.root.position, dx = e.goalX - p.x, dz = e.goalZ - p.z, distance = Math.hypot(dx, dz);
       if (distance < (e.motion.lab ? 0.06 : 0.15)) { e.speed = damp(e.speed, 0, 12, dt); return; }
       const desired = Math.atan2(dx, dz), step = Math.min(distance, speed * dt);
+      // Include sideways and outward steps when skirting a reserved entrance;
+      // the ordinary forward-only steering fan cannot escape its front edge.
+      const avoidEntrance = autonomousChill(e) && !chillCaveClear(p.x, p.y, p.z,
+        p.x + Math.sin(desired) * Math.min(distance, 2), p.y, p.z + Math.cos(desired) * Math.min(distance, 2));
+      const steering = avoidEntrance ? FIRE_STEERING : STEERING;
       const inCave = caveAt(p.x, p.y, p.z) >= 0;
       const onProp = raisedSupport(e);
       const doorway = e.lab.yielding || e.route === "exit" && e.fromSite >= 0 || e.route === "enter" || e.route === "apron";
@@ -3970,8 +4015,8 @@
       e.steerFor = Math.max(0, e.steerFor - dt);
       let chosen = NaN, chosenFacing = e.heading, chosenMode = initialMode, chosenCompact = initialCompact;
       let best = -Infinity, chosenY = p.y, chosenStep = 0, directAhead = false;
-      for (let i = 0; i < STEERING.length; i++) {
-        const heading = desired + STEERING[i] * e.turn, sx = Math.sin(heading), sz = Math.cos(heading);
+      for (let i = 0; i < steering.length; i++) {
+        const heading = desired + steering[i] * e.turn, sx = Math.sin(heading), sz = Math.cos(heading);
         const turn = Math.atan2(Math.sin(heading - e.heading), Math.cos(heading - e.heading));
         const labStation = e.motion.lab && e.phase === "work" && !e.lab.yielding
           && e.lab.pathIndex + 1 >= e.lab.pathCount && labStations[e.lab.stage === "fetch" || e.lab.stage === "return" ? e.lab.bench : e.lab.station];
@@ -4019,7 +4064,7 @@
           && !occupied(e, ax, ay, az, true, aheadFacing)
           && (aheadPropStep ? propStepClear : staticClear)(e, p.x, p.y, p.z, ax, ay, az, e.heading, aheadFacing);
         if (!i) directAhead = goodAhead;
-        const side = Math.sign(STEERING[i] * e.turn);
+        const side = Math.sign(steering[i] * e.turn);
         const commitment = e.steerFor > 0 && side && e.steerSide ? side === e.steerSide ? 0.45 : -1.25 : 0;
         const score = Math.cos(heading - desired) * 2 + Math.cos(heading - e.steerHeading) * 0.5
           + (goodAhead ? 3 : 0) + commitment - i * 0.008;
@@ -5300,6 +5345,12 @@
           if (e.fromSite >= 0) { e.phase = "leave"; e.route = "exit"; }
           else { e.phase = "chill"; e.rest = 0; chooseChill(e); }
         }
+      }
+      if (autonomousChill(e) && !chillCaveClear(p.x, p.y, p.z)) {
+        e.rest = 0;
+        if (e.lounge) leaveLounge(e);
+        if (!chillCaveClear(e.goalX, e.goalY, e.goalZ)
+          || Math.hypot(e.goalX - p.x, e.goalZ - p.z) < 0.15) chooseChill(e);
       }
       if (e.exitFootprint) {
         // Clearing the arch does not instantly make space for the relaxed
