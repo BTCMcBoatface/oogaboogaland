@@ -682,7 +682,9 @@
       assistedTargetActive = assistedTargetInRange = assistedTargetClose = false;
       assistedTargetDistance = Infinity;
       assistedTargetWait = 0;
-      if (!Number.isNaN(assistedReticleX)) {
+      // The HUD survives scene visits; its offset may belong to the previous
+      // pilot even when this visit has never positioned the overhead reticle.
+      if (!Number.isNaN(assistedReticleX) || reticle.style.left || reticle.style.top) {
         assistedReticleX = assistedReticleY = NaN;
         reticle.style.removeProperty("left");
         reticle.style.removeProperty("top");
@@ -2915,6 +2917,7 @@
       unlockAim();
       carryCursor.dispose();
       clearFeedback();
+      resetAssist();
       reticle.hidden = true;
       camera.near = savedNear;
       camera.orthoMix = camera.orthoHeight = 0;

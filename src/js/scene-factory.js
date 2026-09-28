@@ -415,7 +415,8 @@
     };
     const hall = FM.hall(), cond = FM.conduits();
     s.ceiling = createNode({ geometry: hall.ceiling });
-    addChild(root, s.ceiling, createNode({ geometry: hall.rock }), createNode({ geometry: hall.walls }), createNode({ geometry: hall.glow, sightHidden: true }), createNode({ geometry: FM.scaffold() }),
+    s.walls = createNode({ geometry: hall.walls });
+    addChild(root, s.ceiling, createNode({ geometry: hall.rock }), s.walls, createNode({ geometry: hall.glow, sightHidden: true }), createNode({ geometry: FM.scaffold() }),
       createNode({ geometry: FM.coreBody() }), createNode({ geometry: cond.pipe }), createNode({ geometry: cond.glass, sightHidden: true }), createNode({ geometry: cond.glow }), createNode({ geometry: FM.forge() }));
     // The surge's rings round the chamber and the coils' arcs, hidden until a big forward comes through.
     s.coreRings = [0, 1, 2].map(() => createNode({ position: { x: L.core.x, y: 0, z: L.core.z }, geometry: FM.coreRing(), visible: false, sightHidden: true }));
@@ -712,6 +713,7 @@
     return true;
   };
   const resolveLanding = (actor, x, y, z) => {
+    if (actor.ladder && actor.ladder.plane) return;
     const p = actor.root.position, feet = p.y - actor.baseY;
     if (!FM.resolveFall(p, x, z, y - actor.baseY, feet, actor.bodyRadius || 0.35)) return;
     const floor = FM.supportAt(p.x, p.z, feet);
@@ -818,7 +820,7 @@
     world.pilot = null;
     if (playerName) {
       playerWorld = { level: 0, weapons: new Map(), magazine: { owned: false, count: 0, ammo: 0, carrier: null } };
-      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor, flyable: flyableFor, ceilingAt: ceilingFor, onBodyMove: resolveLanding, clipProjectileTarget, absorbProjectile, reloadPolicy };
+      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor, flyable: flyableFor, ceilingAt: ceilingFor, ladders: LAYOUT.ladders, onBodyMove: resolveLanding, clipProjectileTarget, absorbProjectile, reloadPolicy };
       shared.onModelChange = () => {
         if (!avatar) return;
         scene.gate.phase.body.refresh(avatar.root);
@@ -1036,9 +1038,9 @@
     pilot.readInput(dt);
     if (people) people.update(dt, elapsed);
     pilot.update(dt);
-    // Keep the vault out of the view until the displayed birdseye blend has
-    // fully returned, including reversals partway through the transition.
-    s.ceiling.visible = !pilot.birdsEye && pilot.birdsEyeMix === 0;
+    // Cut the vault and inward-leaning walls away so the outer decks stay visible.
+    // Restore them only after the birdseye blend fully returns, including reversals.
+    s.ceiling.visible = s.walls.visible = !pilot.birdsEye && pilot.birdsEyeMix === 0;
     // The gate's shield hums, and shows the outline of whoever walks through it.
     const g = s.gate;
     g.phase.update(dt, elapsed);

@@ -71,6 +71,13 @@
     // In front of the core's stone foot, whose face is at z 0.2 there.
     forge: { x: 0, z: 0.7 },
     lookout: { x: -16, y: LEVEL.top, z: -14, w: 6, d: 6, tower: 5.5 },
+    lookoutDeck: { x: -16, y: LEVEL.top + 5.65, z: -14, w: 5, d: 5 },
+    lookoutApproach: { x: -16, y: LEVEL.top, z: -10.8, w: 2, d: 1.5 },
+    // Vertical climbing planes; normals point out from the upper landing.
+    ladders: [
+      { x: 10.1, z: 6.8, bottom: 0, top: LEVEL.low, nx: -1, nz: 0, width: 1.4, inset: 0.3 },
+      { x: -16, z: -11.6, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: 1, width: 1.4, inset: 0.3 }
+    ],
     study: { x: 21.4, y: LEVEL.main, z: 12, w: 4, d: 7 },
     // Level 2, the balcony's level: the walkway from the balcony's right side round the right wall, past the study
     // hall, to the Harbor line's porch, as decks [x0, x1, z0, z1]; each line's porch out to its peer tunnel comes
@@ -78,12 +85,11 @@
     walk: [[2.5, 17.6, 23.7, 26.3], [17.6, 20.2, 0, 26.3]],
     // Every other flight of stairs, [x, y, z] at the bottom and at the top and its width, read by the scaffold that
     // builds them (cutting the rail wherever one lands) and by the floor an Ooga walks: pit to the switchboard, the
-    // treasury, rebalancer and the core's walkway, the main level to the high lines up the lines' inner sides, and the high
+    // treasury and the core's walkway, the main level to the high lines up the lines' inner sides, and the high
     // lines to the landing in front of the first gallery, one flight from each. An end on a deck's edge stands on that
     // edge's rail line and crosses it square, so its rails meet the ends of the deck's.
     stairs: [
       [-10, 0, 12.4, -10, LEVEL.low, 8.4, 1.6], [10.5, 0, 19, 10.5, LEVEL.low, 14.9, 1.6],
-      [6.1, 0, 6.8, 10.1, LEVEL.low, 6.8, 1.8],
       [-4.8, 0, 7.5, -4.8, LEVEL.main, 1.3, 1.6], [4.8, 0, 7.5, 4.8, LEVEL.main, 1.3, 1.6],
       [-9.2, LEVEL.main, -4.4, -9.2, LEVEL.high, -9.6, 1.6], [9.2, LEVEL.main, -4.4, 9.2, LEVEL.high, -9.6, 1.6],
       [-6.4, LEVEL.high, -14.05, -0.8, LEVEL.top, -14.05, 1.6], [6.4, LEVEL.high, -14.05, 0.8, LEVEL.top, -14.05, 1.6]
@@ -718,6 +724,10 @@
       const l = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / l, dz = (bz - az) / l;
       landings.push([ax, ay, az, w / 2 + 0.05, dx, dz], [bx, by, bz, w / 2 + 0.05, -dx, -dz]);
     }
+    for (const l of L.ladders) {
+      landings.push([l.x, l.top, l.z, l.width / 2 + 0.15, l.nx, l.nz]);
+      landings.push([l.x, l.bottom, l.z, l.width / 2 + 0.15, l.nx, l.nz]);
+    }
     const cutAcross = ([p, q], y) => landings.push([(p[0] + q[0]) / 2, y, (p[1] + q[1]) / 2, Math.hypot(p[0] - q[0], p[1] - q[1]) / 2]);
     for (const bd of ringBridges) cutAcross(bd.sides.map((sd) => sd.b), LEVEL.main);
     for (const bd of topBridges) for (const end of ["a", "b"]) cutAcross(bd.sides.map((sd) => sd[end]), LEVEL.top);
@@ -738,6 +748,22 @@
     for (const b of L.bays) deckAt(b, "nsew");
     for (const d of [L.switchboard, L.rebalancer, L.treasury]) deckAt(d, "nsew");
     deckAt(L.lookout, "nsew");
+    deckAt(L.lookoutDeck, "nsew", 0);
+    deckAt(L.lookoutApproach, "ew", 0);
+    // Brackets carry the lantern deck out from the tower's four legs.
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) geos.push(beam(L.lookout.x + sx * 0.9, L.lookoutDeck.y - 1.4, L.lookout.z + sz * 0.9,
+      L.lookout.x + sx * 2.2, L.lookoutDeck.y - 0.4, L.lookout.z + sz * 2.2, 0.16, TIMBER_DK));
+    // Rails extend above the landing as handholds; the rungs stop below the deck lip.
+    for (const l of L.ladders) {
+      const tx = l.nz, tz = -l.nx;
+      for (const side of [-1, 1]) geos.push(beam(l.x + tx * side * l.width / 2, l.bottom, l.z + tz * side * l.width / 2,
+        l.x + tx * side * l.width / 2, l.top + 1, l.z + tz * side * l.width / 2, 0.12, TIMBER_DK));
+      const count = Math.ceil((l.top - l.bottom) / 0.3);
+      for (let i = 1; i <= count; i++) {
+        const y = l.bottom + (l.top - l.bottom - 0.15) * i / count;
+        geos.push(beam(l.x - tx * l.width / 2, y, l.z - tz * l.width / 2, l.x + tx * l.width / 2, y, l.z + tz * l.width / 2, 0.09, TIMBER_LT));
+      }
+    }
     deckAt(L.landing, "s");
     for (const g of L.galleries) {
       deckAt(g, "swe", 0);
@@ -867,7 +893,7 @@
   const FLOOR = cached(() => {
     const L = LAYOUT, rects = [], strips = [], blocks = [], discs = [];
     const rect = (d, y = d.y) => rects.push(d.x - d.w / 2 + 0.15, d.x + d.w / 2 - 0.15, d.z - d.d / 2 + 0.15, d.z + d.d / 2 - 0.15, y);
-    for (const d of [...L.bays, L.switchboard, L.rebalancer, L.treasury, L.lookout, ...L.galleries]) rect(d);
+    for (const d of [...L.bays, L.switchboard, L.rebalancer, L.treasury, L.lookout, L.lookoutDeck, L.lookoutApproach, ...L.galleries]) rect(d);
     // The landing runs on into the first gallery it opens onto.
     const ld = L.landing;
     rects.push(ld.x - ld.w / 2 + 0.15, ld.x + ld.w / 2 - 0.15, ld.z - ld.d / 2 - 0.4, ld.z + ld.d / 2 - 0.15, ld.y);
@@ -949,7 +975,8 @@
     block(tr.x + TRE.desk[0], tr.z + TRE.desk[1], 0.6, tr.y - 0.5, tr.y + 1.6);
     block(tr.x + TRE.cart[0], tr.z + TRE.cart[1], 0.65, tr.y - 0.5, tr.y + 1.3);
     for (const [x, z] of TRE.crates) block(tr.x + x, tr.z + z, 0.55, tr.y - 0.5, tr.y + 1);
-    block(lk.x, lk.z, 1.35, lk.y - 0.5, lk.y + 6);
+    block(lk.x, lk.z, 1.35, lk.y - 0.5, L.lookoutDeck.y - 0.3);
+    block(lk.x, lk.z, 1, L.lookoutDeck.y - 0.3, lk.y + lk.tower + 3);
     // Each peer tunnel's console box; the connected glass stays walkable.
     // And the study hall's locked door.
     for (const t of L.tunnels) {
@@ -1274,11 +1301,11 @@
     }
     // Arms out from the posts' tops for the station's two lanterns.
     for (const s of [-1, 1]) flat.push(beam(s * 2.25, 3.95, -0.6, s * 3.1, 3.95, -0.6, 0.14, TIMBER_DK), beam(s * 2.4, 3.4, -0.6, s * 2.85, 3.92, -0.6, 0.08, TIMBER));
-    // The control panel between the tanks: a pedestal, a raked screen with green bars, and keys.
+    // The control panel between the tanks: a pedestal, an upright screen with green bars, and keys.
     flat.push(bevelBox({ w: 0.62, h: 0.85, d: 0.42, color: IRON_DK, bevel: 0.04, offset: { y: 0.425, z: 0.62 } }));
     const panel = [bevelBox({ w: 0.6, h: 0.42, d: 0.08, color: IRON, bevel: 0.03 }), box({ w: 0.5, h: 0.32, d: 0.02, color: "#123a2a", emissive: 0.8, offset: { z: 0.05 } })];
     for (let k = 0; k < 4; k++) panel.push(box({ w: 0.07, h: 0.06 + k * 0.05, d: 0.02, color: "#5fff7a", emissive: 1, offset: { x: -0.15 + k * 0.1, y: -0.12 + (0.06 + k * 0.05) / 2, z: 0.07 } }));
-    flat.push(moved(turnedX(merge(...panel), 0.5), 0, 1.05, 0.72));
+    flat.push(moved(merge(...panel), 0, 1.05, 0.72));
     for (let k = 0; k < 5; k++) flat.push(box({ w: 0.08, h: 0.03, d: 0.07, color: ["#ff5a3a", "#ffc83a", "#5fb8ff", "#5fe36a", "#ff5a3a"][k], emissive: 0.95, offset: { x: -0.2 + k * 0.1, y: 0.86, z: 0.8 } }));
     flat.push(bevelBox({ w: 4.4, h: 3.7, d: 0.16, color: "#7c4424", bevel: 0.05, offset: { y: 2, z: -0.95 } }));
     for (let i = 0; i < 13; i++) for (const y of [0.3, 3.7]) round.push(moved(ball(0.05, BRASS, 0, 6), -2 + i * 0.333, y, -0.86));
@@ -1371,12 +1398,12 @@
       for (const y of [3.95, 4.62]) geos.push(bevelBox({ w: 0.62, h: 0.12, d: 0.6, color: IRON_DK, bevel: 0.02, offset: { x: s * 3.7, y, z: 0.75 } }));
     }
     geos.push(bevelBox({ w: 8.3, h: 0.5, d: 0.56, color: TIMBER, bevel: 0.07, offset: { y: 4.3, z: 0.75 } }));
-    // The forge's control: a console with a raked screen of green bars and a lever with a red knob.
+    // The forge's control: a console with an upright screen of green bars and a lever with a red knob.
     const cx = FORGE_CONSOLE[0], cz = FORGE_CONSOLE[1];
     geos.push(bevelBox({ w: 0.7, h: 0.95, d: 0.5, color: IRON_DK, bevel: 0.05, offset: { x: cx, y: 0.475, z: cz } }));
     const screen = [bevelBox({ w: 0.62, h: 0.44, d: 0.08, color: IRON, bevel: 0.03 }), box({ w: 0.52, h: 0.34, d: 0.02, color: "#123a2a", emissive: 0.8, offset: { z: 0.05 } })];
     for (let k = 0; k < 4; k++) screen.push(box({ w: 0.08, h: 0.07 + k * 0.05, d: 0.02, color: "#5fff7a", emissive: 1, offset: { x: -0.16 + k * 0.1, y: -0.12 + (0.07 + k * 0.05) / 2, z: 0.07 } }));
-    geos.push(moved(turnedX(merge(...screen), 0.45), cx - 0.08, 1.15, cz + 0.08), beam(cx + 0.22, 0.95, cz, cx + 0.34, 1.42, cz + 0.1, 0.05, IRON_LT), moved(ball(0.08, "#e8342a", 0.4, 8), cx + 0.35, 1.46, cz + 0.11));
+    geos.push(moved(merge(...screen), cx - 0.08, 1.15, cz + 0.08), beam(cx + 0.22, 0.95, cz, cx + 0.34, 1.42, cz + 0.1, 0.05, IRON_LT), moved(ball(0.08, "#e8342a", 0.4, 8), cx + 0.35, 1.46, cz + 0.11));
     return moved(shaded([rim], geos), f.x, 0, f.z);
   });
   // A flame: a teardrop of orange with a smaller one of yellow in front of it.
@@ -1611,16 +1638,16 @@
 
   // The switchboard, a cockpit of screens round the operator as the concept draws it. Everything is placed round
   // `CONSOLE`, where the operator stands, facing -z: a curved timber desk wrapped round him, its front a row of
-  // raked control decks studded with lit buttons, a lower row of five monitors on necks along its back, tipped back
-  // toward him, an upper row of four on posts leaning in over him, and the big routing board above the middle. A
-  // monitor is [bearing, reach, height, width, tall, tilt, kind]: bearing 0 is straight ahead, tilt leans its top
-  // back (negative) or in (positive), and kind is what its lit face shows (`switchScreens`). A cart of gold stands by.
+  // raked control decks studded with lit buttons, a lower row of five upright monitors on necks along its back,
+  // an upper row of four on posts, and the upright routing board above the middle. A monitor is
+  // [bearing, reach, height, width, tall, tilt, kind]: bearing 0 is straight ahead, tilt is 0 for upright screens,
+  // and kind is what its lit face shows (`switchScreens`). A cart of gold stands by.
   const CONSOLE = { x: 0, z: 0.9, desk: 2, deep: 0.9, top: 1, arc: 1.3 };
   const MONITORS = [
-    [-1.05, 2.25, 1.6, 1.05, 0.66, -0.3, "bars"], [-0.52, 2.25, 1.6, 1.05, 0.66, -0.3, "text"], [0, 2.25, 1.6, 1.05, 0.66, -0.3, "line"],
-    [0.52, 2.25, 1.6, 1.05, 0.66, -0.3, "text"], [1.05, 2.25, 1.6, 1.05, 0.66, -0.3, "bars"],
-    [-0.78, 2.5, 2.45, 1.05, 0.66, 0.14, "text"], [-0.26, 2.5, 2.45, 1.05, 0.66, 0.14, "line"], [0.26, 2.5, 2.45, 1.05, 0.66, 0.14, "bars"], [0.78, 2.5, 2.45, 1.05, 0.66, 0.14, "text"],
-    [0, 2.7, 3.3, 1.6, 0.95, 0.2, "graph"]
+    [-1.05, 2.25, 1.6, 1.05, 0.66, 0, "bars"], [-0.52, 2.25, 1.6, 1.05, 0.66, 0, "text"], [0, 2.25, 1.6, 1.05, 0.66, 0, "line"],
+    [0.52, 2.25, 1.6, 1.05, 0.66, 0, "text"], [1.05, 2.25, 1.6, 1.05, 0.66, 0, "bars"],
+    [-0.78, 2.5, 2.45, 1.05, 0.66, 0, "text"], [-0.26, 2.5, 2.45, 1.05, 0.66, 0, "line"], [0.26, 2.5, 2.45, 1.05, 0.66, 0, "bars"], [0.78, 2.5, 2.45, 1.05, 0.66, 0, "text"],
+    [0, 2.7, 3.3, 1.6, 0.95, 0, "graph"]
   ];
   // Stands a part built facing +z at the origin where a monitor or a deck at `bearing` and `reach` puts it.
   const consoleAt = (geo, bearing, reach, y, tilt) => moved(turnedY(turnedX(geo, tilt), -bearing), CONSOLE.x + Math.sin(bearing) * reach, y, CONSOLE.z - Math.cos(bearing) * reach);
@@ -1804,13 +1831,14 @@
     round.push(moved(ball(0.36, BRONZE, 0, 16), 0, REB.top, cz), moved(turn([[0.2, 1.85], [0.27, 1.88], [0.27, 2], [0.2, 2.03], [0.2, 2.6], [0.26, 2.63], [0.26, 2.72], [0.2, 2.75], [0.2, 3.1]], 16, BRONZE), 0, 0, cz));
     // The boards' chains from the pipes, and their iron backs.
     for (const [bx, , bz] of REB.boards) for (const dx of bx ? [-0.55, 0.55] : [-0.35, 0.35]) round.push(...chain(bx + dx, 2.7, bz, bx + dx, REB.top - REB.pipe, cz, 0.04, IRON_DK));
-    // The console: a raked panel with the rebalancer's sign on its screen, buttons and a lever.
+    // The console: an upright monitor above a raked button panel and a lever.
     const [kx, kz] = REB.console, rake = 0.35;
     flat.push(bevelBox({ w: 1.5, h: 0.85, d: 0.6, color: IRON_DK, bevel: 0.06, offset: { x: kx, y: 0.425, z: kz } }));
     flat.push(moved(turnedX(bevelBox({ w: 1.56, h: 0.07, d: 0.7, color: IRON, bevel: 0.02 }), rake), kx, 0.9, kz));
     const onPanel = (geo, u, v, lift = 0.05) => moved(geo, kx + u, 0.9 + Math.cos(rake) * lift - Math.sin(rake) * v, kz + Math.sin(rake) * lift + Math.cos(rake) * v);
-    glow.push(onPanel(turnedX(box({ w: 0.58, h: 0.02, d: 0.42, color: "#0f2a4a", emissive: 0.9 }), rake), -0.33, 0));
-    for (const part of cycleIcon(0.12, 0.022)) glow.push(onPanel(turnedX(part, rake - Math.PI / 2), -0.33, 0, 0.07));
+    flat.push(box({ w: 0.08, h: 0.14, d: 0.08, color: IRON_DK, offset: { x: kx - 0.33, y: 0.99, z: kz - 0.1 } }), bevelBox({ w: 0.68, h: 0.52, d: 0.08, color: IRON_DK, bevel: 0.03, offset: { x: kx - 0.33, y: 1.3, z: kz - 0.1 } }));
+    glow.push(box({ w: 0.58, h: 0.42, d: 0.02, color: "#0f2a4a", emissive: 0.9, offset: { x: kx - 0.33, y: 1.3, z: kz - 0.05 } }));
+    for (const part of cycleIcon(0.12, 0.022)) glow.push(moved(part, kx - 0.33, 1.3, kz - 0.03));
     [["#e8342a", 0.12, -0.14], ["#ffd23a", 0.26, -0.14], ["#4fd08a", 0.12, 0.02], ["#e8342a", 0.26, 0.02], ["#ffd23a", 0.12, 0.18], ["#4fd08a", 0.26, 0.18]].forEach(([color, u, v]) => glow.push(onPanel(ball(0.035, color, 1, 8), u, v, 0.06)));
     round.push(beam(kx + 0.55, 0.95, kz, kx + 0.58, 1.3, kz + 0.06, 0.04, IRON_LT), moved(ball(0.07, "#e8342a", 0.4, 10), kx + 0.58, 1.33, kz + 0.06));
     // The sign on its posts, with the arrows chasing round beside the lettering.

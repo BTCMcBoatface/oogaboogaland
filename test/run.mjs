@@ -4781,6 +4781,58 @@ const factoryWalking = { name: "factory walking", why: "regression: Factory move
   })()`);
   record("factory rebalancer: walk onto and off the low drum; a shallow console overlap allows walking out while deeper movement stays blocked", rebalancer.onto > 0.5 && Math.abs(rebalancer.peak - (rebalancer.height + 0.56)) < 1e-5 && Math.abs(rebalancer.off - rebalancer.height) < 1e-5 && rebalancer.overlapped && rebalancer.inwardBlocked && rebalancer.escaped > 0.5 && rebalancer.clear && rebalancer.grounded, JSON.stringify(rebalancer));
 } };
+const factoryLadders = { name: "factory ladders", why: "rule: Oogas must climb the rebalancer and lighthouse ladders through real controls, hold their height at rest, walk off both landings and jump away without snapping back", run: async (b) => {
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl"), F = BL.factoryModels, rows = [];
+    if (B.crew.player !== a) B.pilot.possess(a);
+    const key = (name, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name === "Space" ? " " : name, code: name === "Space" ? name : "Key" + name.toUpperCase(), bubbles: true }));
+    const feet = () => a.root.position.y - a.baseY;
+    for (const l of F.LAYOUT.ladders) {
+      const yaw = Math.atan2(l.nx, l.nz), gap = a.bodyRadius + 0.6;
+      B.pilot.navigate({ position: { x: l.x + l.nx * gap, y: l.bottom, z: l.z + l.nz * gap }, yaw, pitch: 0, dist: 6 });
+      B.advance(0.1, 1 / 60); key("w", true);
+      let mounted = false, paused = false, hold = 0, maxStep = 0;
+      for (let i = 0; i < 600; i++) {
+        const x = a.root.position.x, y = feet(), z = a.root.position.z;
+        B.advance(1 / 60, 1 / 60);
+        maxStep = Math.max(maxStep, Math.hypot(a.root.position.x - x, feet() - y, a.root.position.z - z));
+        mounted ||= !!a.ladder.plane;
+        if (!paused && a.ladder.plane && feet() > (l.bottom + l.top) / 2) {
+          key("w", false); const at = feet(); B.advance(0.2, 1 / 60); hold = Math.abs(feet() - at);
+          paused = true; key("w", true);
+        }
+        if (mounted && !a.ladder.plane) break;
+      }
+      key("w", false);
+      const top = feet(), upperSupport = F.supportAt(a.root.position.x, a.root.position.z, top);
+      const upperClear = F.clearAt(a.root.position.x, a.root.position.z, top, a.bodyRadius, a.bodyHeight);
+      // Walk outward over the lip with W held; it must remain descent, rather than bouncing back up.
+      B.pilot.navigate({ position: { x: l.x - l.nx * 0.2, y: l.top, z: l.z - l.nz * 0.2 }, yaw: yaw + Math.PI, pitch: 0, dist: 6 });
+      B.advance(0.1, 1 / 60); key("w", true);
+      let descending = false, rose = false, previous = feet();
+      for (let i = 0; i < 600; i++) {
+        B.advance(1 / 60, 1 / 60);
+        descending ||= !!a.ladder.plane;
+        if (feet() > previous + 1e-5) rose = true;
+        previous = feet();
+        if (descending && !a.ladder.plane) break;
+      }
+      const bottom = feet(), x = a.root.position.x, z = a.root.position.z;
+      B.advance(0.3, 1 / 60); key("w", false);
+      rows.push({ mounted, paused, hold, maxStep, top, upperSupport, upperClear, descending, rose, bottom,
+        walkedAway: Math.hypot(a.root.position.x - x, a.root.position.z - z), active: !!a.ladder.plane, expectedTop: l.top, expectedBottom: l.bottom });
+    }
+    const l = F.LAYOUT.ladders[0], yaw = Math.atan2(l.nx, l.nz);
+    B.pilot.navigate({ position: { x: l.x + l.nx * a.bodyRadius * 0.5, y: l.bottom, z: l.z }, yaw, pitch: 0, dist: 6 });
+    key("w", true); B.advance(0.4, 1 / 60); key("w", false);
+    const attached = !!a.ladder.plane, x = a.root.position.x, z = a.root.position.z;
+    key("Space", true); B.advance(1 / 60, 1 / 60); key("Space", false); B.advance(0.15, 1 / 60);
+    const jumped = { attached, detached: !a.ladder.plane, rising: a.hopV > 0, outward: (a.root.position.x - x) * l.nx + (a.root.position.z - z) * l.nz };
+    return { rows, jumped };
+  })()`);
+  record("factory ladders: both climbs hold at rest, cross the lip continuously, descend without reversal and walk away at the bottom; Space jumps off", r.rows.every((v) => v.mounted && v.paused && v.hold < 1e-6 && v.maxStep < 0.2 && Math.abs(v.top - v.expectedTop) < 1e-6 && Math.abs(v.upperSupport - v.top) < 1e-6 && v.upperClear && v.descending && !v.rose && Math.abs(v.bottom - v.expectedBottom) < 1e-6 && v.walkedAway > 0.2 && !v.active)
+    && r.jumped.attached && r.jumped.detached && r.jumped.rising && r.jumped.outward > 0.05, JSON.stringify(r));
+} };
 const factoryRailingJump = { name: "factory railing jumps", why: "regression: rifle reload checks prevented Factory jumps, and descending past railings could trap the visitor inside a lower-floor obstacle", run: async (b) => {
   const r = await b.evaluate(`(() => {
     const B = __ooga, a = B.cavemen.get("portlandhodl"), rows = [];
@@ -4835,6 +4887,10 @@ const factoryWeapons = { name: "factory weapon selection", why: "regression: the
     const B = __ooga, a = B.cavemen.get("portlandhodl");
     if (B.crew.player !== a) B.pilot.possess(a);
     B.crew.configureWeapon(a, 1); B.crew.configureWeapon(a, 2, 30);
+    // A previous scene's birdseye cursor can leave an offset on the shared HUD
+    // before this pilot has ever written (or cached) reticle coordinates.
+    const reticle = document.getElementById("weapon-reticle");
+    reticle.style.left = "83%"; reticle.style.top = "46%";
     const key = slot => {
       for (const type of ["keydown", "keyup"]) window.dispatchEvent(new KeyboardEvent(type, { key: String(slot), code: "Digit" + slot, bubbles: true }));
       B.advance(0.1, 1 / 60);
@@ -4847,9 +4903,11 @@ const factoryWeapons = { name: "factory weapon selection", why: "regression: the
     primary.dispatchEvent(new PointerEvent("pointerup", { button: 0, buttons: 0, pointerId: 77, bubbles: true }));
     B.advance(0.1, 1 / 60); const meleeButton = a.weapon.primaryEquipped && !a.weapon.equipped;
     secondary.click(); B.advance(0.1, 1 / 60);
-    return { scene: B.scene, meleeKey, rifleKey, visible, meleeButton, rifleButton: a.weapon.equipped && !a.weapon.primaryEquipped };
+    return { scene: B.scene, meleeKey, rifleKey, visible, meleeButton, rifleButton: a.weapon.equipped && !a.weapon.primaryEquipped,
+      centered: !reticle.style.left && !reticle.style.top };
   })()`);
   record("factory weapons: 1 and 2 and both HUD buttons select melee and rifle weapons without leaving the factory", r.scene === "factory" && r.meleeKey && r.rifleKey && r.visible && r.meleeButton && r.rifleButton, JSON.stringify(r));
+  record("factory weapons: the crosshair clears inherited birdseye coordinates and returns to the screen centre", r.centered, JSON.stringify(r));
   const hits = await b.evaluate(`(() => {
     const B = __ooga, a = B.cavemen.get("portlandhodl"), s = B.factory.scene, rows = [];
     const hum = s.tunnels.map(t => t.hum), gateHum = s.gate.hum;
@@ -4956,12 +5014,20 @@ const factoryFloor = { name: "factory floor", why: "regression: stairs landed ag
         const nx = X0 + ni * G, nz = Z0 + nk * G;
         if (M.walkable(x, z, nx, nz, y, R)) add(ni, nk, M.supportAt(nx, nz, y));
       }
+      // A ladder connects its two landings, whose actual control handoffs are checked in factoryLadders.
+      for (const l of L.ladders) {
+        const ax = l.x + l.nx * (R + 0.12), az = l.z + l.nz * (R + 0.12), bx = l.x - l.nx * l.inset, bz = l.z - l.nz * l.inset;
+        if (!M.clearAt(ax, az, l.bottom, R) || !M.clearAt(bx, bz, l.top, R)
+          || Math.abs(M.supportAt(ax, az, l.bottom) - l.bottom) > 1e-5 || Math.abs(M.supportAt(bx, bz, l.top) - l.top) > 1e-5) continue;
+        if (Math.abs(y - l.bottom) < 0.1 && Math.hypot(x - ax, z - az) < 0.35) add(Math.round((bx - X0) / G), Math.round((bz - Z0) / G), l.top);
+        if (Math.abs(y - l.top) < 0.1 && Math.hypot(x - bx, z - bz) < 0.35) add(Math.round((ax - X0) / G), Math.round((az - Z0) / G), l.bottom);
+      }
     }
     const cells = [...seen.values()].map(([i, k, y]) => [X0 + i * G, Z0 + k * G, y]);
     const reachedIn = (x0, x1, z0, z1, y) => cells.some(([x, z, h]) => x >= x0 && x <= x1 && z >= z0 && z <= z1 && Math.abs(h - y) < 0.3);
     const near = (x, z, y) => reachedIn(x - 0.6, x + 0.6, z - 0.6, z + 0.6, y), missing = [];
     L.stairs.forEach(([ax, ay, az, bx, by, bz], n) => { if (!near(ax, az, ay)) missing.push("stair " + n + " foot"); if (!near(bx, bz, by)) missing.push("stair " + n + " head"); });
-    const decks = { A: L.bays[0], B: L.bays[1], C: L.bays[2], D: L.bays[3], switchboard: L.switchboard, rebalancer: L.rebalancer, treasury: L.treasury, watchtower: L.lookout, landing: L.landing, gallery1: L.galleries[0], gallery2: L.galleries[1] };
+    const decks = { A: L.bays[0], B: L.bays[1], C: L.bays[2], D: L.bays[3], switchboard: L.switchboard, rebalancer: L.rebalancer, treasury: L.treasury, watchtower: L.lookout, lighthouse: L.lookoutDeck, landing: L.landing, gallery1: L.galleries[0], gallery2: L.galleries[1] };
     for (const [name, d] of Object.entries(decks)) if (!reachedIn(d.x - d.w / 2, d.x + d.w / 2, d.z - d.d / 2, d.z + d.d / 2, d.y)) missing.push(name);
     if (!near(L.rebalancer.x + M.REB.operator[0], L.rebalancer.z + M.REB.operator[1], L.rebalancer.y)) missing.push("rebalancer operator lane");
     // Each porch reaches its peer mirror's walkable threshold.
@@ -5904,7 +5970,7 @@ scene("drop", { steps: [dropStart, dropSteering, play("drop", "a jump lands on t
 scene("orbit", { steps: [{ name: "orbit flow", why: "regression: the spacewalk air bonus was missing from the flight log", run: orbitFlow }, orbitSteering, orbitMissed, orbitEscape, trip("orbit")] });
 scene("mine", { steps: [mineResume, trip("mine"), mineControls] });
 scene("pool", { steps: [poolLeave, trip("pool")] });
-scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
+scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryLadders, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
 scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"), steps: [factoryFloor, factoryEntrance] });
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
