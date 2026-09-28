@@ -17,7 +17,7 @@
   const BL = window.BL = window.BL || {};
   const { models, math } = BL;
   const { cached, variants, geometry, pushVert, face, box, bevelBox, lathe, ring, tube, merge, forward, moved, turnedX, turnedY, turnedZ, noShadow, makeVox, voxelGeometry } = models;
-  const { hexToRgb } = math;
+  const { hexToRgb, mulberry32 } = math;
   const FM = BL.factoryModels;
   const TAU = Math.PI * 2;
 
@@ -345,10 +345,9 @@
       }
     }
     const walls = voxelGeometry(v, { unit: u, palette: [null, ...STONE, STONE_DK, STONE_LT], origin: { x: 0, y: 0, z: 0 } });
-    // The dome, top down so its faces look into the hall, with bronze ribs from the wall's head to the crown's ring.
+    // The dome is open to the night: a lattice of bronze ribs from the wall's head to the crown's ring, with two rings
+    // round it and brass studs where they cross, so the sky shows between.
     const crown = 1.4, dome = [[crown, HALL.apex], [R * 0.5, HALL.apex - 1.1], [R * 0.82, HALL.wall + 2.7], [R + 0.3, HALL.wall - 0.05]];
-    const vault = lathe({ profile: dome, segments: 48, color: (t) => t < 0.3 ? "#4a433e" : t < 0.7 ? "#433d38" : STONE_DK });
-    const cap = lathe({ profile: [[0, HALL.apex + 0.3], [crown + 0.1, HALL.apex + 0.02]], segments: 24, color: BRONZE_DK });
     const domeAt = (t) => {
       const f = t * (dome.length - 1), i = Math.min(dome.length - 2, Math.floor(f)), k = f - i;
       return [dome[i + 1][0] + (dome[i][0] - dome[i + 1][0]) * (1 - k), dome[i + 1][1] + (dome[i][1] - dome[i + 1][1]) * (1 - k)];
@@ -359,7 +358,12 @@
       ribs.push(tube({ path: (t) => { const [r, y] = domeAt(t); return { x: Math.sin(a) * (r - 0.18), y: y - 0.12, z: Math.cos(a) * (r - 0.18) }; }, radius: () => 0.13, rings: 18, segments: 6, colorFn: (t) => t > 0.9 ? BRASS : BRONZE }));
     }
     const rim = [ring({ r: R - 0.05, thickness: 0.14, y: HALL.wall, segments: 64, color: BRONZE }), ring({ r: crown, thickness: 0.16, y: HALL.apex - 0.1, segments: 32, color: BRASS })];
-    return { walls, dome: merge(vault, cap, ...ribs, ...rim), ...floor() };
+    for (const at of [0.34, 0.68]) {
+      const [r, y] = domeAt(at);
+      rim.push(ring({ r: r - 0.18, thickness: 0.09, y: y - 0.12, segments: 64, color: BRONZE }));
+      for (let s = 0; s < 12; s++) { const a = (s + 0.5) / 12 * TAU; rim.push(moved(ball(0.16, BRASS), Math.sin(a) * (r - 0.18), y - 0.12, Math.cos(a) * (r - 0.18))); }
+    }
+    return { walls, dome: merge(...ribs, ...rim), ...floor() };
   });
 
   // The floor as the concept lays it: flags in rings round the dais over dark grout, each course broken to bond with
@@ -589,7 +593,7 @@
   // ---- the mechanism ------------------------------------------------------------------------------
 
   // The dais and the plinth, turned in stone and bronze; the ₿ that turns over it; three rings of bronze and brass that
-  // turn about it, each with gold studs; and the beam of light from over the ₿ to the crown's ring.
+  // turn about it, each with gold studs; and the beam of light from over the ₿ into the sky.
   const coreBase = cached(() => {
     const [[r0, y0], [r1, y1]] = CORE.steps, p = CORE.plinth;
     const dais = lathe({ profile: [[r0, 0], [r0, y0], [r1, y0], [r1, y1], [p + 0.3, y1], [p + 0.3, y1 + 0.02]], segments: 40, color: (t) => t < 0.4 ? STONE[2] : STONE[1] });
@@ -607,7 +611,130 @@
     for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + i * 0.4; studs.push(moved(ball(0.09, GOLD, 0.6), Math.cos(a) * r, 0, Math.sin(a) * r)); }
     return merge(ring({ r, thickness: 0.055 + i * 0.01, segments: 48, color: i === 1 ? BRASS : BRONZE }), ...studs);
   }));
-  const coreBeam = cached(() => noShadow(lathe({ profile: [[0.1, CORE.glyphY + 1.2], [0.1, HALL.apex], [0, HALL.apex + 0.1]], segments: 10, color: "#ffd98a", emissive: 0.85 })));
+  // The beam of light from over the ₿ into the sky, a stack of short drums sharing one mesh, each a little taller than
+  // the one below, so the scene can light each drum on its own and run bands of light up the beam itself. `rows` hold
+  // each drum's foot, height and radius, the beam's width up to the crown thinning to a thread at the top of the sky.
+  const BEAM = { from: CORE.glyphY + 1.2, first: 0.2, grow: 1.075, waist: 90 };
+  const coreBeam = cached(() => {
+    const widthAt = (y) => y < HALL.apex ? 0.1 : y < BEAM.waist ? 0.1 - 0.05 * (y - HALL.apex) / (BEAM.waist - HALL.apex) : 0.05 * (SKY.beam - y) / (SKY.beam - BEAM.waist);
+    const rows = [];
+    for (let y = BEAM.from, h = BEAM.first; y < SKY.beam; y += h, h *= BEAM.grow) {
+      const top = Math.min(SKY.beam, y + h);
+      rows.push({ y, h: top - y, r: Math.max(0.006, widthAt((y + top) / 2)) });
+    }
+    return { geometry: noShadow(lathe({ profile: [[0, 0], [1, 0], [1, 1], [0, 1]], segments: 10, color: "#ffd98a", emissive: 0.85 })), rows };
+  });
+  // The shockwave the mechanism throws off when it bursts, a thin glowing ring a metre in radius that the scene spreads
+  // out, seen from above and below.
+  const shockwave = cached(() => noShadow(merge(lathe({ profile: [[1, 0], [0.88, 0]], segments: 48, color: "#ffe6a0", emissive: 1 }), lathe({ profile: [[0.88, 0], [1, 0]], segments: 48, color: "#ffe6a0", emissive: 1 }))));
+
+  // ---- the sky ------------------------------------------------------------------------------------------
+
+  // What the open dome looks up into, all on a sphere `r` round the hall and emissive, so the hall's lamps never light
+  // it: the scene's own sky pass paints the night's gradient, its moon and twinkling stars behind; over them a field of
+  // brighter stars (`stars`), a galaxy's band of soft violet and teal haze (`band`, glass so its puffs blend), and the
+  // planets, each shaded on its sunward side (`planets`, each built round its own middle with where it stands). A few
+  // shooting stars (`meteors`) are laid out ready, each where it streaks and along which way (`dir`), for the scene to
+  // light one now and then. `sparse` is Canvas 2D's lighter sky. The beam from the ₿ rises to `beam`.
+  const SKY = { r: 320, beam: 180, sun: [0.6, 0.35, 0.72], band: [0.8, 0.25, 0.55] };
+  const unit = (x, y, z) => { const l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; };
+  // A flat quad `w` by `h` facing the hall's middle at the point `d` (a unit direction) times `r`, turned `spin` about it.
+  const facingIn = (geo, d, r, w, h, spin, color, emissive) => {
+    const [dx, dy, dz] = d, up = Math.abs(dy) > 0.95 ? [1, 0, 0] : [0, 1, 0];
+    let ax = up[1] * dz - up[2] * dy, ay = up[2] * dx - up[0] * dz, az = up[0] * dy - up[1] * dx;
+    const al = Math.hypot(ax, ay, az); ax /= al; ay /= al; az /= al;
+    const bx = dy * az - dz * ay, by = dz * ax - dx * az, bz = dx * ay - dy * ax, c = Math.cos(spin), s = Math.sin(spin);
+    const ux = (ax * c + bx * s) * w / 2, uy = (ay * c + by * s) * w / 2, uz = (az * c + bz * s) * w / 2;
+    const vx = (bx * c - ax * s) * h / 2, vy = (by * c - ay * s) * h / 2, vz = (bz * c - az * s) * h / 2, cx = dx * r, cy = dy * r, cz = dz * r;
+    return facing(geo, [[cx - ux - vx, cy - uy - vy, cz - uz - vz], [cx + ux - vx, cy + uy - vy, cz + uz - vz], [cx + ux + vx, cy + uy + vy, cz + uz + vz], [cx - ux + vx, cy - uy + vy, cz - uz + vz]], color, emissive, 0, 0, 0);
+  };
+  // A planet `r` across, banded from pole to pole in `bands` and shaded toward `sun`, its night side dim, turned so its
+  // pole leans by `tilt`; `rings` [inner, outer, colours] if it has them. It is shaded upright against the sun turned back
+  // by the tilt, so its lit side still faces the sun once it leans.
+  const planet = ({ r, bands, sun = SKY.sun, tilt = 0, rings = null, rows = 12, segments = 20 }) => {
+    const [ux, uy, uz] = unit(...sun), tc = Math.cos(tilt), ts = Math.sin(tilt);
+    const geo = geometry(), rgb = bands.map(hexToRgb), sx = ux * tc + uy * ts, sy = uy * tc - ux * ts, sz = uz, P = [];
+    for (let i = 0; i <= rows; i++) {
+      const lat = -Math.PI / 2 + Math.PI * i / rows, row = [];
+      for (let k = 0; k < segments; k++) { const lon = k / segments * TAU; row.push([Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]); }
+      P.push(row);
+    }
+    const shade = (n) => 0.18 + 0.82 * Math.max(0, n[0] * sx + n[1] * sy + n[2] * sz);
+    for (let i = 0; i < rows; i++) for (let k = 0; k < segments; k++) {
+      const k2 = (k + 1) % segments, q = [P[i][k], P[i][k2], P[i + 1][k2], P[i + 1][k]], n = unit(q[0][0] + q[2][0], q[0][1] + q[2][1], q[0][2] + q[2][2]);
+      const base = rgb[Math.min(rgb.length - 1, Math.floor(i / rows * rgb.length))], k0 = shade(n);
+      const ids = q.map(([x, y, z]) => pushVert(geo, x * r, y * r, z * r));
+      face(geo, ids.reverse(), base.map((v) => Math.min(255, Math.round(v * k0))), { emissive: 1 });
+    }
+    const parts = [geo];
+    if (rings) {
+      const [r0, r1, colours] = rings, ring = geometry(), n = colours.length, lit = 0.35 + 0.65 * Math.abs(sy);
+      for (let b = 0; b < n; b++) for (let k = 0; k < 48; k++) {
+        const ra = r0 + (r1 - r0) * b / n, rb = r0 + (r1 - r0) * (b + 0.85) / n, a0 = k / 48 * TAU, a1 = (k + 1) / 48 * TAU;
+        const pts = [[ra, a0], [rb, a0], [rb, a1], [ra, a1]].map(([rr, a]) => [Math.cos(a) * rr, 0, Math.sin(a) * rr]);
+        const col = hexToRgb(colours[b]).map((v) => Math.round(v * lit)), ids = pts.map(([x, y, z]) => pushVert(ring, x, y, z)), back = pts.map(([x, y, z]) => pushVert(ring, x, y, z));
+        face(ring, ids, col, { emissive: 1 });
+        face(ring, back.reverse(), col, { emissive: 1 });
+      }
+      parts.push(ring);
+    }
+    const out = merge(...parts);
+    if (tilt) turnedZ(out, tilt);
+    return noShadow(out);
+  };
+  const sky = variants((sparse) => {
+    const rand = mulberry32(2140 + sparse), R = SKY.r, stars = geometry(), band = geometry();
+    // Stars, thicker toward the zenith the dome frames; a few big and coloured.
+    for (let i = 0; i < (sparse ? 260 : 1100); i++) {
+      const y = 0.1 + 0.9 * Math.sqrt(rand()), a = rand() * TAU, s = Math.sqrt(1 - y * y), big = rand() < 0.06, size = big ? 1.4 + rand() * 1.2 : 0.45 + rand() * 0.6;
+      const tone = rand(), color = tone < 0.6 ? "#f4f6ff" : tone < 0.8 ? "#bcd4ff" : tone < 0.93 ? "#ffe6b0" : "#ffb8a0";
+      facingIn(stars, [Math.cos(a) * s, y, Math.sin(a) * s], R, size, size, rand() * TAU, color, 1);
+    }
+    // The galaxy's band: a great circle across the sky tipped toward the dome, soft puffs along it.
+    const [nx, ny, nz] = unit(...SKY.band), ex = unit(ny, -nx, 0), fx = [ny * ex[2] - nz * ex[1], nz * ex[0] - nx * ex[2], nx * ex[1] - ny * ex[0]];
+    const hazes = ["#3a1f6e", "#5a2a86", "#20507a", "#2a6a8a", "#6a3a9a"];
+    for (let i = 0; i < (sparse ? 40 : 150); i++) {
+      const a = rand() * TAU, off = (rand() - 0.5) * 0.42 * (0.5 + rand());
+      const d = unit(ex[0] * Math.cos(a) + fx[0] * Math.sin(a) + nx * off, ex[1] * Math.cos(a) + fx[1] * Math.sin(a) + ny * off, ex[2] * Math.cos(a) + fx[2] * Math.sin(a) + nz * off);
+      if (d[1] < 0.05) continue;
+      const w = 30 + rand() * 50;
+      facingIn(band, d, R * 1.02, w, w * (0.5 + rand() * 0.5), rand() * TAU, hazes[Math.floor(rand() * hazes.length)], 0.7);
+    }
+    band.glass = 0.16;
+    // Bright knots and a dust of stars in the band.
+    for (let i = 0; i < (sparse ? 60 : 320); i++) {
+      const a = rand() * TAU, off = (rand() - 0.5) * 0.18;
+      const d = unit(ex[0] * Math.cos(a) + fx[0] * Math.sin(a) + nx * off, ex[1] * Math.cos(a) + fx[1] * Math.sin(a) + ny * off, ex[2] * Math.cos(a) + fx[2] * Math.sin(a) + nz * off);
+      if (d[1] < 0.05) continue;
+      const size = 0.35 + rand() * 0.7;
+      facingIn(stars, d, R * 0.99, size, size, rand() * TAU, rand() < 0.5 ? "#e8ddff" : "#c8f0ff", 1);
+    }
+    const at = (x, y, z, r) => { const d = unit(x, y, z); return { x: d[0] * r, y: d[1] * r, z: d[2] * r }; };
+    const planets = [
+      // A ringed giant in amber and cream, high over the far side of the dome.
+      { at: at(0.35, 0.72, -0.62, 250), geometry: planet({ r: 26, tilt: 0.38, bands: ["#8a5a2e", "#c9955a", "#e8cf9a", "#b8783e", "#f0dcae", "#a8703a", "#d9b27a", "#7a4a26"], rings: [36, 60, ["#c8a878", "#e6d2a8", "#9a8060", "#dcc294", "#b89a70"]] }) },
+      // A small red world.
+      { at: at(-0.55, 0.5, -0.67, 280), geometry: planet({ r: 8, bands: ["#6a2a1e", "#a8432a", "#c8603a", "#a8432a", "#7a301e"], rows: 10, segments: 16 }) },
+      // An ice world with a moon of its own.
+      { at: at(-0.18, 0.84, 0.5, 300), geometry: planet({ r: 12, bands: ["#9ad4e8", "#c8ecf8", "#7ab8d8", "#e8f8ff", "#8ac4e0"], rows: 10, segments: 18 }) },
+      { at: at(-0.08, 0.86, 0.5, 300), geometry: planet({ r: 3, bands: ["#9a9aa8", "#c8c8d4", "#8a8a98"], rows: 6, segments: 10 }) }
+    ];
+    // Shooting stars: a bright head trailing a thinning tail, each laid along its own way across the upper sky.
+    const meteors = [];
+    for (let i = 0; i < 6; i++) {
+      const a = rand() * TAU, y = 0.45 + rand() * 0.4, s = Math.sqrt(1 - y * y), d = [Math.cos(a) * s, y, Math.sin(a) * s];
+      const dir = unit(-d[2] + (rand() - 0.5) * 0.3, -0.35 - rand() * 0.3, d[0] + (rand() - 0.5) * 0.3), geo = geometry(), len = 26 + rand() * 18, r = SKY.r * 0.95;
+      for (let k = 0; k < 8; k++) {
+        const t0 = k / 8, t1 = (k + 1) / 8, w0 = 0.9 * (1 - t0) + 0.05, w1 = 0.9 * (1 - t1) + 0.05;
+        const p0 = [d[0] * r - dir[0] * len * t0, d[1] * r - dir[1] * len * t0, d[2] * r - dir[2] * len * t0], p1 = [d[0] * r - dir[0] * len * t1, d[1] * r - dir[1] * len * t1, d[2] * r - dir[2] * len * t1];
+        const side = unit(dir[1] * d[2] - dir[2] * d[1], dir[2] * d[0] - dir[0] * d[2], dir[0] * d[1] - dir[1] * d[0]);
+        const col = k < 2 ? "#ffffff" : k < 5 ? "#cfe4ff" : "#7aa8ff";
+        facing(geo, [[p0[0] - side[0] * w0, p0[1] - side[1] * w0, p0[2] - side[2] * w0], [p0[0] + side[0] * w0, p0[1] + side[1] * w0, p0[2] + side[2] * w0], [p1[0] + side[0] * w1, p1[1] + side[1] * w1, p1[2] + side[2] * w1], [p1[0] - side[0] * w1, p1[1] - side[1] * w1, p1[2] - side[2] * w1]], col, 1 - t0 * 0.6, 0, 0, 0);
+      }
+      meteors.push({ geometry: noShadow(geo), dir, len: len * 1.6 });
+    }
+    return { stars: noShadow(stars), band: noShadow(band), planets, meteors };
+  });
 
   // ---- the furniture ------------------------------------------------------------------------------------
 
@@ -717,7 +844,7 @@
   BL.bifrostModels = {
     HALL, ENTRY, WINDOW, WINDOW_TOP, FRAME, CORE, WINDOWS, SLOTS, PILLARS, PILLAR_R, NAME, MIRROR_Z, COURT, BENCHES, BENCH_R, PLANTERS, PLANTER_R, PLANTER_TOP,
     frameOf, inArch, hall, pillars, tunnel, entryField, archStone, archGlow, RIM_STEPS, portalRim, hanger, passage, pictureQuad, dsbStandIn, mirror, name,
-    coreBase, coreGlyph, coreRings, coreBeam, courtPosts, bench, planter, lighting, dressing, fieldSheet, swirl, archRing, banner,
+    SKY, sky, coreBase, coreGlyph, coreRings, coreBeam, shockwave, courtPosts, bench, planter, lighting, dressing, fieldSheet, swirl, archRing, banner,
     supportAt, clearAt, walkable, word, GLYPHS
   };
 })();

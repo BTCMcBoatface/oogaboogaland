@@ -33,14 +33,32 @@
   const PRESETS = {
     entrance: view(0, 3.2, -2, 0, 0.12, 13),
     core: view(0, 3.4, 0, 0.5, 0.16, 9.5),
-    dsb: toward(WINDOWS.findIndex((w) => w.id === "dsb"))
+    dsb: toward(WINDOWS.findIndex((w) => w.id === "dsb")),
+    // Low by the dais, looking up the beam through the open dome, the ringed giant beside it.
+    sky: view(0, 7, 0, -0.3, -0.7, 7)
   };
+  // Warm lamps inside, and over the open dome a clear night: the sky pass paints its gradient, its moon and its twinkling
+  // stars (turned with the scene's own sky by `starMatrix`), and the moon lights the hall a little, cool. `sun` is the
+  // sun's colour, which the stars' night hides.
+  const MOON = [-0.45, 0.72, 0.53].map((v, i, a) => v / Math.hypot(...a));
   const RENDER_OPTS = {
-    clear: [0.03, 0.035, 0.06], sky: [0.34, 0.3, 0.32], ground: [0.14, 0.11, 0.1],
-    direct: [0.55, 0.5, 0.46], directStrength: 0.3, ambientFloor: 0.32,
-    sun: { x: 0.2, y: 0.95, z: 0.25 }, shadowCenter: { x: 0, y: 3, z: 0 }, shadowExtent: 18,
+    clear: [0.01, 0.012, 0.035], sky: [0.3, 0.3, 0.38], ground: [0.13, 0.11, 0.1],
+    horizon: [0.07, 0.06, 0.18], zenith: [0.006, 0.008, 0.03], stars: 1, moon: { x: MOON[0], y: MOON[1], z: MOON[2] },
+    starMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    light: { x: MOON[0], y: MOON[1], z: MOON[2] }, sun: [0.05, 0.05, 0.08], direct: [0.42, 0.5, 0.68], directStrength: 0.32, ambientFloor: 0.3,
+    shadowCenter: { x: 0, y: 3, z: 0 }, shadowExtent: 18,
     lights: new Float32Array(BL.glRenderer.POINT_LIGHT_CAPACITY * 8), lightCount: 0, bloomStrength: 0.8
   };
+  // The mechanism charges as someone nears an open world's window: how fast it follows, the seconds between bursts, and
+  // the sparkles a burst throws. Bands of light run up the beam: how many of its drums one band spans, how many bands
+  // leave its foot a second at rest and fully charged, and the seconds a burst's surge takes to reach the sky and how
+  // many drums it lights at once.
+  const CHARGE_EASE = 2, BURST_GAP = [4.5, 1.6], BURST_FROM = 0.3;
+  const BAND = 9, BAND_RATE = [0.3, 2.4], SURGE_TIME = 1.3, SURGE_WIDTH = 2.5;
+  const SPARKLES = ["#ffc83a", "#fff2b8", "#7fe0ff", "#ffffff"].map((c) => models.particleGeometry(c, 0.1, 1));
+  // How fast the heavens turn (radians a second: a turn in a little over an hour), how long a shooting star lasts, and
+  // how long between them.
+  const SKY_TURN = 0.0015, METEOR_LIFE = 0.8, METEOR_GAP = [3, 9];
   // Tooltip and tap words; a window's tooltip is its world's name and the first.
   const TIPS = {
     core: ["₿IFRÖST · the mechanism", "The heart of ₿IFRÖST. It turns for now; one day it may do more."],
@@ -49,6 +67,7 @@
     mirror: ["Not open yet · a mirror for now", "Not open yet. Ooga still building this world; its window shows you yourself."]
   };
   // How the ₿'s rings turn, radians a second, and how each is tipped.
+  const TAU = Math.PI * 2;
   const RING_SPIN = [0.5, -0.35, 0.25], RING_TILT = [[Math.PI / 2, 0], [1.1, 0.5], [0.4, -0.9]];
   // The mirror's set-back: how far out from the glass the Ooga stands again, and how long the blue flash lasts.
   const SETBACK = 4.5, FLASH = 0.45;
@@ -190,15 +209,37 @@
       addChild(root, createNode({ position: { x, y: 0, z }, rotation: { x: 0, y: a, z: 0 }, geometry: BM.planter() }), createNode({ position: { x, y: BM.PLANTER_TOP, z }, rotation: { x: 0, y: k * 1.3, z: 0 }, geometry: BL.hubModels.bush(k % 3), sightHidden: true }));
     });
     BM.PILLARS.forEach((b, k) => addChild(root, createNode({ position: { x: Math.sin(b) * BM.PILLAR_R, y: HALL.wall, z: Math.cos(b) * BM.PILLAR_R }, rotation: { x: 0, y: k * 2.1, z: 0 }, scale: { x: 0.85, y: 0.85, z: 0.85 }, geometry: BL.hubModels.bush((k + 1) % 3), sightHidden: true })));
-    // The mechanism: the ₿ turning over the plinth inside its three rings, and the beam up to the crown.
+    // The mechanism: the ₿ turning over the plinth inside its three rings, and the beam up into the sky.
     s.glyph = createNode({ position: { x: 0, y: CORE.glyphY, z: 0 }, geometry: BM.coreGlyph() });
-    s.beam = createNode({ geometry: BM.coreBeam(), sightHidden: true });
+    const beam = BM.coreBeam();
+    s.beam = beam.rows.map((row) => ({ node: createNode({ position: { x: 0, y: row.y, z: 0 }, scale: { x: row.r, y: row.h, z: row.r }, geometry: beam.geometry, sightHidden: true }), r: row.r }));
     BM.coreRings().forEach((geometry, i) => {
       const spin = createNode({ position: { x: 0, y: CORE.glyphY, z: 0 } });
       addChild(spin, createNode({ rotation: { x: RING_TILT[i][0], y: 0, z: RING_TILT[i][1] }, geometry }));
       s.rings.push(spin);
     });
-    addChild(root, s.glyph, s.beam, ...s.rings);
+    addChild(root, s.glyph, ...s.beam.map((b) => b.node), ...s.rings);
+    // The mechanism's charge, the bands running up its beam and a burst's surge (1 when none is climbing), and its two
+    // shockwaves: one round the ₿, one across the floor.
+    s.charge = 0; s.flare = 0; s.burstWait = BURST_GAP[0]; s.bob = 0; s.flow = 0; s.surge = 1;
+    s.shocks = [[CORE.glyphY, 5], [0.03, 9]].map(([y, reach]) => {
+      const node = createNode({ position: { x: 0, y, z: 0 }, geometry: BM.shockwave(), visible: false, sightHidden: true });
+      addChild(root, node);
+      return { node, t: 1, reach };
+    });
+    // The sky over the open dome, lighter on Canvas 2D: stars, the galaxy's band, the planets and the shooting stars
+    // waiting their turn, all on one node that turns the heavens.
+    const night = BM.sky(renderer.kind === "canvas2d" ? 1 : 0);
+    s.sky = createNode();
+    addChild(s.sky, createNode({ geometry: night.stars, sightHidden: true }), createNode({ geometry: night.band, sightHidden: true }));
+    for (const p of night.planets) addChild(s.sky, createNode({ position: { x: p.at.x, y: p.at.y, z: p.at.z }, geometry: p.geometry, sightHidden: true }));
+    s.meteors = night.meteors.map((m) => {
+      const node = createNode({ geometry: m.geometry, visible: false, sightHidden: true });
+      addChild(s.sky, node);
+      return { node, dir: m.dir, len: m.len, t: 1 };
+    });
+    s.meteorWait = METEOR_GAP[0];
+    addChild(root, s.sky);
     // The field at the tunnel's far end, facing back in: the sheet, the swirl that turns on it, and the ripples.
     const fieldGroup = createNode({ position: { x: 0, y: 0, z: ENTRY.field }, rotation: { x: 0, y: Math.PI, z: 0 } });
     s.swirl = createNode({ position: { x: 0, y: field.swirlY, z: 0 }, geometry: field.swirl, sightHidden: true });
@@ -292,7 +333,7 @@
     const pictured = ctx.from !== null && takePicture();
     pictureTries = pictured ? 0 : PICTURE_TRIES;
     pictureWait = 0;
-    camera = createCamera({ fov: 55, near: 0.3, far: 90 });
+    camera = createCamera({ fov: 55, near: 0.3, far: 700 });
     root = createNode();
     hud = hudMod.create({ roster: contributors.activeRoster, catalog: models.SWAG, tierColors: models.TIER_COLORS, renderIcon: hudMod.renderIcon, lootEnabled: ctx.lootEnabled });
     if (window.matchMedia("(max-width: 720px), (max-height: 500px)").matches) hud.el.sheet.dataset.open = "false";
@@ -432,15 +473,87 @@
     }
   };
 
+  // The mechanism, charged by how near anyone stands to an open world's window: the ₿ spins faster and bobs, its rings
+  // whirl, and the light in the beam flows upward, a slow shimmer at rest and a rush fully charged; and once it is
+  // charged it bursts now and then, throwing sparkles, two shockwaves and a flare, and sending a surge up the beam.
+  const mechanism = (s, dt, elapsed) => {
+    let want = 0;
+    for (let i = 0; i < s.windows.length; i++) if (s.windows[i].kind === "travel") want = Math.max(want, s.windows[i].near);
+    const k = (s.charge += (want - s.charge) * Math.min(1, dt * CHARGE_EASE));
+    s.glyph.rotation.y += dt * (0.6 + 5 * k);
+    s.bob += dt * (1.5 + 4 * k);
+    s.glyph.position.y = CORE.glyphY + Math.sin(s.bob) * 0.06 * (0.4 + k);
+    s.glyph.scale.x = s.glyph.scale.y = s.glyph.scale.z = 1 + (0.04 * k + 0.12 * s.flare) * (1 + Math.sin(elapsed * 9));
+    for (let i = 0; i < s.rings.length; i++) s.rings[i].rotation.y += dt * RING_SPIN[i] * (1 + 7 * k);
+    // The beam: bands of light leave its foot and climb, lengthening and speeding up with its drums; they come faster,
+    // deeper and brighter as the charge builds and swell the beam a little as they pass, and a surge outshines them all.
+    s.flow += dt * (BAND_RATE[0] + (BAND_RATE[1] - BAND_RATE[0]) * k);
+    s.surge = Math.min(1, s.surge + dt / SURGE_TIME);
+    const depth = 0.25 + 0.35 * k, at = s.surge * (s.beam.length + 2 * SURGE_WIDTH) - SURGE_WIDTH;
+    for (let i = 0; i < s.beam.length; i++) {
+      const b = s.beam[i], u = 0.5 + 0.5 * Math.sin(TAU * (i / BAND - s.flow)), band = u * u * u, d = (i - at) / SURGE_WIDTH;
+      const surge = s.surge < 1 ? Math.exp(-d * d) : 0;
+      b.node.glow = (0.8 + 0.4 * k) * (1 - depth * (1 - band)) + surge;
+      b.node.highlight = band * (0.1 + 0.7 * k) + 1.2 * surge;
+      b.node.scale.x = b.node.scale.z = b.r * (1 + 0.35 * k + band * (0.04 + 0.16 * k) + 0.9 * surge);
+    }
+    // Bursts, once charged: sparkles, the shockwaves, a flare and a surge up the beam.
+    s.flare = Math.max(0, s.flare - dt * 1.8);
+    if (k > BURST_FROM) {
+      s.burstWait -= dt;
+      if (s.burstWait <= 0) {
+        s.burstWait = BURST_GAP[0] + (BURST_GAP[1] - BURST_GAP[0]) * k + Math.random() * 1.2;
+        fx.burst(0, CORE.glyphY, 0, Math.round(18 + 30 * k), SPARKLES, 4 + 4 * k);
+        for (let i = 0; i < s.shocks.length; i++) { s.shocks[i].t = 0; s.shocks[i].node.visible = true; }
+        s.flare = 1;
+        s.surge = 0;
+      }
+    } else s.burstWait = Math.max(s.burstWait, BURST_GAP[1]);
+    for (let i = 0; i < s.shocks.length; i++) {
+      const w = s.shocks[i];
+      if (w.t >= 1) continue;
+      w.t = Math.min(1, w.t + dt / 0.9);
+      const r = 0.6 + w.reach * (1 - (1 - w.t) * (1 - w.t));
+      w.node.scale.x = w.node.scale.z = r;
+      w.node.glow = 1.5 * (1 - w.t);
+      w.node.smokeOpacity = Math.min(1, 3 * (1 - w.t));
+      w.node.visible = w.t < 1;
+    }
+    // The core's light swells with the charge and flares with a burst.
+    const L = RENDER_OPTS.lights, lift = 1 + 1.2 * k + 3 * s.flare;
+    L[4] = 0.85 * lift; L[5] = 0.55 * lift; L[6] = 0.22 * lift;
+  };
+
+  // The heavens turn slowly overhead, and the sky pass's stars with them, while the moon stays where the hall's light
+  // comes from; now and then a shooting star streaks down its way and fades.
+  const heavens = (s, dt) => {
+    const a = (s.sky.rotation.y += dt * SKY_TURN), c = Math.cos(a), sn = Math.sin(a), M = RENDER_OPTS.starMatrix;
+    M[0] = c; M[2] = sn; M[6] = -sn; M[8] = c;
+    s.meteorWait -= dt;
+    if (s.meteorWait <= 0) {
+      s.meteorWait = METEOR_GAP[0] + Math.random() * (METEOR_GAP[1] - METEOR_GAP[0]);
+      const m = s.meteors[Math.floor(Math.random() * s.meteors.length)];
+      if (m.t >= 1) { m.t = 0; m.node.visible = true; }
+    }
+    for (let i = 0; i < s.meteors.length; i++) {
+      const m = s.meteors[i];
+      if (m.t >= 1) continue;
+      m.t = Math.min(1, m.t + dt / METEOR_LIFE);
+      const k = m.t * m.len;
+      m.node.position.x = m.dir[0] * k; m.node.position.y = m.dir[1] * k; m.node.position.z = m.dir[2] * k;
+      m.node.glow = 1.4 * (1 - m.t);
+      m.node.smokeOpacity = Math.min(1, 3 * (1 - m.t));
+      m.node.visible = m.t < 1;
+    }
+  };
+
   const update = (dt, elapsed) => {
     const s = scene;
     pilot.readInput(dt);
     if (people) people.update(dt, elapsed);
     pilot.update(dt);
-    // The mechanism: the ₿ turns, its rings turn about it, and the beam breathes.
-    s.glyph.rotation.y += dt * 0.6;
-    for (let i = 0; i < s.rings.length; i++) s.rings[i].rotation.y += dt * RING_SPIN[i];
-    s.beam.scale.x = s.beam.scale.z = 1 + Math.sin(elapsed * 2.2) * 0.12;
+    mechanism(s, dt, elapsed);
+    heavens(s, dt);
     s.swirl.rotation.z -= dt * 0.9;
     // The way out's field hums and shows the outline of whoever walks through it.
     const g = s.gate;
