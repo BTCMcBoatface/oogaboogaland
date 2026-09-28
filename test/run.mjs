@@ -18,6 +18,25 @@ const { solidPropsProbe } = (() => {
     solids.add(box); solids.add(box); sync(box);
     rows.push({ name: "solid volume and swept sides", ok: solids.stats.nodes === 1 && !solids.clearAt(0, 0.2, 0, 0.2, 0.4) && !solids.segmentClear(-3, 0.2, 0, 3, 0.2, 0, 0.2, 1) && solids.clearAt(2, 0, 0, 0.2, 1) });
     rows.push({ name: "landing footprint and head clearance", ok: solids.supportAt(0, 0, 3, 0, 0.2) === 2 && solids.supportAt(1.1, 0, 3, 0, 0.2) === 2 && solids.clearAt(0, 2, 0, 0.2, 1) && solids.ceilingAt(0, 0, -2, 0.2) === 0 && solids.ceilingAt(3, 0, -2, 0.2) === Infinity });
+    // Raising a rider next to a mesh can leave a shallow side overlap. Recover in ordinary short walking
+    // steps, including mirrored mesh winding, without granting entry or tunnelling through another prop.
+    const recovery = [];
+    for (const sign of [1, -1]) {
+      box.scale.x = sign; sync(box);
+      const strict = !solids.segmentClear(sign * 1.1, 0.8, 0, sign * 1.15, 0.8, 0, 0.3, 1.5);
+      const inward = !solids.escapeSegmentClear(sign * 1.1, 0.8, 0, sign * 1.05, 0.8, 0, 0.3, 1.5);
+      const entry = !solids.escapeSegmentClear(sign * 1.6, 0.8, 0, sign * 1.15, 0.8, 0, 0.3, 1.5);
+      const inside = !solids.escapeSegmentClear(sign * 0.95, 0.8, 0, sign * 1.05, 0.8, 0, 0.3, 1.5);
+      let escaped = true, x = sign * 1.1;
+      for (let i = 0; i < 5; i++) { const nx = x + sign * 0.05; escaped &&= solids.escapeSegmentClear(x, 0.8, 0, nx, 0.8, 0, 0.3, 1.5); x = nx; }
+      recovery.push(strict && inward && entry && inside && escaped && solids.clearAt(x, 0.8, 0, 0.3, 1.5));
+    }
+    box.scale.x = 1;
+    const post = scene.createNode({ geometry: models.box({ w: 0.04, h: 3, d: 2, color: "#fff" }), position: { x: 2.1, y: 1.5, z: 0 } });
+    solids.add(post); sync(box); sync(post);
+    rows.push({ name: "raised rider escapes existing mesh contact without entering solids", ok: recovery.every(Boolean)
+      && !solids.escapeSegmentClear(1.1, 0.8, 0, 2.5, 0.8, 0, 0.3, 1.5), recovery });
+    solids.remove(post);
     box.rotation.z = 0.4; box.scale.x = 2; box.scale.z = 0.5; box.position.x = 5; sync(box);
     const tiltedTop = solids.supportAt(5, 0, 10, 0, 0.3);
     rows.push({ name: "rotation and nonuniform scale", ok: tiltedTop > 2 && tiltedTop < 2.5 && !solids.clearAt(5, 0.5, 0, 0.2, 0.3) && solids.clearAt(5, tiltedTop, 0, 0.3, 1.5) && solids.clearAt(5, 0.5, 0, 0.2, 0.3, box), top: tiltedTop });
@@ -7403,7 +7422,7 @@ const unitChecks = async () => {
   }
   {
     const meshes = solidPropsProbe();
-    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings while preserving gate and aircraft openings`, meshes.length === 13 && meshes.every((row) => row.ok), JSON.stringify(meshes));
+    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings while preserving gate and aircraft openings`, meshes.length === 14 && meshes.every((row) => row.ok), JSON.stringify(meshes));
   }
   {
     const r = windowFlareProbe();

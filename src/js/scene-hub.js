@@ -3225,7 +3225,7 @@
     }
     return true;
   };
-  const clankerSegmentClear = (x, y, z, toX, toY, toZ, radius, height, ignore = null) => {
+  const clankerSegmentClear = (x, y, z, toX, toY, toZ, radius, height, ignore = null, escaping = false) => {
     // The landing surface and its sides use the same animated mesh. The broad
     // companion envelopes intentionally include empty air above a hunched back.
     // Keep the established full-arm gap for an ordinary walk at ground level.
@@ -3234,11 +3234,11 @@
       if (other !== ignore && other.active && Math.min(y, toY) <= other.root.position.y + STEP_MAX + 1e-5
         && !clankerBodySegmentClear(other, x, y, z, toX, toY, toZ, Math.max(radius, BODY_RADIUS), height)) return false;
     }
-    return !clankerMeshes || clankerMeshes.segmentClear(x, y, z, toX, toY, toZ,
+    return !clankerMeshes || (escaping ? clankerMeshes.escapeSegmentClear : clankerMeshes.segmentClear)(x, y, z, toX, toY, toZ,
       Math.max(radius, BODY_RADIUS), height, ignore && ignore.root);
   };
-  const propSegmentClear = (x, y, z, toX, toY, toZ, radius, height, actor, carrying = false, ignoreClanker = null) => {
-    if (solids && !solids.segmentClear(x, y, z, toX, toY, toZ, radius, height)) return false;
+  const propSegmentClear = (x, y, z, toX, toY, toZ, radius, height, actor, carrying = false, ignoreClanker = null, escaping = false) => {
+    if (solids && !(escaping ? solids.escapeSegmentClear : solids.segmentClear)(x, y, z, toX, toY, toZ, radius, height)) return false;
     if (altar && !cylinderSegmentClear(x, y, z, toX, toY, toZ, radius, height, 0, 0, 0, ALTAR_HEIGHT, altar.platformRadius)) return false;
     if (crew) for (let otherIndex = 0; otherIndex < crew.list.length; otherIndex++) {
       const other = crew.list[otherIndex];
@@ -3248,7 +3248,7 @@
         if (!terrain.segmentBoxClear(x, y, z, toX - x, toY - y, toZ - z, radius, height, b[0], b[1], b[2], b[3], b[4], b[5])) return false;
       } else if (!cylinderSegmentClear(x, y, z, toX, toY, toZ, radius, height, p.x, p.z, b[1], b[4], BODY_RADIUS)) return false;
     }
-    return clankerSegmentClear(x, y, z, toX, toY, toZ, radius, height, ignoreClanker);
+    return clankerSegmentClear(x, y, z, toX, toY, toZ, radius, height, ignoreClanker, escaping);
   };
   const bedSupportAt = (x, z, y, maxStep, radius) => {
     let floor = -Infinity;
@@ -3573,8 +3573,8 @@
     }
     return ceiling;
   };
-  const ceilingAt = (x, z, y, actor = pilot?.player, passengers = true) => {
-    let ceiling = Math.min(island.ceilingAt(x, y, z, PLAYER_RADIUS), entranceCeilingAt(x, z, y, PLAYER_RADIUS), bedCeilingAt(x, z, y, PLAYER_RADIUS), matrixGateCeilingAt(x, z, y), propCeilingAt(x, z, y, PLAYER_RADIUS, actor));
+  const ceilingAt = (x, z, y, actor = pilot?.player, passengers = true, props = true) => {
+    let ceiling = Math.min(island.ceilingAt(x, y, z, PLAYER_RADIUS), entranceCeilingAt(x, z, y, PLAYER_RADIUS), bedCeilingAt(x, z, y, PLAYER_RADIUS), matrixGateCeilingAt(x, z, y), props ? propCeilingAt(x, z, y, PLAYER_RADIUS, actor) : Infinity);
     for (let i = 0; i < CAMERA_OPENINGS.length; i++) {
       const entry = CAMERA_OPENINGS[i], m = entry.mouth, rim = entry.rim;
       const dx = x - m.x, dz = z - m.z, along = dx * entry.sr + dz * entry.cr, across = dx * entry.cr - dz * entry.sr;
@@ -3586,7 +3586,7 @@
       if (rider === actor || !passengerOf(rider, actor)) continue;
       const from = actor.riding, riding = rider.riding;
       const offset = riding.y - rider.baseY - from.y + actor.baseY;
-      const roof = ceilingAt(x + riding.x - from.x, z + riding.z - from.z, y + offset, rider, false);
+      const roof = ceilingAt(x + riding.x - from.x, z + riding.z - from.z, y + offset, rider, false, props);
       // Convert each passenger's headroom into a limit for the lower body.
       // Upward motion cannot push it through a roof; level travel may leave a passenger at a wall.
       ceiling = Math.min(ceiling, roof - offset - rider.bodyHeight - Math.max(0, rider.viewLift) + actor.bodyHeight + Math.max(0, actor.viewLift));
@@ -3817,6 +3817,18 @@
     return false;
   };
   // Bananas are passable; the visitor must jump onto their stone platform.
+  const playerEscapeClear = (fromX, fromZ, toX, toZ, y, height, actor, step) => {
+    if (!actor || actor !== pilot.player || fromX === toX && fromZ === toZ) return false;
+    // Endpoint-only head/body checks cannot free a pre-existing mesh overlap. The recovery sweep checks
+    // every touched face instead, while terrain, beds, gates and mirrors retain their ordinary rules.
+    return y + height <= ceilingAt(toX, toZ, y, actor, true, false) + 1e-7
+      && island.clearAt(toX, y + step, toZ, PLAYER_RADIUS, Math.max(0, height - step))
+      && island.voxelSegmentClearAt(fromX, y + step, fromZ, toX, y + step, toZ, PLAYER_RADIUS, Math.max(0, height - step))
+      && propSegmentClear(fromX, y + step, fromZ, toX, y + step, toZ, PLAYER_RADIUS, Math.max(0, height - step), actor, false, null, true)
+      && bedSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height)
+      && matrixGateSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height)
+      && mirrorActorSegmentClear(fromX, y, fromZ, toX, y, toZ, height, actor);
+  };
   const walkable = (fromX, fromZ, toX, toZ, y, height = 1.5, actor = pilot?.player) => {
     if (Math.hypot(toX, toZ) > FLY_BOUND || crossesSealedCave(fromX, fromZ, toX, toZ, y)) return false;
     // Sweep the feet before ordinary step assistance lifts them. Once above
@@ -3826,9 +3838,12 @@
     if (floor - y > STEP_MAX) return false;
     // Feet may mount an ordinary voxel step.
     // Torso and head must fit across their whole footprint at the destination's actual elevation.
-    return feet + height <= ceilingAt(toX, toZ, feet, actor) + 1e-7 && physicalClearAt(toX, feet + STEP_MAX, toZ, PLAYER_RADIUS, Math.max(0, height - STEP_MAX), actor) && propSegmentClear(fromX, feet + STEP_MAX, fromZ, toX, feet + STEP_MAX, toZ, PLAYER_RADIUS, Math.max(0, height - STEP_MAX), actor) && matrixGateSegmentClear(fromX, y, fromZ, toX, feet, toZ, PLAYER_RADIUS, height) && mirrorActorSegmentClear(fromX, y, fromZ, toX, feet, toZ, height, actor);
+    return feet + height <= ceilingAt(toX, toZ, feet, actor) + 1e-7 && physicalClearAt(toX, feet + STEP_MAX, toZ, PLAYER_RADIUS, Math.max(0, height - STEP_MAX), actor) && propSegmentClear(fromX, feet + STEP_MAX, fromZ, toX, feet + STEP_MAX, toZ, PLAYER_RADIUS, Math.max(0, height - STEP_MAX), actor) && matrixGateSegmentClear(fromX, y, fromZ, toX, feet, toZ, PLAYER_RADIUS, height) && mirrorActorSegmentClear(fromX, y, fromZ, toX, feet, toZ, height, actor)
+      || feet === y && playerEscapeClear(fromX, fromZ, toX, toZ, y, height, actor, STEP_MAX);
   };
-  const flyable = (fromX, fromZ, toX, toZ, y = 0, height = 1.5, actor = pilot?.player) => Math.hypot(toX, toZ) <= FLY_BOUND && !crossesSealedCave(fromX, fromZ, toX, toZ, y) && y + height <= ceilingAt(toX, toZ, y, actor) + 1e-7 && physicalClearAt(toX, y, toZ, PLAYER_RADIUS, height, actor) && propSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height, actor) && bedSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height) && matrixGateSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height) && mirrorActorSegmentClear(fromX, y, fromZ, toX, y, toZ, height, actor);
+  const flyable = (fromX, fromZ, toX, toZ, y = 0, height = 1.5, actor = pilot?.player) => Math.hypot(toX, toZ) <= FLY_BOUND && !crossesSealedCave(fromX, fromZ, toX, toZ, y)
+    && (y + height <= ceilingAt(toX, toZ, y, actor) + 1e-7 && physicalClearAt(toX, y, toZ, PLAYER_RADIUS, height, actor) && propSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height, actor) && bedSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height) && matrixGateSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height) && mirrorActorSegmentClear(fromX, y, fromZ, toX, y, toZ, height, actor)
+      || playerEscapeClear(fromX, fromZ, toX, toZ, y, height, actor, 0));
   const characterCarryClear = (cave, x, y, z, toX, toY, toZ, ignoreClanker = null) => {
     const height = cave.bodyHeight + Math.max(0, cave.viewLift), feet = y + 1e-7, toFeet = toY + 1e-7;
     return Math.hypot(toX, toZ) <= FLY_BOUND && !crossesSealedCave(x, z, toX, toZ, Math.min(y, toY))
@@ -3880,7 +3895,7 @@
       math.mat4.invert(CLANKER_RIDER_INVERSE, ride.node.world);
       math.mat4.transformPoint(CLANKER_RIDER_POINT, CLANKER_RIDER_INVERSE, p.x, feet, p.z);
       ride.localX = CLANKER_RIDER_POINT[0]; ride.localY = CLANKER_RIDER_POINT[1]; ride.localZ = CLANKER_RIDER_POINT[2];
-      jumpOffClanker(cave, ride, elapsed);
+      if (cave !== pilot.player) jumpOffClanker(cave, ride, elapsed);
     }
   };
   const clankerRidersClear = (entry, x, y, z, toX, toY, toZ, fromHeading, toHeading) => {
@@ -8173,7 +8188,7 @@
     // Mounting one would interrupt the return to the walking line.
     shared.shoulderPropClear = (cave, x, z) => {
       const p = cave.root.position, feet = p.y - cave.baseY + 1e-5;
-      return solids.segmentClear(p.x, feet, p.z, x, feet, z, PLAYER_RADIUS, cave.bodyHeight - 1e-5);
+      return (cave === pilot.player ? solids.escapeSegmentClear : solids.segmentClear)(p.x, feet, p.z, x, feet, z, PLAYER_RADIUS, cave.bodyHeight - 1e-5);
     };
     shared.onBodyMove = moveCampBody;
     mirrorCave.damage = BL.mirrorDamage.create(mirrorCave.node, (geometry) => renderer.releaseGeometry(geometry), (x, z, y) => island.supportAt(x, z, y, 0));

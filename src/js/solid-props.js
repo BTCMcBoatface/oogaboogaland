@@ -1,5 +1,5 @@
 // Props whose render mesh is also their collision shell, over one local-space tree per geometry. The API
-// from `create` is `add`, `remove`, `sync`, `segmentClear`, `clearAt`, `supportAt`, `ceilingAt`,
+// from `create` is `add`, `remove`, `sync`, `segmentClear`, `escapeSegmentClear`, `clearAt`, `supportAt`, `ceilingAt`,
 // `shoulderAt` and `isActive`.
 (() => {
   "use strict";
@@ -330,8 +330,9 @@
       }
       return winding > 0;
     };
-    const segmentClear = (x, y, z, toX, toY, toZ, radius, height, ignore = null, toRadius = radius, toHeight = height, skipGorillaSteps = false, skipClimbMasonry = false) => {
+    const segmentClear = (x, y, z, toX, toY, toZ, radius, height, ignore = null, toRadius = radius, toHeight = height, skipGorillaSteps = false, skipClimbMasonry = false, escape = false) => {
       stats.queries++;
+      escape = escape && y === toY && radius === toRadius && height === toHeight && (x !== toX || z !== toZ);
       const x0 = Math.min(x - radius, toX - toRadius), x1 = Math.max(x + radius, toX + toRadius), y0 = Math.min(y, toY), y1 = Math.max(y + height, toY + toHeight),
         z0 = Math.min(z - radius, toZ - toRadius), z1 = Math.max(z + radius, toZ + toRadius);
       for (let c = 0, count = gather(x0, z0, x1, z1); c < count; c++) {
@@ -352,7 +353,17 @@
             if (skipGorillaSteps && entry.geometry.gorillaStep[index]) continue;
             transformTriangle(entry, index);
             if (Math.max(triangle[1], triangle[4], triangle[7]) <= y0 + EPS || Math.min(triangle[1], triangle[4], triangle[7]) >= y1 - EPS) continue;
-            if (BL.convex.sweptCylinder(triangle, x, y, z, toX, toY, toZ, radius, height, toRadius, toHeight)) return false;
+            if (!BL.convex.sweptCylinder(triangle, x, y, z, toX, toY, toZ, radius, height, toRadius, toHeight)) continue;
+            // Animated supports can put the edge of a standing body into a neighbouring mesh. Only an
+            // existing contact may separate: fresh faces, inward travel and enclosed centres still block.
+            if (!escape || !BL.convex.sweptCylinder(triangle, x, y, z, x, y, z, radius, height)) return false;
+            const ux = triangle[3] - triangle[0], uy = triangle[4] - triangle[1], uz = triangle[5] - triangle[2];
+            const vx = triangle[6] - triangle[0], vy = triangle[7] - triangle[1], vz = triangle[8] - triangle[2];
+            const nx = (uy * vz - uz * vy) * entry.orientation, ny = (uz * vx - ux * vz) * entry.orientation,
+              nz = (ux * vy - uy * vx) * entry.orientation, tolerance = EPS * Math.hypot(nx, ny, nz);
+            const side = nx * (x - triangle[0]) + ny * (y + height / 2 - triangle[1]) + nz * (z - triangle[2]);
+            const away = nx * (toX - x) + nz * (toZ - z);
+            if (side < -tolerance || away < -tolerance) return false;
           }
         }
       }
@@ -559,6 +570,8 @@
     };
     return {
       add, remove, sync, segmentClear, shoulderAt, gorillaStepAt, gorillaBlendedStepAt, stats,
+      escapeSegmentClear: (x, y, z, toX, toY, toZ, radius, height, ignore = null) =>
+        segmentClear(x, y, z, toX, toY, toZ, radius, height, ignore, radius, height, false, false, true),
       isActive: (node) => !!registered.get(node)?.active,
       clearAt: (x, y, z, radius, height, ignore = null) => segmentClear(x, y, z, x, y, z, radius, height, ignore),
       supportAt: (x, z, y, maxStep = 0, radius = 0, ignore = null, out = null, skipGorillaSteps = false) => surfaceAt(x, z, y, maxStep, radius, ignore, 1, out, skipGorillaSteps),
