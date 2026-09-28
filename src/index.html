@@ -157,6 +157,7 @@
         <p data-scene="lab" hidden>EntropyLab cave</p>
         <p data-scene="pool" hidden>Mempool cave</p>
         <p data-scene="factory" hidden>Lightning Factory</p>
+        <p data-scene="bifrost" hidden>₿IFRÖST</p>
       </div>
       <time class="world-clock" id="world-clock" aria-label="Local time"></time>
       <div class="world-block" id="world-block" aria-live="polite" aria-label="Bitcoin block height unavailable">
@@ -199,6 +200,11 @@
         <button type="button" data-action="dsb-lookout">Turtle view</button>
         <button type="button" data-action="reset-view">Walk</button>
         <button type="button" data-action="dsb-mute" id="dsb-mute" aria-pressed="false">Mute</button>
+      </nav>
+      <nav class="presets" aria-label="₿IFRÖST" data-scene="bifrost" hidden>
+        <button type="button" data-preset="core">Core</button>
+        <button type="button" data-preset="dsb">DSB</button>
+        <button type="button" class="leave" data-action="leave">Leave<span> chamber</span></button>
       </nav>
       <nav class="presets" aria-label="Drop" data-scene="drop" hidden>
         <button type="button" data-action="drop-board" id="drop-board-btn">Board</button>
@@ -1134,6 +1140,8 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
   <script src="js/dsb-agent-brain.js"></script>
   <script src="js/dsb-agent.js"></script>
   <script src="js/scene-dsb.js"></script>
+  <script src="js/bifrost-models.js"></script>
+  <script src="js/scene-bifrost.js"></script>
   <script src="js/routes.js"></script>
   <script src="js/router.js"></script>
   <script src="js/director.js"></script>
