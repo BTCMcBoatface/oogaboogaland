@@ -45,6 +45,9 @@
   const PEER_OPENING = { minX: -2.1, maxX: 2.1, floorY: 0.1, ceilingY: 4.65 }, PEER_PLANE = 0.45, PEER_TINT = [0.3, 0.72, 1], NODE_RETURN = { x: 0, z: 1.6 };
   const view = (x, y, z, yaw, pitch, dist) => ({ yaw, pitch, dist, target: { x, y, z } });
   const bay = (i, dist = 11) => { const b = LAYOUT.bays[i]; return view(b.x * 0.9, b.y + 2, b.z, b.x < 0 ? 0.55 : -0.55, 0.22, dist); };
+  // Where whoever walked in stands: a step inside the gate, facing the core (yaw 0 turns the Ooga to PI), seen over
+  // its shoulder at the shoulder view's own pitch.
+  const ARRIVAL = { yaw: 0, pitch: 0.42, dist: FOLLOW.max, position: { x: 0, y: LAYOUT.entrance.y, z: LAYOUT.entrance.z + 1 } };
   // `entrance` is the balcony's view across the core; the rest frame one station each.
   const PRESETS = {
     entrance: view(0, 9, -6, 0, 0.07, 33),
@@ -758,10 +761,10 @@
       people = shared.crew = BL.crew.create(shared);
       pilot.bind(shared);
       avatar = people.cavemen.get(playerName);
-      const e = LAYOUT.entrance;
-      Object.assign(avatar.root.position, { x: 0, y: avatar.baseY + e.y, z: e.z + 1 });
-      avatar.root.rotation.y = Math.PI;
       pilot.possess(avatar);
+      // An arrival, as on the island: the Ooga stands a step inside the gate facing the core and the view starts
+      // settled over its shoulder, never sweeping in from wherever the new camera began.
+      pilot.navigate(ARRIVAL);
       scene.gate.phase.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
     }
     lightUp();

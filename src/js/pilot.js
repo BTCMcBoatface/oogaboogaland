@@ -2695,9 +2695,10 @@
       orbit.tx = orbit.target.x;
       orbit.ty = orbit.target.y;
       orbit.tz = orbit.target.z;
-      if (closeWanted && armed()) {
+      if (aimView()) {
         // Navigation is a new physical arrival, not a dolly from the old
-        // scene position. Start directly at its selected first-person eye.
+        // scene position or from where a fresh camera was left before a
+        // possess. Start directly at its selected shoulder or first-person eye.
         aimMix = 1; aimVelocity = 0;
         aimAtCursor = aimPreserveFacing = false;
       }

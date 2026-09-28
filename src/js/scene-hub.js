@@ -337,7 +337,7 @@
   const clankerGroundTarget = (owner) => owner.kind === "prop" && (owner.prop === "crate" || owner.prop === "barrel" || owner.prop === "rock");
   const CLANKER_CAVITY = { floor: 0, ceiling: 0, caveIndex: 0 };
   const JETPACK_HUD_STATE = { owned: false, equipped: false, fuel: 1, blocked: false };
-  let enteringTween = null, pitDeparting = false, pitArrival = null;
+  let enteringTween = null, pitDeparting = false, factoryDeparting = false, pitArrival = null;
   const pitArrivalPoint = { x: 0, y: 0, z: 0 };
   const pitPrevious = { x: 0, y: 0, z: 0 };
   let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null;
@@ -4717,9 +4717,12 @@
     const feet = p.y - player.baseY - m.floorY;
     if (along > shield || along < shield - 2 || Math.abs(across) > 2.4 || feet < o.floorY - 0.12 || feet >= o.ceilingY) return;
     f.phase.ripples.pulse(across, p.y - m.floorY + 1, 0);
-    entering = true;
+    // Through: still played, so the crew never stands it up and turns it back out to work, and it and the camera hold
+    // where it crossed (the update stops after this) while the ripple spreads and the screen goes dark.
+    entering = factoryDeparting = true;
     world.pilot = player.traits.name;
-    releaseForScene("factory");
+    f.snap = true;
+    pilot.controls.reset(); input.reset(); pilot.setActive(false); hud.tooltip.hide();
     go("factory");
   };
   // The Lightning Factory looks back out through its own end of this tunnel, so on the way in the island is
@@ -4783,7 +4786,7 @@
       && actionWithinReach(at.x, at.y + (player ? 1.1 - player.baseY : 0), at.z, point.x, point.y, point.z, 2);
   };
   const onTap = (hit, p) => {
-    if (pitArrival || pitGate?.isOpen) return;
+    if (pitArrival || factoryDeparting || pitGate?.isOpen) return;
     if (!hit) return;
     const o = hit.owner;
     switch (o.kind) {
@@ -6030,6 +6033,7 @@
     mirrorCave.ripples.update(dt, elapsed);
     entropyLab.phase.update(dt, elapsed);
     if (factoryMouth) factoryShield(dt, elapsed);
+    if (factoryDeparting) return; // The Ooga through the shield and its camera hold through the director fade.
     prepareClankerRiders();
     prepareClankerStrike();
     clankers.update(dt);
@@ -6895,7 +6899,7 @@
     location.reload();
   };
   const onKey = (e) => {
-    if (pitArrival) return;
+    if (pitArrival || factoryDeparting) return;
     if (clankerPlay.active) {
       if (!e.repeat && (e.key === "x" || e.key === "X")) clankerPlay.action("mode-toggle");
       return;
@@ -6930,7 +6934,7 @@
   const enter = (ctx) => {
     ({ renderer, game, world, go, lootEnabled, testBananas } = ctx);
     glCanvas = ctx.canvas;
-    pitDeparting = false; pitArrival = null;
+    pitDeparting = factoryDeparting = false; pitArrival = null;
     const travel = world.oogaPortalTravel;
     const pitReturn = ctx.from === "dsb" && travel?.from === "dsb" && travel.to === "hub" && travel.arrival === "pit" && travel.name === world.pilot;
     delete world.oogaPortalTravel; // Consume once; ordinary scene visits cannot inherit this route.
@@ -7417,7 +7421,7 @@
         else pilot.hooks.onZoom(factor, gesture, px, py);
       },
       onDoubleTap: (hit, p) => {
-        if (pitArrival) return;
+        if (pitArrival || factoryDeparting) return;
         if (hit && (hit.owner.prop === "timechainchair" || hit.owner.cave?.traits.name === "SaniExp" && timechainIsland?.seat.active)) { spinTimechainChair(); return; }
         if (hit && hit.owner.kind === "clanker") return;
         else {
