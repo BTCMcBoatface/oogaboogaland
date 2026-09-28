@@ -265,6 +265,15 @@
     let eye = { x: 0, y: 0, z: 0 }, near = 0.2, cutawayMaxY = Infinity;
     const lightDir = new Float32Array([0, 1, 0]);
     let directStrength = 1, ambientFloor = 0.3, diffuseFloor = 0, skyLuma = 0.5, groundLuma = 0.2;
+    let spotLight = null;
+    const spotEnergy = (x, y, z, nx, ny, nz) => {
+      if (!spotLight || spotLight[3] <= 0) return 0;
+      const dx = x - spotLight[0], dy = y - spotLight[1], dz = z - spotLight[2], dist = Math.hypot(dx, dy, dz);
+      if (dist < 0.0001 || dist >= spotLight[3]) return 0;
+      const angle = (dx * spotLight[4] + dy * spotLight[5] + dz * spotLight[6]) / dist;
+      const cone = smooth((angle - spotLight[7]) / (spotLight[11] - spotLight[7])), fade = 1 - dist / spotLight[3];
+      return cone * fade * fade * Math.max(0, -(nx * dx + ny * dy + nz * dz) / dist) / (1 + 0.005 * dist * dist);
+    };
     // Fog toward a colour; fogNear/fogFar start at 1e8/1e8+1 so it stays off until a frame sets one.
     const fogRgb = [0, 0, 0];
     let fogNear = 1e8, fogFar = 1e8 + 1;
@@ -415,6 +424,12 @@
           centerX /= count;
           centerY /= count;
           centerZ /= count;
+          let faceOpacity = opacity;
+          if (node.geometry.lightBeam) {
+            const along = ((centerX - w[12]) * w[0] + (centerY - w[13]) * w[1] + (centerZ - w[14]) * w[2]) / (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+            const fade = Math.max(0, Math.min(1, 1 - along / node.geometry.lightBeam));
+            faceOpacity *= fade * fade;
+          }
           // Mode 5 keeps its own palette in the Matrix; clouds are mode 4.
           const matrixNative = matrixMode > 4.5;
           const matrixCloud = matrixMode > 3.5 && !matrixNative;
@@ -575,7 +590,7 @@
               rec.n = clipped;
               rec.depth = zsum / clipped - (node.depthBias || 0);
               rec.line = false;
-              rec.smokeOpacity = opacity;
+              rec.smokeOpacity = faceOpacity;
               rec.mirror = mirrorFace;
               rec.mirrorNode = mirrorFace ? node : null;
               rec.imageNode = node.geometry.imageSurface ? node : null;
@@ -634,9 +649,10 @@
               const cb = lerp(c[2] * scorch, heat * (0.01 + ember * ember * ember * 0.74), ember * 0.9);
               const tip = node.tip > 1.5 ? 0 : node.tip || 0;
               const fog = localMatrixGlyph ? smooth((glyphDistance - fogNear) / (fogFar - fogNear)) : Math.min(1, Math.max(0, (-rec.depth - fogNear) / (fogFar - fogNear)));
-              let red = lerp(lerp(cr * k, 214, tip * 0.88), fogRgb[0], fog);
-              let green = lerp(lerp(cg * k, 255, tip * 0.88), fogRgb[1], fog);
-              let blue = lerp(lerp(cb * k, 227, tip * 0.88), fogRgb[2], fog);
+              const beam = localMatrixGlyph ? 0 : spotEnergy(centerX, centerY, centerZ, nx, ny, nz) * (1 - Math.min(1, emissive));
+              let red = lerp(lerp(cr * (k + (beam ? beam * spotLight[8] : 0)), 214, tip * 0.88), fogRgb[0], fog);
+              let green = lerp(lerp(cg * (k + (beam ? beam * spotLight[9] : 0)), 255, tip * 0.88), fogRgb[1], fog);
+              let blue = lerp(lerp(cb * (k + (beam ? beam * spotLight[10] : 0)), 227, tip * 0.88), fogRgb[2], fog);
               if (liquid) {
                 const time = node.portalTime, radius = Math.hypot(liquidX, liquidZ);
                 const interference = Math.sin(Math.hypot(liquidX - 0.22, liquidZ + 0.17) * 32 - time * 4)
@@ -1401,6 +1417,7 @@
         cutawayPlanes[at + 19] = s * x + c * z - region.halfDepth;
       }
       const { light = DEFAULT_LIGHT, directStrength: strength = 1, ambientFloor: ambient = 0.3, diffuseFloor: diffuse = 0, clear = null, sky = DEFAULT_SKY, ground = DEFAULT_GROUND, horizon = null, zenith = null, fog = null, fogNear: near0 = 0, fogFar: far0 = 0, matrix = null } = opts;
+      spotLight = opts.spotLight || null;
       matrixActive = matrix ? matrix.active : 0;
       matrixRadius = matrix ? matrix.radius : 0;
       matrixTime = matrix ? matrix.time : 0;

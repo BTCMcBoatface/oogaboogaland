@@ -115,6 +115,7 @@
   const { WALK } = BL.pilot;
   const WANDER_SPEED = 1.3, RUSH_SPEED = 2.8, PLAYER_SPEED = WALK.speed;
   const PLAYER_STEP = 0.125;
+  const LADDER_SPEED = 2.4;
   const SHOULDER_GAP = 0.68, SHOULDER_REACH = 1.3, SHOULDER_TWIST = 1.05;
   // A body the scene owns rather than the roster can be bigger than an Ooga, so
   // the gap kept from it is wider than the one walkers keep from each other.
@@ -569,6 +570,8 @@
         progress: { x: NaN, z: NaN, stalled: 0, motionless: 0, retry: 0, replanned: false, navigationHop: false, escaped: false,
           backoff: 0, backX: 0, backZ: 0, detours: 0, replans: 0, resets: 0, roofTime: 0 },
         roofEscape: { active: false, jumping: false, blocked: 0 },
+        ladder: ctx.ladders ? { plane: null, cooldown: 0, across: 0, along: 0, descentHeld: false, mix: 0,
+          flat: { width: 0, depth: 0, overlap: 0 }, vertical: { width: 0, height: 0, overlap: 0 } } : null,
         avoidance: { active: false, side: i & 1 ? 1 : -1, stalled: 0, best: Infinity, tx: NaN, tz: NaN,
           detour: { site: -1, phase: 0, side: 1, entryX: 0, goalX: NaN, goalZ: NaN, x: 0, z: 0 },
           navigation: { mode: 0, x: 0, z: 0, count: 0, index: 0, searches: 0, expansions: 0,
@@ -769,6 +772,7 @@
       if (ctx.refreshMirrorObject) ctx.refreshMirrorObject(cave.root);
     };
     const resetPose = (cave) => {
+      if (cave.ladder) { cave.ladder.plane = null; cave.ladder.mix = 0; cave.ladder.cooldown = 0; }
       cave.roofEscape.active = cave.roofEscape.jumping = false; cave.roofEscape.blocked = 0;
       clearMeleeThrust(cave);
       takeBedWeapons(cave);
@@ -4226,7 +4230,84 @@
       cave.hop = limit;
       cave.hopV = held ? 0 : Math.min(cave.hopV, 0);
     };
+    // A ladder owns a vertical body rectangle and a separate horizontal footprint. The top quarter of the
+    // vertical rectangle clearing the landing starts the inward handoff; feet still rise at climbing speed.
+    const ladderPose = (cave) => {
+      const l = cave.ladder, parts = cave.parts, wave = Math.sin(cave.act.phase), mix = l.mix;
+      standPose(cave);
+      parts.torso.rotation.x = -0.12 * mix;
+      parts.armL.rotation.x = lerp(-0.2, -2.2 + wave * 0.2, mix);
+      parts.armR.rotation.x = lerp(-0.2, -2.2 - wave * 0.2, mix);
+      parts.legL.rotation.x = wave * 0.35 * mix;
+      parts.legR.rotation.x = -wave * 0.35 * mix;
+      parts.head.rotation.x = -0.1 * mix;
+      parts.snack.visible = false;
+    };
+    const leaveLadder = (cave) => {
+      const l = cave.ladder;
+      l.plane = null; l.cooldown = 0.35; l.mix = 0; l.descentHeld = false;
+      cave.hop = Math.max(0, cave.root.position.y - groundY(cave));
+      cave.hopV = 0; cave.jumps = cave.hop > 0 ? 1 : 0;
+      standPose(cave);
+    };
+    const runLadder = (cave, dt, driving) => {
+      const l = cave.ladder;
+      if (!l) return false;
+      const p = cave.root.position, feet = p.y - cave.baseY;
+      l.cooldown = Math.max(0, l.cooldown - dt);
+      if (!l.plane && driving && l.cooldown === 0 && !(cave.jet && cave.jet.thrust)) {
+        for (const plane of ctx.ladders) {
+          const dx = p.x - plane.x, dz = p.z - plane.z, along = dx * plane.nx + dz * plane.nz;
+          const across = dx * plane.nz - dz * plane.nx, outward = steer.x * plane.nx + steer.z * plane.nz;
+          const gap = cave.bodyRadius * 0.5, half = plane.width / 2;
+          // At the top the outward walking command becomes descent until released, so a held W cannot
+          // immediately reverse the mount and put the character back on the deck.
+          const fromTop = Math.abs(feet - plane.top) < 0.15 && outward > 0.05;
+          const fromFace = feet >= plane.bottom - 0.1 && feet < plane.top - 0.15 && outward < -0.05;
+          if ((!fromTop && !fromFace) || Math.abs(across) > half - 0.1
+            || along < -cave.bodyRadius || along > gap + 0.08) continue;
+          l.plane = plane; l.across = across; l.along = along;
+          l.descentHeld = fromTop && steer.forward > 0.05;
+          l.flat.width = l.vertical.width = cave.bodyRadius * 2;
+          l.flat.depth = cave.bodyRadius * 2; l.vertical.height = cave.bodyHeight;
+          clearShoulder(cave);
+          cave.hopV = 0; cave.leap.vx = cave.leap.vz = cave.leap.land = 0;
+          break;
+        }
+      }
+      if (!l.plane) return false;
+      const plane = l.plane, height = l.vertical.height;
+      if (steer.forward <= 0.05) l.descentHeld = false;
+      const axis = driving ? (l.descentHeld ? -steer.forward : steer.forward) : -1;
+      const side = driving ? steer.strafe : 0, length = Math.max(1, Math.hypot(axis, side));
+      const speed = LADDER_SPEED * (driving ? steer.speed : 1), step = speed * dt / length;
+      const nextFeet = clamp(feet + axis * step, plane.bottom, plane.top);
+      const across = clamp(l.across - side * step, -plane.width / 2 + 0.1, plane.width / 2 - 0.1);
+      // The exposed vertical fraction and the footprint's landing fraction are kept separate. Start moving
+      // over the lip at 25% exposure, with no flip animation or pause in the held movement.
+      const exposed = clamp((nextFeet + height - plane.top) / height, 0, 1);
+      const blend = clamp((exposed - 0.25) / 0.75, 0, 1);
+      const gap = cave.bodyRadius * 0.5, inset = plane.inset, landingTarget = lerp(gap, -inset, blend);
+      const target = axis < 0 ? Math.max(l.along, landingTarget) : axis > 0 ? Math.min(l.along, landingTarget) : l.along;
+      const along = l.along + clamp(target - l.along, -speed * dt, speed * dt);
+      const nx = plane.x + plane.nz * across + plane.nx * along;
+      const nz = plane.z - plane.nx * across + plane.nz * along;
+      // Check scenery at the actual feet height; a ladder never grants passage through a machine or wall.
+      if (!flyable(p.x, p.z, nx, nz, Math.min(feet, nextFeet), cave.bodyHeight, cave)) return true;
+      l.along = along; l.across = across; p.x = nx; p.z = nz; p.y = cave.baseY + nextFeet;
+      cave.hop = Math.max(0, p.y - groundY(cave)); cave.hopV = 0;
+      cave.root.rotation.y = Math.atan2(-plane.nx, -plane.nz);
+      l.vertical.overlap = 1 - exposed;
+      l.flat.overlap = clamp((l.flat.depth / 2 - along) / l.flat.depth, 0, 1);
+      l.mix = 1 - blend;
+      cave.act.phase += Math.hypot(axis, side) * dt * 8;
+      ladderPose(cave);
+      if (axis > 0 && nextFeet >= plane.top && along <= -inset + 1e-6
+        || axis < 0 && nextFeet <= plane.bottom && along >= gap - 1e-6) leaveLadder(cave);
+      return true;
+    };
     const runPlayer = (cave, dt, driving = true) => {
+      if (runLadder(cave, dt, driving)) return;
       const p = cave.root.position, leap = cave.leap;
       const fromX = p.x, fromZ = p.z;
       const wasGround = groundY(cave);
@@ -4391,7 +4472,7 @@
       clearHeadLook(cave);
       const parts = cave.parts;
       if (ctx.prepareCloudSupport && (!cave.bedTravel.mode || cave.bedTravel.mode === "landing" || cave.bedTravel.mode === "waiting")) ctx.prepareCloudSupport(cave);
-      if (cave.root.visible && (cave.state === "working" || cave.state === "chilling" || cave.bedTravel.mode === "landing" || cave.bedTravel.mode === "waiting" || cave.bedTravel.mode === "walk")) {
+      if (!(cave.ladder && cave.ladder.plane) && cave.root.visible && (cave.state === "working" || cave.state === "chilling" || cave.bedTravel.mode === "landing" || cave.bedTravel.mode === "waiting" || cave.bedTravel.mode === "walk")) {
         // Hop is relative to support but the body lives at a world height; rebase before gravity when support changes.
         const floor = groundY(cave), p = cave.root.position;
         cave.hop = Math.max(0, p.y - floor);
@@ -4425,7 +4506,7 @@
           cave.tintTime = tintWait();
         }
       }
-      if (cave.hopV > 0 || cave.hop > 0) {
+      if (!(cave.ladder && cave.ladder.plane) && (cave.hopV > 0 || cave.hop > 0)) {
         cave.hopV -= WALK.gravity * dt;
         // Fruit halves vertical travel without changing ballistic momentum; leaving restores normal movement at once.
         const verticalScale = inBananas(cave) ? 0.5 : 1;
@@ -4468,6 +4549,7 @@
         }
         return;
       }
+      if (cave !== player && cave.ladder && cave.ladder.plane) { runLadder(cave, dt, false); return; }
       if (ctx.playerName && cave !== player) { standPose(cave); poseWeapon(cave); return; }
       if (cave === player) {
         runPlayer(cave, dt);
@@ -5020,6 +5102,7 @@
     const relocatePlayer = (position, heading) => {
       const cave = player;
       if (!cave) return;
+      if (cave.ladder) { cave.ladder.plane = null; cave.ladder.mix = 0; cave.ladder.cooldown = 0; }
       stopReload(cave);
       clearShoulder(cave);
       if (cave.camp.seat) { cave.camp.seat.sitter = null; cave.camp.seat = null; }
@@ -5110,6 +5193,13 @@
     };
     const jumpPlayer = () => {
       if (!player || player.health.stunned || player.bedTravel.manual || player.camp.seat || player.camp.rolling || player.jet && !player.jetRecovering) return false;
+      if (player.ladder && player.ladder.plane) {
+        const plane = player.ladder.plane;
+        leaveLadder(player);
+        player.hopV = JUMP_SPEED; player.jumps = 1;
+        player.leap.vx = plane.nx * WALK.ledgeSpeed; player.leap.vz = plane.nz * WALK.ledgeSpeed;
+        return true;
+      }
       if (player.traits.footRockets && !player.jet) {
         if (!grounded(player)) return false;
         elevatePlayer(0);
@@ -5491,6 +5581,7 @@
       if (cave.parts.chuk) poseNunchaku(cave, dt);
       if (cave === player) posePeek(cave, dt);
       poseWeapon(cave);
+      if (cave.ladder && cave.ladder.plane) ladderPose(cave);
       if (bashBefore > GUN_BASH_IMPACT && w.bashTime <= GUN_BASH_IMPACT && cave === player && w.equipped && !w.reloading && !w.swapTime && !w.reloadHandoff && !cave.health.stunned && !cave.camp.seat && !cave.bedTravel.mode) {
         weaponOrigin(weaponStart, cave, true);
         hitMeleeTarget(cave, GUN_BASH_POWER);

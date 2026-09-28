@@ -1534,7 +1534,7 @@ const { contributorActivityProbe } = (() => {
     const HOUR = 3600000, { roster, stateFor, ageLabel, applyActivity, applySnapshot, hasRecentActivity, subscribe } = contributors;
     const saved = roster.map((entry) => ({ at: entry.lastCommitAt, activity: [...entry.activity] }));
     const state = (age) => stateFor({ lastCommitAt: at - age }, at);
-    const boundaries = state(0) === "working" && state(HOUR - 1) === "working" && state(HOUR) === "chilling" &&
+    const boundaries = state(0) === "working" && state(HOUR) === "working" && state(2 * HOUR - 1) === "working" && state(2 * HOUR) === "chilling" &&
       state(24 * HOUR - 1) === "chilling" && state(24 * HOUR) === "sleeping" && state(8 * 24 * HOUR) === "sleeping";
     const invalidStates = [NaN, Infinity, 0, -1, at + 1].every((lastCommitAt) => stateFor({ lastCommitAt }, at) === "sleeping");
     const labels = ageLabel({ lastCommitAt: at }, at) === "0m ago" &&
@@ -1558,7 +1558,9 @@ const { contributorActivityProbe } = (() => {
         { name: "unknown-contributor", lastCommitAt: at }, { lastCommitAt: at }
       ], at) === 0 && applyActivity(null, at) === 0 && applyActivity([], NaN) === 0 &&
         first.lastCommitAt === firstAt && notifications === 1;
-      const expires = stateFor(first, firstAt + HOUR) === "chilling" && stateFor(first, firstAt + 24 * HOUR) === "sleeping";
+      const expires = stateFor(first, firstAt + 2 * HOUR) === "chilling" && stateFor(first, firstAt + 24 * HOUR) === "sleeping"
+        && hasRecentActivity(first, "oogaboogax/entropylab", firstAt + 2 * HOUR - 1)
+        && !hasRecentActivity(first, "oogaboogax/entropylab", firstAt + 2 * HOUR);
       const snapshot = (repo, login, age) => ({ meta: { repo, schema_version: 1, generated_at: new Date(at).toISOString() },
         contributors: [{ login, last_seen_at: new Date(at - age).toISOString() }] });
       const alias = roster.find((entry) => entry.name === "bc1gui");
@@ -3320,9 +3322,9 @@ const hubMatrix = { name: "hub matrix", why: "rule: the room lever raises the mi
     && carved.regions.every(region => Math.abs(region.width - region.expectedWidth) < 1e-7 && Math.abs(region.depth - region.expectedDepth) < 1e-7)
     && carved.sealed.length === 1 && carved.sealed.map(entry => entry.id).sort().join() === "c3" && carved.sealed.every(entry => entry.visible && Number.isFinite(entry.stop)), JSON.stringify(carved));
 } };
-const hubMirror = { name: "hub mirror", why: "rule: 68 damage shatters the mirror, which unlocks its gate, ends the glyph hint and stays broken for the visit", run: async (b) => {
-  const r = await b.evaluate(`(() => { const B = window.__ooga, M = B.mirrorCave, g = M.gate, w = M.node.world, G = B.matrixGate, m = M.mouth; B.pilot.navigate({ position: { x: G.x + Math.sin(m.ry) * 0.8, y: m.floorY, z: G.z + Math.cos(m.ry) * 0.8 }, yaw: m.ry, pitch: 0.3, dist: 3 }); B.advance(0.5, 1 / 60); const before = { broken: M.damage.broken, locked: g.locked, hint: M.guides.state.doorway }; M.damage.hit(67.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const whole = { broken: M.damage.broken, locked: g.locked }; M.damage.hit(0.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const u0 = M.guides.state.doorwayUpdates; B.advance(1, 1 / 60); const after = { broken: M.damage.broken, shattered: M.shattered, locked: g.locked, reveal: M.node.mirrorReveal, hint: M.guides.state.doorway, frozen: M.guides.state.doorwayUpdates === u0 }; B.go("pool"); let n = 0; while ((B.transitioning || B.scene !== "pool") && n++ < 600) B.advance(1 / 30, 1 / 30); B.go("hub"); n = 0; while ((B.transitioning || B.scene !== "hub") && n++ < 600) B.advance(1 / 30, 1 / 30); B.advance(0.5, 1 / 60); const N = B.mirrorCave; return { before, whole, after, back: { broken: N.damage.broken, shattered: N.shattered, locked: N.gate.locked, reveal: N.node.mirrorReveal, hint: N.guides.state.doorway } }; })()`);
-  record("hub mirror: 67.5 damage leaves it whole and locked, 68 shatters it open with its gate unlocked and the glyph hint stopped, and it is still broken after a trip away", !r.before.broken && r.before.locked && r.before.hint && !r.whole.broken && r.whole.locked && r.after.broken && r.after.shattered && !r.after.locked && r.after.reveal === 1 && !r.after.hint && r.after.frozen && r.back.broken && r.back.shattered && !r.back.locked && r.back.reveal === 1 && !r.back.hint, JSON.stringify(r));
+const hubMirror = { name: "hub mirror", why: "rule: 116 damage shatters the mirror, which unlocks its gate, ends the glyph hint and stays broken for the visit", run: async (b) => {
+  const r = await b.evaluate(`(() => { const B = window.__ooga, M = B.mirrorCave, g = M.gate, w = M.node.world, G = B.matrixGate, m = M.mouth; B.pilot.navigate({ position: { x: G.x + Math.sin(m.ry) * 0.8, y: m.floorY, z: G.z + Math.cos(m.ry) * 0.8 }, yaw: m.ry, pitch: 0.3, dist: 3 }); B.advance(0.5, 1 / 60); const before = { broken: M.damage.broken, locked: g.locked, hint: M.guides.state.doorway }; M.damage.hit(115.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const whole = { broken: M.damage.broken, locked: g.locked }; M.damage.hit(0.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const u0 = M.guides.state.doorwayUpdates; B.advance(1, 1 / 60); const after = { broken: M.damage.broken, shattered: M.shattered, locked: g.locked, reveal: M.node.mirrorReveal, hint: M.guides.state.doorway, frozen: M.guides.state.doorwayUpdates === u0 }; B.go("pool"); let n = 0; while ((B.transitioning || B.scene !== "pool") && n++ < 600) B.advance(1 / 30, 1 / 30); B.go("hub"); n = 0; while ((B.transitioning || B.scene !== "hub") && n++ < 600) B.advance(1 / 30, 1 / 30); B.advance(0.5, 1 / 60); const N = B.mirrorCave; return { before, whole, after, back: { broken: N.damage.broken, shattered: N.shattered, locked: N.gate.locked, reveal: N.node.mirrorReveal, hint: N.guides.state.doorway } }; })()`);
+  record("hub mirror: 115.5 damage leaves it whole and locked, 116 shatters it open with its gate unlocked and the glyph hint stopped, and it is still broken after a trip away", !r.before.broken && r.before.locked && r.before.hint && !r.whole.broken && r.whole.locked && r.after.broken && r.after.shattered && !r.after.locked && r.after.reveal === 1 && !r.after.hint && r.after.frozen && r.back.broken && r.back.shattered && !r.back.locked && r.back.reveal === 1 && !r.back.hint, JSON.stringify(r));
 } };
 // The Canvas 2D fallback, for a device without WebGL2: every scene, entered in one page, paints real
 // colour (sampled small, after the arrival fade) and keeps the leave contract; the console stays clean.
@@ -4737,9 +4739,199 @@ const walkToward = async (b, dx, dz, seconds) => {
   await holdKey(b, k, seconds);
   return k;
 };
-const factoryWalking = { name: "factory walking", why: "rule: W A S D walk the visitor's Ooga their way on screen in the factory, as they do on the island", run: async (b) => {
+const factoryWalking = { name: "factory walking", why: "regression: Factory movement must preserve W A S D steering and keep walking and jumping bodies from passing through the backs of stairs", run: async (b) => {
   const ooga = await walkKeys(b, "portlandhodl", 0, 8, [0, 2.2], 0.5);
   record("factory walking: W A S D walk the visitor's Ooga away, left, back and right on screen on the forge floor from two camera angles", allWalk(ooga), JSON.stringify(ooga));
+  const stairs = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl"), F = BL.factoryModels;
+    if (B.crew.player !== a) B.pilot.possess(a);
+    B.pilot.navigate({ position: { x: 0, y: 0, z: 20 }, yaw: 0, pitch: 0, dist: 6 });
+    B.advance(0.1, 1 / 60);
+    const key = (name, code, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name, code, bubbles: true }));
+    const ceiling = F.stairCeilingAt(0, 20, 0, a.bodyRadius);
+    key(" ", "Space", true); B.advance(0.02, 1 / 60); key(" ", "Space", false);
+    let peak = 0;
+    for (let i = 0; i < 120; i++) { B.advance(1 / 60, 1 / 60); peak = Math.max(peak, a.root.position.y - a.baseY + a.bodyHeight); }
+    key("w", "KeyW", true); B.advance(3, 1 / 60); key("w", "KeyW", false);
+    const p = a.root.position, feet = p.y - a.baseY;
+    return { ceiling, peak, z: p.z, feet, clear: F.clearAt(p.x, p.z, feet, a.bodyRadius, a.bodyHeight) };
+  })()`);
+  record("factory stair backs: jumping beneath the high end stops at the underside and walking toward the low end stops before entering the stairs, without lifting onto their treads", Number.isFinite(stairs.ceiling) && stairs.peak <= stairs.ceiling + 1e-6 && stairs.z < 19.5 && stairs.z > 13.5 && Math.abs(stairs.feet) < 1e-6 && stairs.clear, JSON.stringify(stairs));
+  const rebalancer = await b.evaluate(`(() => {
+    const B = __ooga, a = B.crew.player, F = BL.factoryModels, d = F.LAYOUT.rebalancer;
+    const key = (name, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name, code: "Key" + name.toUpperCase(), bubbles: true }));
+    const start = { x: d.x + 0.8, y: d.y, z: d.z + F.REB.cz + 2.4 };
+    B.pilot.navigate({ position: start, yaw: 0, pitch: 0, dist: 6 }); B.advance(0.1, 1 / 60);
+    key("w", true);
+    let peak = d.y;
+    for (let i = 0; i < 39; i++) { B.advance(1 / 60, 1 / 60); peak = Math.max(peak, a.root.position.y - a.baseY); }
+    key("w", false);
+    const onto = Math.hypot(a.root.position.x - start.x, a.root.position.z - start.z);
+    key("s", true); B.advance(0.65, 1 / 60); key("s", false);
+    const off = a.root.position.y - a.baseY;
+    // Recreate a shallow overlap left by a landing or relocation, then leave it with ordinary input.
+    const x = d.x + F.REB.console[0] + 0.78 + a.bodyRadius - 0.08, z = d.z + F.REB.console[1];
+    B.pilot.navigate({ position: { x, y: d.y, z }, yaw: 0, pitch: 0, dist: 6 }); B.advance(0.1, 1 / 60);
+    const overlapped = !F.clearAt(x, z, d.y, a.bodyRadius);
+    const inwardBlocked = !F.walkable(x, z, x - 0.05, z, d.y, a.bodyRadius, a.bodyHeight);
+    key("d", true); B.advance(0.65, 1 / 60); key("d", false);
+    const p = a.root.position, feet = p.y - a.baseY;
+    return { height: d.y, onto, peak, off, overlapped, inwardBlocked, escaped: p.x - x,
+      clear: F.clearAt(p.x, p.z, feet, a.bodyRadius, a.bodyHeight), grounded: a.hop === 0 };
+  })()`);
+  record("factory rebalancer: walk onto and off the low drum; a shallow console overlap allows walking out while deeper movement stays blocked", rebalancer.onto > 0.5 && Math.abs(rebalancer.peak - (rebalancer.height + 0.56)) < 1e-5 && Math.abs(rebalancer.off - rebalancer.height) < 1e-5 && rebalancer.overlapped && rebalancer.inwardBlocked && rebalancer.escaped > 0.5 && rebalancer.clear && rebalancer.grounded, JSON.stringify(rebalancer));
+} };
+const factoryLadders = { name: "factory ladders", why: "rule: Oogas must climb the rebalancer and lighthouse ladders through real controls, hold their height at rest, walk off both landings and jump away without snapping back", run: async (b) => {
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl"), F = BL.factoryModels, rows = [];
+    if (B.crew.player !== a) B.pilot.possess(a);
+    const key = (name, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name === "Space" ? " " : name, code: name === "Space" ? name : "Key" + name.toUpperCase(), bubbles: true }));
+    const feet = () => a.root.position.y - a.baseY;
+    for (const l of F.LAYOUT.ladders) {
+      const yaw = Math.atan2(l.nx, l.nz), gap = a.bodyRadius + 0.6;
+      B.pilot.navigate({ position: { x: l.x + l.nx * gap, y: l.bottom, z: l.z + l.nz * gap }, yaw, pitch: 0, dist: 6 });
+      B.advance(0.1, 1 / 60); key("w", true);
+      let mounted = false, paused = false, hold = 0, maxStep = 0;
+      for (let i = 0; i < 600; i++) {
+        const x = a.root.position.x, y = feet(), z = a.root.position.z;
+        B.advance(1 / 60, 1 / 60);
+        maxStep = Math.max(maxStep, Math.hypot(a.root.position.x - x, feet() - y, a.root.position.z - z));
+        mounted ||= !!a.ladder.plane;
+        if (!paused && a.ladder.plane && feet() > (l.bottom + l.top) / 2) {
+          key("w", false); const at = feet(); B.advance(0.2, 1 / 60); hold = Math.abs(feet() - at);
+          paused = true; key("w", true);
+        }
+        if (mounted && !a.ladder.plane) break;
+      }
+      key("w", false);
+      const top = feet(), upperSupport = F.supportAt(a.root.position.x, a.root.position.z, top);
+      const upperClear = F.clearAt(a.root.position.x, a.root.position.z, top, a.bodyRadius, a.bodyHeight);
+      // Walk outward over the lip with W held; it must remain descent, rather than bouncing back up.
+      B.pilot.navigate({ position: { x: l.x - l.nx * 0.2, y: l.top, z: l.z - l.nz * 0.2 }, yaw: yaw + Math.PI, pitch: 0, dist: 6 });
+      B.advance(0.1, 1 / 60); key("w", true);
+      let descending = false, rose = false, previous = feet();
+      for (let i = 0; i < 600; i++) {
+        B.advance(1 / 60, 1 / 60);
+        descending ||= !!a.ladder.plane;
+        if (feet() > previous + 1e-5) rose = true;
+        previous = feet();
+        if (descending && !a.ladder.plane) break;
+      }
+      const bottom = feet(), x = a.root.position.x, z = a.root.position.z;
+      B.advance(0.3, 1 / 60); key("w", false);
+      rows.push({ mounted, paused, hold, maxStep, top, upperSupport, upperClear, descending, rose, bottom,
+        walkedAway: Math.hypot(a.root.position.x - x, a.root.position.z - z), active: !!a.ladder.plane, expectedTop: l.top, expectedBottom: l.bottom });
+    }
+    const l = F.LAYOUT.ladders[0], yaw = Math.atan2(l.nx, l.nz);
+    B.pilot.navigate({ position: { x: l.x + l.nx * a.bodyRadius * 0.5, y: l.bottom, z: l.z }, yaw, pitch: 0, dist: 6 });
+    key("w", true); B.advance(0.4, 1 / 60); key("w", false);
+    const attached = !!a.ladder.plane, x = a.root.position.x, z = a.root.position.z;
+    key("Space", true); B.advance(1 / 60, 1 / 60); key("Space", false); B.advance(0.15, 1 / 60);
+    const jumped = { attached, detached: !a.ladder.plane, rising: a.hopV > 0, outward: (a.root.position.x - x) * l.nx + (a.root.position.z - z) * l.nz };
+    return { rows, jumped };
+  })()`);
+  record("factory ladders: both climbs hold at rest, cross the lip continuously, descend without reversal and walk away at the bottom; Space jumps off", r.rows.every((v) => v.mounted && v.paused && v.hold < 1e-6 && v.maxStep < 0.2 && Math.abs(v.top - v.expectedTop) < 1e-6 && Math.abs(v.upperSupport - v.top) < 1e-6 && v.upperClear && v.descending && !v.rose && Math.abs(v.bottom - v.expectedBottom) < 1e-6 && v.walkedAway > 0.2 && !v.active)
+    && r.jumped.attached && r.jumped.detached && r.jumped.rising && r.jumped.outward > 0.05, JSON.stringify(r));
+} };
+const factoryRailingJump = { name: "factory railing jumps", why: "regression: rifle reload checks prevented Factory jumps, and descending past railings could trap the visitor inside a lower-floor obstacle", run: async (b) => {
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl"), rows = [];
+    if (B.crew.player !== a) B.pilot.possess(a);
+    const key = (name, code, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name, code, bubbles: true }));
+    const walkAfterLanding = () => {
+      let distance = 0;
+      for (const name of ["w", "a", "s", "d"]) {
+        const x = a.root.position.x, z = a.root.position.z;
+        key(name, "Key" + name.toUpperCase(), true); B.advance(0.25, 1 / 60); key(name, "Key" + name.toUpperCase(), false);
+        distance = Math.max(distance, Math.hypot(a.root.position.x - x, a.root.position.z - z));
+      }
+      return distance;
+    };
+    for (const [name, x, y, z, yaw, edge, ammo] of [
+      ["balcony", 0.8, 5, 27.5, -Math.PI / 2, 2.5, 0],
+      ["line C", -15.4, 5, -1.3, Math.PI, 0.5, 7],
+      ["gallery", -3, 15.5, -16.1, Math.PI, -14.8, 0],
+      ["watchtower", -16, 15.5, -11.9, Math.PI, -11, 7]
+    ]) {
+      B.crew.configureWeapon(a, 2, ammo);
+      B.pilot.navigate({ position: { x, y, z }, yaw, pitch: 0.3, dist: 6 });
+      B.advance(0.1, 1 / 60);
+      key(" ", "Space", true); B.advance(0.32, 1 / 60); key(" ", "Space", false);
+      const jumped = a.hop > 0.5 && !a.weapon.reloading;
+      key("w", "KeyW", true);
+      let crossed = false, airborne = false;
+      for (let i = 0; i < 27; i++) {
+        B.advance(1 / 60, 1 / 60);
+        if ((name === "balcony" ? a.root.position.x : a.root.position.z) > edge) {
+          crossed = true; airborne = airborne || a.root.position.y - a.baseY > y + 0.1;
+        }
+      }
+      key("w", "KeyW", false); B.advance(3, 1 / 60);
+      const p = a.root.position, feet = p.y - a.baseY, floor = BL.factoryModels.supportAt(p.x, p.z, feet);
+      const grounded = a.hop === 0 && Math.abs(feet - floor) < 1e-6, clear = BL.factoryModels.clearAt(p.x, p.z, feet, a.bodyRadius);
+      rows.push({ name, ammo, jumped, crossed, airborne, feet, floor, landedBelow: floor < y, grounded, clear, walked: walkAfterLanding() });
+    }
+    // Drop over a channel tank from above its collision layer, where airborne horizontal clearance alone
+    // used to accept the position and leave every walking direction blocked after landing.
+    const F = BL.factoryModels, bay = F.LAYOUT.bays[2];
+    B.pilot.navigate({ position: { x: F.stationX(bay) + 1.2, y: bay.y + 4, z: F.stationZ(bay) }, yaw: 0, pitch: 0.3, dist: 6 });
+    B.advance(3, 1 / 60);
+    const p = a.root.position, feet = p.y - a.baseY, floor = F.supportAt(p.x, p.z, feet);
+    const tankLanding = { feet, floor, grounded: a.hop === 0 && Math.abs(feet - floor) < 1e-6, clear: F.clearAt(p.x, p.z, feet, a.bodyRadius), walked: walkAfterLanding() };
+    return { scene: B.scene, rows, tankLanding };
+  })()`);
+  record("factory railings: empty or partly used rifles jump off four platforms, land clear on the floor below and keep walking; falling over a channel tank also leaves movement clear", r.scene === "factory" && r.rows.length === 4 && r.rows.every(row => row.jumped && row.crossed && row.airborne && row.grounded && row.landedBelow && row.floor >= 0 && row.clear && row.walked > 0.5) && r.tankLanding.grounded && r.tankLanding.clear && r.tankLanding.walked > 0.5, JSON.stringify(r));
+} };
+const factoryWeapons = { name: "factory weapon selection", why: "regression: the factory omitted the keyboard and HUD handlers for selecting melee and rifle weapons", run: async (b) => {
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl");
+    if (B.crew.player !== a) B.pilot.possess(a);
+    B.crew.configureWeapon(a, 1); B.crew.configureWeapon(a, 2, 30);
+    // A previous scene's birdseye cursor can leave an offset on the shared HUD
+    // before this pilot has ever written (or cached) reticle coordinates.
+    const reticle = document.getElementById("weapon-reticle");
+    reticle.style.left = "83%"; reticle.style.top = "46%";
+    const key = slot => {
+      for (const type of ["keydown", "keyup"]) window.dispatchEvent(new KeyboardEvent(type, { key: String(slot), code: "Digit" + slot, bubbles: true }));
+      B.advance(0.1, 1 / 60);
+    };
+    key(1); const meleeKey = a.weapon.primaryEquipped && !a.weapon.equipped;
+    key(2); const rifleKey = a.weapon.equipped && !a.weapon.primaryEquipped;
+    const primary = document.getElementById("primary-hud"), secondary = document.getElementById("weapon-hud");
+    const visible = !primary.hidden && !secondary.hidden;
+    primary.dispatchEvent(new PointerEvent("pointerdown", { button: 0, buttons: 1, pointerId: 77, bubbles: true }));
+    primary.dispatchEvent(new PointerEvent("pointerup", { button: 0, buttons: 0, pointerId: 77, bubbles: true }));
+    B.advance(0.1, 1 / 60); const meleeButton = a.weapon.primaryEquipped && !a.weapon.equipped;
+    secondary.click(); B.advance(0.1, 1 / 60);
+    return { scene: B.scene, meleeKey, rifleKey, visible, meleeButton, rifleButton: a.weapon.equipped && !a.weapon.primaryEquipped,
+      centered: !reticle.style.left && !reticle.style.top };
+  })()`);
+  record("factory weapons: 1 and 2 and both HUD buttons select melee and rifle weapons without leaving the factory", r.scene === "factory" && r.meleeKey && r.rifleKey && r.visible && r.meleeButton && r.rifleButton, JSON.stringify(r));
+  record("factory weapons: the crosshair clears inherited birdseye coordinates and returns to the screen centre", r.centered, JSON.stringify(r));
+  const hits = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl"), s = B.factory.scene, rows = [];
+    const hum = s.tunnels.map(t => t.hum), gateHum = s.gate.hum;
+    for (const t of s.tunnels) t.hum = Infinity;
+    s.gate.hum = Infinity;
+    try {
+      for (let i = 0; i <= s.tunnels.length; i++) {
+        const t = s.tunnels[i], at = t ? t.at : { x: 0, y: BL.factoryModels.LAYOUT.entrance.y, z: BL.factoryModels.HALL.front - 0.6, turn: Math.PI };
+        const ripple = t ? t.ripples : s.gate.phase.ripples, plane = t ? 0.45 : 0;
+        const sn = Math.sin(at.turn), c = Math.cos(at.turn);
+        B.crew.configureWeapon(a, 2, 30);
+        B.pilot.navigate({ position: { x: at.x + sn * 2.5, y: at.y, z: at.z + c * 2.5 }, yaw: at.turn, pitch: 0, dist: 6 });
+        B.advance(0.4, 1 / 60);
+        const before = ripple.hits;
+        const fired = B.crew.fireWeapon(a, { x: at.x + sn * (plane - 0.5), y: at.y + 2, z: at.z + c * (plane - 0.5) }, 1);
+        B.advance(0.3, 1 / 60);
+        rows.push({ i, fired, hits: ripple.hits - before, active: ripple.active, bounded: ripple.active <= BL.mirrorRipples.CAPACITY });
+      }
+    } finally {
+      s.tunnels.forEach((t, i) => t.hum = hum[i]); s.gate.hum = gateHum;
+    }
+    return rows;
+  })()`);
+  record("factory banana impacts: actual rifle rounds create one bounded ripple on each of the four peer mirrors and on the exit shield", hits.length === 5 && hits.every(row => row.fired && row.hits === 1 && row.active > 0 && row.bounded), JSON.stringify(hits));
 } };
 const factoryForward = { name: "factory forward", why: "rule: a forward's sats go in along the line it came in on, through the core and out along the line it left by; a failed one comes back and its target sputters", run: async (b) => {
   const r = await b.evaluate(`(() => { const B = window.__ooga; ${FACTORY_EVENT} const s = X.scene, q = s.sats, bays = s.bays;
@@ -4764,18 +4956,50 @@ const factoryForge = { name: "factory forge", why: "rule: opening a channel send
     return { opened, inDone, closed, minted, rolled, cyan, sunk, coinGone: s.coinD < 0 && !s.coin.visible }; })()`);
   record("factory forge: a large channel's opening sends two carts up the chain's shaft that the forge takes with a gold flash each, and a close mints a coin on a cyan flash that rolls down the other shaft", r.opened && r.inDone.carts === 2 && r.inDone.flashes === 2 && r.inDone.rising && r.inDone.waiting === 0 && r.inDone.out === 0 && r.closed && r.minted && r.rolled && r.cyan && r.sunk && r.coinGone, JSON.stringify(r));
 } };
-const factoryShields = { name: "factory peer shield", why: "rule: a peer tunnel's shield lets nobody through and sets whoever walks into it back on the node's walkway", run: async (b) => {
-  // The Harbor line's porch, walking into its tunnel's shield toward the right wall.
-  await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"), t = window.BL.factoryModels.LAYOUT.tunnels[3]; if (B.crew.player !== a) B.pilot.possess(a); B.pilot.navigate({ position: { x: t.x - 2.6, y: t.y, z: t.z }, yaw: -Math.PI / 2, pitch: 0.3, dist: 6 }); B.advance(0.5, 1 / 60); })()`);
-  const key = await walkToward(b, 1, 0, 1.6);
-  const r = await b.evaluate(`(() => { const B = window.__ooga, p = B.cavemen.get("portlandhodl").root.position, L = window.BL.factoryModels.LAYOUT; return { x: +p.x.toFixed(2), z: +p.z.toFixed(2), onRing: Math.hypot(p.x - L.ring.x, p.z - L.ring.z) < L.ring.outer + 2.5, scene: B.scene }; })()`);
-  r.key = key;
-  record("factory peer shield: walking into a peer tunnel's shield sets the Ooga back on the node's walkway", r.scene === "factory" && r.onRing && r.x < 5, JSON.stringify(r));
+const factoryShields = { name: "factory peer portals", why: "rule: paired peer mirrors highlight body contact and preserve position, jump motion and view across a walk and its return", run: async (b) => {
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl"), tunnels = B.factory.scene.tunnels, rows = [];
+    if (B.crew.player !== a) B.pilot.possess(a);
+    const key = (name, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name, code: "Key" + name.toUpperCase(), bubbles: true }));
+    const local = t => { const p = a.root.position, dx = p.x - t.at.x, dz = p.z - t.at.z, c = Math.cos(t.at.turn), s = Math.sin(t.at.turn); return { across: dx * c - dz * s, along: dx * s + dz * c, feet: p.y - a.baseY - t.at.y }; };
+    const boom = () => Math.hypot(B.camera.position.x - a.root.position.x, B.camera.position.y - a.root.position.y, B.camera.position.z - a.root.position.z);
+    for (const lateral of [0.35, 1.35, -1.35]) for (let i = 0; i < tunnels.length; i++) {
+      const t = tunnels[i], other = tunnels[i ^ 1], offset = i % 2 ? -lateral : lateral, c = Math.cos(t.at.turn), s = Math.sin(t.at.turn);
+      B.pilot.navigate({ position: { x: t.at.x + offset * c + 0.5 * s, y: t.at.y, z: t.at.z - offset * s + 0.5 * c }, yaw: t.at.turn, pitch: 0.3, dist: 6 });
+      B.advance(0.1, 1 / 60);
+      const contacts = t.body.contacts, start = local(t), count = t.crossings, beforeMode = B.pilot.mode;
+      if (i === 1) B.crew.jumpPlayer();
+      let crossed = false, before = null, after = null, cameraChange = Infinity, air = false, clearExit = false;
+      key("w", true);
+      for (let n = 0; n < 60; n++) {
+        before = local(t); const distance = boom();
+        B.advance(1 / 60, 1 / 60);
+        if (t.crossings !== count) {
+          crossed = true; after = local(other); cameraChange = Math.abs(boom() - distance); air = a.hop > 0 && a.hopV > 0;
+          clearExit = BL.factoryModels.clearAt(a.root.position.x, a.root.position.z, a.root.position.y - a.baseY, a.bodyRadius);
+          break;
+        }
+      }
+      const outgoing = crossed ? local(other).along : 0, exitCount = other.crossings;
+      B.advance(0.2, 1 / 60); key("w", false);
+      const exit = local(other), stayedOut = other.crossings === exitCount;
+      key("s", true);
+      for (let n = 0; n < 90 && other.crossings === exitCount; n++) B.advance(1 / 60, 1 / 60);
+      key("s", false);
+      rows.push({ i, offset, contacts, start, crossed, before, after, cameraChange, air, clearExit, exit,
+        walkedOut: exit.along > outgoing + 0.1, stayedOut, returned: other.crossings === exitCount + 1,
+        sameMode: B.pilot.mode === beforeMode, supported: BL.factoryModels.supportAt(a.root.position.x, a.root.position.z, a.root.position.y - a.baseY) === t.at.y });
+    }
+    return { scene: B.scene, rows };
+  })()`);
+  record("factory peer portals: all four mirrors outline contact, cross at central and off-centre positions into clear space, preserve offsets and camera distance, continue walking without bounce and allow a return; an airborne crossing keeps its jump", r.scene === "factory" && r.rows.length === 12 && r.rows.every(row => row.contacts > 0 && row.start.along > 0.45 && row.crossed && row.clearExit && row.before.along >= 0.45 - 1e-7
+    && row.after.along >= 0.45 - 1e-7 && row.after.along < 0.65 && Math.abs(row.after.across + row.before.across) < 1e-6
+    && Math.abs(row.after.feet - row.before.feet) < 0.25 && row.cameraChange < 0.25 && row.sameMode && row.walkedOut && row.stayedOut && row.returned && row.supported)
+    && r.rows[1].air && r.rows[1].after.feet > 0, JSON.stringify(r));
 } };
 // Everywhere the widest Ooga on the roster can walk from the balcony, by the factory's own step rule on a
 // quarter-metre grid: both ends of every stair, every line's deck and its peer tunnel's porch, the switchboard,
-// treasury, watchtower, landing, galleries and the forge floor. It runs on the island, where the whole roster is
-// built. Level 1's rebalancer has no route yet, so it is not asked for.
+// rebalancer, treasury, watchtower, landing, galleries and the forge floor. It runs on the island, where the whole roster is built.
 const factoryFloor = { name: "factory floor", why: "regression: stairs landed against rails and blocks, and lanes round the tanks and past the tunnels' console boxes were too narrow to walk", run: async (b) => {
   const r = await b.evaluate(`(() => {
     let R = 0, who = ""; for (const cave of window.__ooga.cavemen.values()) if (cave.bodyRadius > R) { R = cave.bodyRadius; who = cave.traits.name; }
@@ -4790,19 +5014,28 @@ const factoryFloor = { name: "factory floor", why: "regression: stairs landed ag
         const nx = X0 + ni * G, nz = Z0 + nk * G;
         if (M.walkable(x, z, nx, nz, y, R)) add(ni, nk, M.supportAt(nx, nz, y));
       }
+      // A ladder connects its two landings, whose actual control handoffs are checked in factoryLadders.
+      for (const l of L.ladders) {
+        const ax = l.x + l.nx * (R + 0.12), az = l.z + l.nz * (R + 0.12), bx = l.x - l.nx * l.inset, bz = l.z - l.nz * l.inset;
+        if (!M.clearAt(ax, az, l.bottom, R) || !M.clearAt(bx, bz, l.top, R)
+          || Math.abs(M.supportAt(ax, az, l.bottom) - l.bottom) > 1e-5 || Math.abs(M.supportAt(bx, bz, l.top) - l.top) > 1e-5) continue;
+        if (Math.abs(y - l.bottom) < 0.1 && Math.hypot(x - ax, z - az) < 0.35) add(Math.round((bx - X0) / G), Math.round((bz - Z0) / G), l.top);
+        if (Math.abs(y - l.top) < 0.1 && Math.hypot(x - bx, z - bz) < 0.35) add(Math.round((ax - X0) / G), Math.round((az - Z0) / G), l.bottom);
+      }
     }
     const cells = [...seen.values()].map(([i, k, y]) => [X0 + i * G, Z0 + k * G, y]);
     const reachedIn = (x0, x1, z0, z1, y) => cells.some(([x, z, h]) => x >= x0 && x <= x1 && z >= z0 && z <= z1 && Math.abs(h - y) < 0.3);
     const near = (x, z, y) => reachedIn(x - 0.6, x + 0.6, z - 0.6, z + 0.6, y), missing = [];
     L.stairs.forEach(([ax, ay, az, bx, by, bz], n) => { if (!near(ax, az, ay)) missing.push("stair " + n + " foot"); if (!near(bx, bz, by)) missing.push("stair " + n + " head"); });
-    const decks = { A: L.bays[0], B: L.bays[1], C: L.bays[2], D: L.bays[3], switchboard: L.switchboard, treasury: L.treasury, watchtower: L.lookout, landing: L.landing, gallery1: L.galleries[0], gallery2: L.galleries[1] };
+    const decks = { A: L.bays[0], B: L.bays[1], C: L.bays[2], D: L.bays[3], switchboard: L.switchboard, rebalancer: L.rebalancer, treasury: L.treasury, watchtower: L.lookout, lighthouse: L.lookoutDeck, landing: L.landing, gallery1: L.galleries[0], gallery2: L.galleries[1] };
     for (const [name, d] of Object.entries(decks)) if (!reachedIn(d.x - d.w / 2, d.x + d.w / 2, d.z - d.d / 2, d.z + d.d / 2, d.y)) missing.push(name);
-    // Each porch as far as its peer tunnel's shield, where a walker is sent back.
+    if (!near(L.rebalancer.x + M.REB.operator[0], L.rebalancer.z + M.REB.operator[1], L.rebalancer.y)) missing.push("rebalancer operator lane");
+    // Each porch reaches its peer mirror's walkable threshold.
     L.tunnels.forEach((t, n) => { const c = Math.cos(t.turn), sn = Math.sin(t.turn), d = 1.1; if (!near(t.x + sn * d, t.z + c * d, t.y)) missing.push("shield " + "ABCD"[n]); });
     if (!near(L.stairway[0], L.stairway[2] - 1, 0)) missing.push("forge floor");
     return { who, radius: +R.toFixed(2), missing, cells: cells.length };
   })()`);
-  record("factory floor: from the balcony the widest Ooga on the roster reaches both ends of every stair, every line's deck, each peer tunnel's shield, the switchboard, treasury, watchtower, landing, galleries and the forge", r.missing.length === 0 && r.radius > 0.6 && r.cells > 20000, JSON.stringify(r));
+  record("factory floor: from the balcony the widest Ooga on the roster reaches both ends of every stair, every line's deck, each peer tunnel's shield, the switchboard, rebalancer and its operator lane, treasury, watchtower, landing, galleries and the forge", r.missing.length === 0 && r.radius > 0.6 && r.cells > 20000, JSON.stringify(r));
 } };
 // The way in and out: from the island through the 2 o'clock mouth's shield, back out past the balcony, and Escape.
 const factoryEntrance = { name: "factory entrance", why: "regression: flying above the mouth entered the factory and reaching its front wall away from the doorway exited; real doorway crossings must still keep the same Ooga", run: async (b) => {
@@ -5737,7 +5970,7 @@ scene("drop", { steps: [dropStart, dropSteering, play("drop", "a jump lands on t
 scene("orbit", { steps: [{ name: "orbit flow", why: "regression: the spacewalk air bonus was missing from the flight log", run: orbitFlow }, orbitSteering, orbitMissed, orbitEscape, trip("orbit")] });
 scene("mine", { steps: [mineResume, trip("mine"), mineControls] });
 scene("pool", { steps: [poolLeave, trip("pool")] });
-scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryForward, factoryForge, factoryShields, trip("factory")] });
+scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryLadders, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
 scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"), steps: [factoryFloor, factoryEntrance] });
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
@@ -7137,7 +7370,7 @@ const unitChecks = async () => {
       firstCrackArea += Math.abs(area) * 0.5;
     }
     const rows = [];
-    for (const power of [BL.mirrorDamage.PANEL_DAMAGE - 0.5, 0.5, 0.5, BL.mirrorDamage.PANEL_LIMIT - 1, BL.mirrorDamage.MAX_DAMAGE]) {
+    for (const power of [BL.mirrorDamage.PANEL_DAMAGE - 0.5, 0.5, 1.5, (BL.mirrorDamage.PANEL_LIMIT - 1) * BL.mirrorDamage.PANEL_HEALTH, BL.mirrorDamage.MAX_DAMAGE]) {
       damage.hit(power, 0.2, 0.1, 0);
       const live = new Set(); damage.liveGeometry(live);
       rows.push({ stage: damage.stage, seams: damage.seams, active: damage.active, holes: damage.holes, minimumHealth: Math.min(...damage.panelHealth), live: live.size, nodes: root.children.length });
@@ -7163,7 +7396,7 @@ const unitChecks = async () => {
     }
     const settled = damage.active === 0 && shards.every(node => !node.visible);
     damage.dispose();
-    record("mirror damage: twenty crack damage precedes one-health panels, with bounded reflective debris, flat landings above support, fade and complete disposal", ignored && firstSeams >= 40 && firstHoles === 0 && firstCrackArea > 0.03 && rows[0].active === 0 && rows[0].live === 3 && rows[0].seams > firstSeams && rows[1].active === 0 && rows[1].minimumHealth === 0.5 && rows[2].holes === 1 && rows[2].active === 1 && rows.every(row => row.active <= limit && row.live <= limit + 3 && row.nodes === limit + 2) && shards.length === limit && rows[3].active === limit && reflective && falling && landed && faded && !belowGround && settled && damage.damage === BL.mirrorDamage.MAX_DAMAGE && root.children.length === 1 && root.children[0] === panel && panel.geometry === original && panel.mirrorDamage === null && panel.mirrorCaptureGeometry === null && nodes.slice(1).every(node => node.parent === null), JSON.stringify({ ignored, limit, firstSeams, firstHoles, firstCrackArea, rows, reflective, falling, landed, faded, belowGround, settled, children: root.children.length }));
+    record("mirror damage: twenty crack damage precedes two-health panels, with bounded reflective debris, flat landings above support, fade and complete disposal", ignored && firstSeams >= 40 && firstHoles === 0 && firstCrackArea > 0.03 && rows[0].active === 0 && rows[0].live === 3 && rows[0].seams > firstSeams && rows[1].active === 0 && rows[1].minimumHealth === 1.5 && rows[2].holes === 1 && rows[2].active === 1 && rows.every(row => row.active <= limit && row.live <= limit + 3 && row.nodes === limit + 2) && shards.length === limit && rows[3].active === limit && reflective && falling && landed && faded && !belowGround && settled && damage.damage === BL.mirrorDamage.MAX_DAMAGE && root.children.length === 1 && root.children[0] === panel && panel.geometry === original && panel.mirrorDamage === null && panel.mirrorCaptureGeometry === null && nodes.slice(1).every(node => node.parent === null), JSON.stringify({ ignored, limit, firstSeams, firstHoles, firstCrackArea, rows, reflective, falling, landed, faded, belowGround, settled, children: root.children.length }));
   }
   {
     const S = BL.scene, make = () => {
@@ -7183,14 +7416,14 @@ const unitChecks = async () => {
     };
     const health = make(), healthArray = health.damage.panelHealth;
     health.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0);
-    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === 20 && !health.damage.holes && healthArray.every(value => value === 1);
+    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === 20 && !health.damage.holes && healthArray.every(value => value === 2);
     health.damage.hit(0.5, 0.2, 0.1, 0);
     const halfHealth = Array.from(healthArray), halfIntact = !health.damage.holes && !health.damage.active && crackedVertices.every((value, i) => value === health.panel.geometry.verts[i]);
-    health.damage.hit(0.5, 0.2, 0.1, 0);
+    health.damage.hit(1.5, 0.2, 0.1, 0);
     const roundBreak = health.damage.holes === 1 && health.damage.active === 1 && healthArray.filter(value => value === 0).length === 1;
     health.damage.dispose();
-    const charged = make(); charged.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0); charged.damage.hit(1.5, 0.2, 0.1, 0);
-    const chargedHealth = Array.from(charged.damage.panelHealth), brokenIndex = chargedHealth.indexOf(0), woundedIndex = chargedHealth.indexOf(0.5);
+    const charged = make(); charged.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0); charged.damage.hit(2.5, 0.2, 0.1, 0);
+    const chargedHealth = Array.from(charged.damage.panelHealth), brokenIndex = chargedHealth.indexOf(0), woundedIndex = chargedHealth.indexOf(1.5);
     const chip = charged.root.children.find(node => node.visible && node.mirrorShard === charged.panel), chipGeometry = chip.geometry, cx = chip.position.x, cy = chip.position.y;
     const panelAim = {}, aimedAtSurvivor = charged.damage.aimCenter(panelAim, cx, cy, 0)
       && charged.damage.contains(panelAim.x, panelAim.y) && Math.hypot(panelAim.x - cx, panelAim.y - cy) > 1e-5;
@@ -7218,7 +7451,7 @@ const unitChecks = async () => {
     const proportionalBreak = charged.damage.panelHealth[brokenIndex] === 0 && charged.damage.panelHealth[woundedIndex] === woundedRecovered && !charged.damage.contains(cx, cy);
     charged.damage.dispose();
     record("mirror damage: auto aim through a hole resolves to the closest surviving reflective panel", aimedAtSurvivor, JSON.stringify({ aimedAtSurvivor, panelAim, hole: [cx, cy] }));
-    record("mirror damage: each panel has one health, charged overflow reaches the next panel, and regrown area restores matching fractional health", BL.mirrorDamage.PANEL_DAMAGE === 20 && BL.mirrorDamage.PANEL_HEALTH === 1 && BL.mirrorDamage.PANEL_LIMIT === 48 && BL.mirrorDamage.MAX_DAMAGE === 68 && healthArray === health.damage.panelHealth && allCracked && halfIntact && halfHealth.filter(value => value === 0.5).length === 1 && halfHealth.every(value => value === 1 || value === 0.5) && roundBreak && chargedHealth.filter(value => value === 0).length === 1 && chargedHealth.filter(value => value === 0.5).length === 1 && Math.abs(recovered - 0.25) < 1e-9 && Math.abs(woundedRecovered - 0.75) < 1e-9 && Math.abs(areaFraction - recovered) < 1e-6 && Math.abs(partialHealth - 0.15) < 1e-9 && extentRetained && proportionalBreak && fallen.length === 1 && Math.abs(fallenArea - areaFraction) < 1e-6, JSON.stringify({ allCracked, halfHealth, halfIntact, roundBreak, chargedHealth, recovered, woundedRecovered, areaFraction, partialHealth, extentRetained, proportionalBreak, fallen: fallen.length, fallenArea }));
+    record("mirror damage: each panel has two health, charged overflow reaches the next panel, and regrown area restores matching fractional health", BL.mirrorDamage.PANEL_DAMAGE === 20 && BL.mirrorDamage.PANEL_HEALTH === 2 && BL.mirrorDamage.PANEL_LIMIT === 48 && BL.mirrorDamage.MAX_DAMAGE === 116 && healthArray === health.damage.panelHealth && allCracked && halfIntact && halfHealth.filter(value => value === 1.5).length === 1 && halfHealth.every(value => value === 2 || value === 1.5) && roundBreak && chargedHealth.filter(value => value === 0).length === 1 && chargedHealth.filter(value => value === 1.5).length === 1 && Math.abs(recovered - 0.25) < 1e-9 && Math.abs(woundedRecovered - 1.75) < 1e-9 && Math.abs(areaFraction - recovered / BL.mirrorDamage.PANEL_HEALTH) < 1e-6 && Math.abs(partialHealth - 0.15) < 1e-9 && extentRetained && proportionalBreak && fallen.length === 1 && Math.abs(fallenArea - areaFraction) < 1e-6, JSON.stringify({ allCracked, halfHealth, halfIntact, roundBreak, chargedHealth, recovered, woundedRecovered, areaFraction, partialHealth, extentRetained, proportionalBreak, fallen: fallen.length, fallenArea }));
     const crackedReference = make(); crackedReference.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0);
     const crackedTemplate = crackedReference.panel.geometry; crackedReference.damage.dispose();
     const repaired = make(), repairDamage = BL.mirrorDamage.PANEL_DAMAGE + 16, panelTime = BL.mirrorDamage.PANEL_HEALTH / BL.mirrorDamage.PANEL_HEAL_RATE;
@@ -7284,7 +7517,7 @@ const unitChecks = async () => {
     record("mirror damage: hits during final crack sealing preserve every untouched pane contour and restart the quiet delay", sealingHits.every(row => row.complete && row.hit && row.beforeCracks > 0 && row.beforeCracks < 1 && row.remote > 20 && !row.changed && row.quiet), JSON.stringify(sealingHits));
     const locality = [];
     for (const x of [-1.8, 1.8]) {
-      const m = make(); m.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0, 0, 0); m.damage.hit(4, x, 0.1, 0);
+      const m = make(); m.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0, 0, 0); m.damage.hit(4 * BL.mirrorDamage.PANEL_HEALTH, x, 0.1, 0);
       const shards = m.root.children.filter(node => node.visible && node.mirrorShard === m.panel);
       const mean = shards.reduce((sum, node) => sum + node.position.x, 0) / shards.length;
       locality.push({ x, count: shards.length, mean }); m.damage.dispose();

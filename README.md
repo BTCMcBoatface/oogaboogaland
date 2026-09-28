@@ -17,6 +17,7 @@ npm run watch   # the same, rebuilding on every change under src/
 
 - **Fly:** **W A S D**, **Q E** turn, **Z**/**Space** up, **X** down; drag to orbit, scroll to zoom. On a phone the left stick moves and the right stick looks.
 - **Play an Ooga:** double-tap one. Hold **Left Shift** while moving to run. **Space** jumps (twice for a double jump) and uses whatever is beside you; **Escape** lets go.
+- **Factory ladders:** walk into a ladder to attach automatically. **W/S** climb up/down, **A/D** shift sideways, and **Space** jumps off. Walking outward onto a ladder from its upper landing starts a descent; release the movement key, then use **W/S** to change direction.
 - **Play a gorilla:** double-click or double-tap one to take control. **W A S D** walks, hold **Left Shift** to run, and **Space** jumps with an optional second jump in the air. Walking and running use the same speeds and animations as the NPC gorillas.
 - **Gorilla views:** **X** switches carry/combat. Scroll between first person, shoulder, and orbit/bird's-eye; combat shows the same crosshair. **Right-click** returns to shoulder, **Right Shift** swaps shoulders (**Right Shift + A/D** peeks), and **Q/E** rotate bird's-eye with **N** for north. **C** beats its chest.
 - **Views:** **X** switches carry and combat. Combat has first-person, shoulder and birds-eye (scroll out from shoulder); in birds-eye the mouse points your Ooga, **Q E** rotate and **N** turns north up. **Right-click** returns to shoulder. In shoulder view, **Right Shift + A/D** peeks; tap **Right Shift** to switch shoulders.

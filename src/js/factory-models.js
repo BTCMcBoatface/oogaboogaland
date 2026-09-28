@@ -66,11 +66,18 @@
       { bay: 3, x: 20.8, y: LEVEL.main, z: -2, turn: -Math.PI / 2 }
     ],
     switchboard: { x: -12, y: LEVEL.low, z: 6, w: 7, d: 5 },
-    rebalancer: { x: 14, y: LEVEL.low, z: 4.2, w: 6, d: 6 },
+    rebalancer: { x: 14, y: LEVEL.low, z: 4.2, w: 8, d: 10 },
     treasury: { x: 12, y: LEVEL.low, z: 12.5, w: 7, d: 5 },
     // In front of the core's stone foot, whose face is at z 0.2 there.
     forge: { x: 0, z: 0.7 },
     lookout: { x: -16, y: LEVEL.top, z: -14, w: 6, d: 6, tower: 5.5 },
+    lookoutDeck: { x: -16, y: LEVEL.top + 5.65, z: -14, w: 5, d: 5 },
+    lookoutApproach: { x: -16, y: LEVEL.top, z: -10.8, w: 2, d: 1.5 },
+    // Vertical climbing planes; normals point out from the upper landing.
+    ladders: [
+      { x: 10.1, z: 6.8, bottom: 0, top: LEVEL.low, nx: -1, nz: 0, width: 1.4, inset: 0.3 },
+      { x: -16, z: -11.6, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: 1, width: 1.4, inset: 0.3 }
+    ],
     study: { x: 21.4, y: LEVEL.main, z: 12, w: 4, d: 7 },
     // Level 2, the balcony's level: the walkway from the balcony's right side round the right wall, past the study
     // hall, to the Harbor line's porch, as decks [x0, x1, z0, z1]; each line's porch out to its peer tunnel comes
@@ -553,10 +560,10 @@
   // ---- the hall ---------------------------------------------------------------------------------------
 
   // The cavern itself: a stone floor, craggy walls in stacked blocks, a vault hung with stalactites, rock
-  // ledges under the high decks, and blue crystal and the glow of water running down the back. Stone is one
-  // mesh; the crystal and the falls, which glow, are another with no shadow.
+  // ledges under the high decks, and blue crystal and the glow of water running down the back. The vault has
+  // its own mesh for birdseye views; the crystal and the falls, which glow, have no shadow.
   const hall = cached(() => {
-    const rand = mulberry32(2112), rock = [], glow = [];
+    const rand = mulberry32(2112), rock = [], ceiling = [], glow = [];
     const { halfW: W, back: B, front: F, h: H } = HALL;
     for (let x = -W; x < W; x += 4) for (let z = B; z < F; z += 4) {
       rock.push(box({ w: 4, h: 0.4, d: 4, color: STONE[Math.floor(rand() * 4)], offset: { x: x + 2, y: -0.2 - rand() * 0.06, z: z + 2 } }));
@@ -601,11 +608,11 @@
     shell("right", B, F, 4, (iu, iy, depth, d, c) => v.set(cell(W - depth) + d, iy, iu, c));
     const walls = voxelGeometry(v, { unit: C, palette: [null, ...STONE, ROCK_LT] });
     // The vault: slabs across the top and stalactites hanging from them in three tapering courses.
-    for (let x = -W; x < W; x += 5) for (let z = B; z < F; z += 5) rock.push(box({ w: 5.4, h: 2, d: 5.4, color: STONE[Math.floor(rand() * 4)], offset: { x: x + 2.5, y: H + rand() * 1.2, z: z + 2.5 } }));
+    for (let x = -W; x < W; x += 5) for (let z = B; z < F; z += 5) ceiling.push(box({ w: 5.4, h: 2, d: 5.4, color: STONE[Math.floor(rand() * 4)], offset: { x: x + 2.5, y: H + rand() * 1.2, z: z + 2.5 } }));
     for (let i = 0; i < 70; i++) {
       const x = (rand() * 2 - 1) * (W - 3), z = B + 2 + rand() * (F - B - 5), len = 1.4 + rand() * 3.6, s = 0.8 + rand() * 0.8;
       const top = H - 0.8, color = STONE[Math.floor(rand() * 4)];
-      rock.push(
+      ceiling.push(
         box({ w: 0.9 * s, h: len * 0.45, d: 0.9 * s, color, offset: { x, y: top - len * 0.22, z } }),
         box({ w: 0.55 * s, h: len * 0.35, d: 0.55 * s, color, offset: { x, y: top - len * 0.62, z } }),
         box({ w: 0.25 * s, h: len * 0.22, d: 0.25 * s, color, offset: { x, y: top - len * 0.9, z } })
@@ -652,7 +659,7 @@
       // The pool each fall lands in.
       glow.push(moved(lathe({ profile: [[1.6, 0.05], [0, 0.05]], segments: 10, color: "#4a9bff", emissive: 0.5 }), fx, 0, B + 2.6));
     }
-    return { rock: merge(...rock), walls, glow: noShadow(merge(...glow)) };
+    return { rock: merge(...rock), ceiling: merge(...ceiling), walls, glow: noShadow(merge(...glow)) };
   });
 
   // The highest thing standing under (x, z) below the height y, for a post to rest on: a walkable floor, a tunnel's
@@ -717,6 +724,10 @@
       const l = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / l, dz = (bz - az) / l;
       landings.push([ax, ay, az, w / 2 + 0.05, dx, dz], [bx, by, bz, w / 2 + 0.05, -dx, -dz]);
     }
+    for (const l of L.ladders) {
+      landings.push([l.x, l.top, l.z, l.width / 2 + 0.15, l.nx, l.nz]);
+      landings.push([l.x, l.bottom, l.z, l.width / 2 + 0.15, l.nx, l.nz]);
+    }
     const cutAcross = ([p, q], y) => landings.push([(p[0] + q[0]) / 2, y, (p[1] + q[1]) / 2, Math.hypot(p[0] - q[0], p[1] - q[1]) / 2]);
     for (const bd of ringBridges) cutAcross(bd.sides.map((sd) => sd.b), LEVEL.main);
     for (const bd of topBridges) for (const end of ["a", "b"]) cutAcross(bd.sides.map((sd) => sd[end]), LEVEL.top);
@@ -737,6 +748,22 @@
     for (const b of L.bays) deckAt(b, "nsew");
     for (const d of [L.switchboard, L.rebalancer, L.treasury]) deckAt(d, "nsew");
     deckAt(L.lookout, "nsew");
+    deckAt(L.lookoutDeck, "nsew", 0);
+    deckAt(L.lookoutApproach, "ew", 0);
+    // Brackets carry the lantern deck out from the tower's four legs.
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) geos.push(beam(L.lookout.x + sx * 0.9, L.lookoutDeck.y - 1.4, L.lookout.z + sz * 0.9,
+      L.lookout.x + sx * 2.2, L.lookoutDeck.y - 0.4, L.lookout.z + sz * 2.2, 0.16, TIMBER_DK));
+    // Rails extend above the landing as handholds; the rungs stop below the deck lip.
+    for (const l of L.ladders) {
+      const tx = l.nz, tz = -l.nx;
+      for (const side of [-1, 1]) geos.push(beam(l.x + tx * side * l.width / 2, l.bottom, l.z + tz * side * l.width / 2,
+        l.x + tx * side * l.width / 2, l.top + 1, l.z + tz * side * l.width / 2, 0.12, TIMBER_DK));
+      const count = Math.ceil((l.top - l.bottom) / 0.3);
+      for (let i = 1; i <= count; i++) {
+        const y = l.bottom + (l.top - l.bottom - 0.15) * i / count;
+        geos.push(beam(l.x - tx * l.width / 2, y, l.z - tz * l.width / 2, l.x + tx * l.width / 2, y, l.z + tz * l.width / 2, 0.09, TIMBER_LT));
+      }
+    }
     deckAt(L.landing, "s");
     for (const g of L.galleries) {
       deckAt(g, "swe", 0);
@@ -864,9 +891,9 @@
   // walks under it. `clearAt` keeps bodies out of what stands on the floors. Both allocate nothing.
   const STEP = 0.6;
   const FLOOR = cached(() => {
-    const L = LAYOUT, rects = [], strips = [], blocks = [];
+    const L = LAYOUT, rects = [], strips = [], blocks = [], discs = [];
     const rect = (d, y = d.y) => rects.push(d.x - d.w / 2 + 0.15, d.x + d.w / 2 - 0.15, d.z - d.d / 2 + 0.15, d.z + d.d / 2 - 0.15, y);
-    for (const d of [...L.bays, L.switchboard, L.rebalancer, L.treasury, L.lookout, ...L.galleries]) rect(d);
+    for (const d of [...L.bays, L.switchboard, L.rebalancer, L.treasury, L.lookout, L.lookoutDeck, L.lookoutApproach, ...L.galleries]) rect(d);
     // The landing runs on into the first gallery it opens onto.
     const ld = L.landing;
     rects.push(ld.x - ld.w / 2 + 0.15, ld.x + ld.w / 2 - 0.15, ld.z - ld.d / 2 - 0.4, ld.z + ld.d / 2 - 0.15, ld.y);
@@ -876,7 +903,9 @@
     rects.push(ax0 - 0.3, ax1 + 0.3, az0 + 0.15, az1 - 0.15, y2, bx0 + 0.15, bx1 - 0.15, bz0 - 0.3, bz1 - 0.15, y2);
     for (const t of L.tunnels) {
       const [x0, x1, z0, z1] = porchOf(t);
-      if (t.turn === 0) rects.push(x0 + 0.15, x1 - 0.15, z0, z1 + 0.3, t.y);
+      // Continue the threshold underneath the glass: a walker must retain
+      // support until its centre crosses the connected mirror plane.
+      if (t.turn === 0) rects.push(x0 + 0.15, x1 - 0.15, t.z - 0.35, z1 + 0.3, t.y);
       else rects.push(x0 - 0.3, x1 + 0.3, z0 + 0.15, z1 - 0.15, t.y);
     }
     // A strip runs from one end to the other, `w` wide, rising from y0 to y1: bridges and stairs.
@@ -927,14 +956,17 @@
       block(sw.x + CONSOLE.x + Math.sin(b) * CONSOLE.desk, sw.z + CONSOLE.z - Math.cos(b) * CONSOLE.desk, 0.65, sw.y - 0.5, sw.y + 3);
     }
     block(sw.x - 3, sw.z + 1.4, 0.75, sw.y - 0.5, sw.y + 2);
-    // The rebalancer's platform, the pipes' feet, the console, the crates and the sign's posts.
-    block(rb.x, rb.z + REB.cz, 1.95, rb.y - 0.5, rb.y + 4);
+    // The low drum is a step, not a four-metre invisible wall. Its column and glass tubes have their own shells.
+    discs.push(rb.x, rb.z + REB.cz, 1.85, rb.y + 0.56);
+    block(rb.x, rb.z + REB.cz, 0.36, rb.y + 0.54, rb.y + REB.top + 0.36);
+    for (const s of [-1, 1]) block(rb.x + s * 1.15, rb.z + REB.cz - 0.95, 0.22, rb.y + 0.54, rb.y + 1.68);
+    // The pipes' feet, console, crates and sign posts.
     for (const s of [-1, 1]) {
       block(rb.x + s * REB.leg, rb.z + REB.cz, 0.4, rb.y - 0.5, rb.y + 4);
       block(rb.x + s * REB.post, rb.z + REB.postZ, 0.25, rb.y - 0.5, rb.y + 6);
       block(tr.x + s * TRE.post, tr.z + TRE.postZ, 0.25, tr.y - 0.5, tr.y + 6);
     }
-    block(rb.x + REB.console[0], rb.z + REB.console[1], 0.8, rb.y - 0.5, rb.y + 1.5);
+    for (const x of [-0.42, 0, 0.42]) block(rb.x + REB.console[0] + x, rb.z + REB.console[1], 0.36, rb.y - 0.5, rb.y + 1.5);
     for (const [x, z] of REB.crates) block(rb.x + x, rb.z + z, 0.55, rb.y - 0.5, rb.y + 1);
     // The treasury's vault, its belt and crate, the desk, the cart and the crate of gold.
     block(tr.x, tr.z + TRE.vz, 1.9, tr.y - 0.5, tr.y + 4);
@@ -943,9 +975,10 @@
     block(tr.x + TRE.desk[0], tr.z + TRE.desk[1], 0.6, tr.y - 0.5, tr.y + 1.6);
     block(tr.x + TRE.cart[0], tr.z + TRE.cart[1], 0.65, tr.y - 0.5, tr.y + 1.3);
     for (const [x, z] of TRE.crates) block(tr.x + x, tr.z + z, 0.55, tr.y - 0.5, tr.y + 1);
-    block(lk.x, lk.z, 1.35, lk.y - 0.5, lk.y + 6);
-    // Each peer tunnel's console box; its shield stays walkable, since the scene sends whoever reaches it back to the
-    // node. And the study hall's locked door.
+    block(lk.x, lk.z, 1.35, lk.y - 0.5, L.lookoutDeck.y - 0.3);
+    block(lk.x, lk.z, 1, L.lookoutDeck.y - 0.3, lk.y + lk.tower + 3);
+    // Each peer tunnel's console box; the connected glass stays walkable.
+    // And the study hall's locked door.
     for (const t of L.tunnels) {
       const [bx, bz] = TUNNEL_BOX, c = Math.cos(t.turn), sn = Math.sin(t.turn);
       block(t.x + bx * c + bz * sn, t.z - bx * sn + bz * c, 0.45, t.y - 0.5, t.y + 1.5);
@@ -956,7 +989,8 @@
     for (const s of [-1, 1]) block(st.x - S.z, st.z + s * S.post, 0.35, st.y - 0.5, st.y + 8);
     block(st.x - S.crate[1], st.z + S.crate[0], 0.4, st.y - 0.5, st.y + 1.2);
     block(st.x - S.easel[1], st.z + S.easel[0], 0.5, st.y - 0.5, st.y + 2.8);
-    return { rects: new Float32Array(rects), strips: new Float32Array(strips), blocks: new Float32Array(blocks), ring: L.ring };
+    return { rects: new Float32Array(rects), strips: new Float32Array(strips), blocks: new Float32Array(blocks), discs: new Float32Array(discs),
+      stairs: new Float32Array([L.stairway, ...L.stairs].flat()), ring: L.ring };
   });
   const supportAt = (x, z, feet) => {
     const F = FLOOR(), reach = feet + STEP;
@@ -965,6 +999,11 @@
     for (let i = 0; i < R.length; i += 5) {
       const y = R[i + 4];
       if (y > best && y <= reach && x >= R[i] && x <= R[i + 1] && z >= R[i + 2] && z <= R[i + 3]) best = y;
+    }
+    const D = F.discs;
+    for (let i = 0; i < D.length; i += 4) {
+      const dx = x - D[i], dz = z - D[i + 1], y = D[i + 3];
+      if (y > best && y <= reach && dx * dx + dz * dz <= D[i + 2] * D[i + 2]) best = y;
     }
     const S = F.strips;
     for (let i = 0; i < S.length; i += 7) {
@@ -983,23 +1022,72 @@
   };
   // Whether a walker of `radius` whose feet are at `feet` can step from (ax, az) to (bx, bz): clear of everything
   // standing on the floors all the way, and never dropping more than a step. The scene's walkers and the tests share it.
-  const walkable = (ax, az, bx, bz, feet, radius) => {
+  const walkable = (ax, az, bx, bz, feet, radius, height = 0) => {
     const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.2));
     for (let i = 1; i <= steps; i++) {
       const x = ax + (bx - ax) * i / steps, z = az + (bz - az) * i / steps;
-      if (!clearAt(x, z, feet, radius) || supportAt(x, z, feet) < feet - STEP) return false;
+      const floor = supportAt(x, z, feet);
+      const px = ax + (bx - ax) * (i - 1) / steps, pz = az + (bz - az) * (i - 1) / steps;
+      if (!clearAt(x, z, Math.max(feet, floor), radius, height, px, pz) || floor < feet - STEP) return false;
     }
     return true;
   };
-  const clearAt = (x, z, feet, radius) => {
+  // The treads share a continuous thin collision shell with their walking surface. Its underside is solid,
+  // while the air below it stays open. A body already standing on the treads is above this shell.
+  const stairCeilingAt = (x, z, feet, radius) => {
+    const S = FLOOR().stairs;
+    let ceiling = Infinity;
+    for (let i = 0; i < S.length; i += 7) {
+      const dx = S[i + 3] - S[i], dz = S[i + 5] - S[i + 2], len = Math.hypot(dx, dz);
+      const along = ((x - S[i]) * dx + (z - S[i + 2]) * dz) / len;
+      if (along < -radius || along > len + radius) continue;
+      const across = Math.abs((x - S[i]) * dz - (z - S[i + 2]) * dx) / len;
+      const end = Math.max(0, -along, along - len), side = Math.max(0, across - S[i + 6] / 2);
+      if (end * end + side * side > radius * radius) continue;
+      const top = S[i + 1] + (S[i + 4] - S[i + 1]) * Math.max(0, Math.min(1, along / len));
+      if (feet < top - 0.02) ceiling = Math.min(ceiling, top - 0.28);
+    }
+    return ceiling;
+  };
+  // A movement query may escape an existing overlap, provided every overlapping shell gets farther away.
+  // Ordinary point queries still report that overlap, and a sweep cannot enter any new shell.
+  const clearAt = (x, z, feet, radius, height = 0, fromX = x, fromZ = z) => {
     if (Math.abs(x) > HALL.halfW - 2 || z < HALL.back + 2 || z > HALL.front - 0.4) return false;
+    if (feet + height > stairCeilingAt(x, z, feet, radius) + 1e-6) return false;
     const B = FLOOR().blocks;
     for (let i = 0; i < B.length; i += 5) {
       if (feet < B[i + 3] || feet > B[i + 4]) continue;
       const dx = x - B[i], dz = z - B[i + 1], r = B[i + 2] + radius;
-      if (dx * dx + dz * dz < r * r) return false;
+      const distance2 = dx * dx + dz * dz;
+      if (distance2 >= r * r) continue;
+      const ox = fromX - B[i], oz = fromZ - B[i + 1], old2 = ox * ox + oz * oz;
+      if (old2 >= r * r || distance2 <= old2 + 1e-12 || ox * (x - fromX) + oz * (z - fromZ) < -1e-12) return false;
     }
     return true;
+  };
+  // Horizontal clearance alone cannot stop a fall entering a lower layer's obstacle. Resolve the new
+  // contact at its rim as the feet cross its top, before the walker can land trapped inside it.
+  const resolveFall = (p, fromX, fromZ, previousFeet, feet, radius) => {
+    if (feet >= previousFeet || clearAt(p.x, p.z, feet, radius)) return false;
+    const B = FLOOR().blocks;
+    let moved = false;
+    for (let pass = 0; pass < 4; pass++) {
+      let contact = false;
+      for (let i = 0; i < B.length; i += 5) {
+        if (feet < B[i + 3] || feet > B[i + 4] || pass === 0 && previousFeet <= B[i + 4]) continue;
+        let dx = p.x - B[i], dz = p.z - B[i + 1], distance = Math.hypot(dx, dz);
+        const r = B[i + 2] + radius + 1e-4;
+        if (distance >= r) continue;
+        if (distance < 1e-8) {
+          dx = fromX - B[i]; dz = fromZ - B[i + 1]; distance = Math.hypot(dx, dz);
+          if (distance < 1e-8) { dx = 0; dz = 1; distance = 1; }
+        }
+        p.x = B[i] + dx / distance * r; p.z = B[i + 1] + dz / distance * r;
+        contact = moved = true;
+      }
+      if (!contact || clearAt(p.x, p.z, feet, radius)) break;
+    }
+    return moved;
   };
 
   // ---- the node core ------------------------------------------------------------------------------------
@@ -1213,11 +1301,11 @@
     }
     // Arms out from the posts' tops for the station's two lanterns.
     for (const s of [-1, 1]) flat.push(beam(s * 2.25, 3.95, -0.6, s * 3.1, 3.95, -0.6, 0.14, TIMBER_DK), beam(s * 2.4, 3.4, -0.6, s * 2.85, 3.92, -0.6, 0.08, TIMBER));
-    // The control panel between the tanks: a pedestal, a raked screen with green bars, and keys.
+    // The control panel between the tanks: a pedestal, an upright screen with green bars, and keys.
     flat.push(bevelBox({ w: 0.62, h: 0.85, d: 0.42, color: IRON_DK, bevel: 0.04, offset: { y: 0.425, z: 0.62 } }));
     const panel = [bevelBox({ w: 0.6, h: 0.42, d: 0.08, color: IRON, bevel: 0.03 }), box({ w: 0.5, h: 0.32, d: 0.02, color: "#123a2a", emissive: 0.8, offset: { z: 0.05 } })];
     for (let k = 0; k < 4; k++) panel.push(box({ w: 0.07, h: 0.06 + k * 0.05, d: 0.02, color: "#5fff7a", emissive: 1, offset: { x: -0.15 + k * 0.1, y: -0.12 + (0.06 + k * 0.05) / 2, z: 0.07 } }));
-    flat.push(moved(turnedX(merge(...panel), 0.5), 0, 1.05, 0.72));
+    flat.push(moved(merge(...panel), 0, 1.05, 0.72));
     for (let k = 0; k < 5; k++) flat.push(box({ w: 0.08, h: 0.03, d: 0.07, color: ["#ff5a3a", "#ffc83a", "#5fb8ff", "#5fe36a", "#ff5a3a"][k], emissive: 0.95, offset: { x: -0.2 + k * 0.1, y: 0.86, z: 0.8 } }));
     flat.push(bevelBox({ w: 4.4, h: 3.7, d: 0.16, color: "#7c4424", bevel: 0.05, offset: { y: 2, z: -0.95 } }));
     for (let i = 0; i < 13; i++) for (const y of [0.3, 3.7]) round.push(moved(ball(0.05, BRASS, 0, 6), -2 + i * 0.333, y, -0.86));
@@ -1310,12 +1398,12 @@
       for (const y of [3.95, 4.62]) geos.push(bevelBox({ w: 0.62, h: 0.12, d: 0.6, color: IRON_DK, bevel: 0.02, offset: { x: s * 3.7, y, z: 0.75 } }));
     }
     geos.push(bevelBox({ w: 8.3, h: 0.5, d: 0.56, color: TIMBER, bevel: 0.07, offset: { y: 4.3, z: 0.75 } }));
-    // The forge's control: a console with a raked screen of green bars and a lever with a red knob.
+    // The forge's control: a console with an upright screen of green bars and a lever with a red knob.
     const cx = FORGE_CONSOLE[0], cz = FORGE_CONSOLE[1];
     geos.push(bevelBox({ w: 0.7, h: 0.95, d: 0.5, color: IRON_DK, bevel: 0.05, offset: { x: cx, y: 0.475, z: cz } }));
     const screen = [bevelBox({ w: 0.62, h: 0.44, d: 0.08, color: IRON, bevel: 0.03 }), box({ w: 0.52, h: 0.34, d: 0.02, color: "#123a2a", emissive: 0.8, offset: { z: 0.05 } })];
     for (let k = 0; k < 4; k++) screen.push(box({ w: 0.08, h: 0.07 + k * 0.05, d: 0.02, color: "#5fff7a", emissive: 1, offset: { x: -0.16 + k * 0.1, y: -0.12 + (0.07 + k * 0.05) / 2, z: 0.07 } }));
-    geos.push(moved(turnedX(merge(...screen), 0.45), cx - 0.08, 1.15, cz + 0.08), beam(cx + 0.22, 0.95, cz, cx + 0.34, 1.42, cz + 0.1, 0.05, IRON_LT), moved(ball(0.08, "#e8342a", 0.4, 8), cx + 0.35, 1.46, cz + 0.11));
+    geos.push(moved(merge(...screen), cx - 0.08, 1.15, cz + 0.08), beam(cx + 0.22, 0.95, cz, cx + 0.34, 1.42, cz + 0.1, 0.05, IRON_LT), moved(ball(0.08, "#e8342a", 0.4, 8), cx + 0.35, 1.46, cz + 0.11));
     return moved(shaded([rim], geos), f.x, 0, f.z);
   });
   // A flame: a teardrop of orange with a smaller one of yellow in front of it.
@@ -1550,16 +1638,16 @@
 
   // The switchboard, a cockpit of screens round the operator as the concept draws it. Everything is placed round
   // `CONSOLE`, where the operator stands, facing -z: a curved timber desk wrapped round him, its front a row of
-  // raked control decks studded with lit buttons, a lower row of five monitors on necks along its back, tipped back
-  // toward him, an upper row of four on posts leaning in over him, and the big routing board above the middle. A
-  // monitor is [bearing, reach, height, width, tall, tilt, kind]: bearing 0 is straight ahead, tilt leans its top
-  // back (negative) or in (positive), and kind is what its lit face shows (`switchScreens`). A cart of gold stands by.
+  // raked control decks studded with lit buttons, a lower row of five upright monitors on necks along its back,
+  // an upper row of four on posts, and the upright routing board above the middle. A monitor is
+  // [bearing, reach, height, width, tall, tilt, kind]: bearing 0 is straight ahead, tilt is 0 for upright screens,
+  // and kind is what its lit face shows (`switchScreens`). A cart of gold stands by.
   const CONSOLE = { x: 0, z: 0.9, desk: 2, deep: 0.9, top: 1, arc: 1.3 };
   const MONITORS = [
-    [-1.05, 2.25, 1.6, 1.05, 0.66, -0.3, "bars"], [-0.52, 2.25, 1.6, 1.05, 0.66, -0.3, "text"], [0, 2.25, 1.6, 1.05, 0.66, -0.3, "line"],
-    [0.52, 2.25, 1.6, 1.05, 0.66, -0.3, "text"], [1.05, 2.25, 1.6, 1.05, 0.66, -0.3, "bars"],
-    [-0.78, 2.5, 2.45, 1.05, 0.66, 0.14, "text"], [-0.26, 2.5, 2.45, 1.05, 0.66, 0.14, "line"], [0.26, 2.5, 2.45, 1.05, 0.66, 0.14, "bars"], [0.78, 2.5, 2.45, 1.05, 0.66, 0.14, "text"],
-    [0, 2.7, 3.3, 1.6, 0.95, 0.2, "graph"]
+    [-1.05, 2.25, 1.6, 1.05, 0.66, 0, "bars"], [-0.52, 2.25, 1.6, 1.05, 0.66, 0, "text"], [0, 2.25, 1.6, 1.05, 0.66, 0, "line"],
+    [0.52, 2.25, 1.6, 1.05, 0.66, 0, "text"], [1.05, 2.25, 1.6, 1.05, 0.66, 0, "bars"],
+    [-0.78, 2.5, 2.45, 1.05, 0.66, 0, "text"], [-0.26, 2.5, 2.45, 1.05, 0.66, 0, "line"], [0.26, 2.5, 2.45, 1.05, 0.66, 0, "bars"], [0.78, 2.5, 2.45, 1.05, 0.66, 0, "text"],
+    [0, 2.7, 3.3, 1.6, 0.95, 0, "graph"]
   ];
   // Stands a part built facing +z at the origin where a monitor or a deck at `bearing` and `reach` puts it.
   const consoleAt = (geo, bearing, reach, y, tilt) => moved(turnedY(turnedX(geo, tilt), -bearing), CONSOLE.x + Math.sin(bearing) * reach, y, CONSOLE.z - Math.cos(bearing) * reach);
@@ -1715,7 +1803,7 @@
   // the lanterns, and the operator's and the crates' spots.
   const REB = {
     cz: -0.6, leg: 2.5, top: 3.4, pipe: 0.19, post: 2.8, postZ: -2.75, sign: [0.5, 4.55, -2.45], boards: [[-1.75, 2.35, -0.22], [0, 2.35, -0.2], [1.75, 2.35, -0.22]],
-    lamps: [[-2.8, 5.24, -2.25], [2.8, 5.24, -2.25]], console: [0, 1.85], crates: [[-2.2, 1.95], [2.2, 1.95]], operator: [0, 2.55]
+    lamps: [[-2.8, 5.24, -2.25], [2.8, 5.24, -2.25]], console: [0, 3], crates: [[-2.2, 1.95], [2.2, 1.95]], operator: [0, 4.1]
   };
   const rebalancerPaths = cached(() => ({
     from: roundedPath([[-REB.leg, 0.3, REB.cz], [-REB.leg, REB.top, REB.cz], [-0.36, REB.top, REB.cz]], 0.7),
@@ -1743,13 +1831,14 @@
     round.push(moved(ball(0.36, BRONZE, 0, 16), 0, REB.top, cz), moved(turn([[0.2, 1.85], [0.27, 1.88], [0.27, 2], [0.2, 2.03], [0.2, 2.6], [0.26, 2.63], [0.26, 2.72], [0.2, 2.75], [0.2, 3.1]], 16, BRONZE), 0, 0, cz));
     // The boards' chains from the pipes, and their iron backs.
     for (const [bx, , bz] of REB.boards) for (const dx of bx ? [-0.55, 0.55] : [-0.35, 0.35]) round.push(...chain(bx + dx, 2.7, bz, bx + dx, REB.top - REB.pipe, cz, 0.04, IRON_DK));
-    // The console: a raked panel with the rebalancer's sign on its screen, buttons and a lever.
+    // The console: an upright monitor above a raked button panel and a lever.
     const [kx, kz] = REB.console, rake = 0.35;
     flat.push(bevelBox({ w: 1.5, h: 0.85, d: 0.6, color: IRON_DK, bevel: 0.06, offset: { x: kx, y: 0.425, z: kz } }));
     flat.push(moved(turnedX(bevelBox({ w: 1.56, h: 0.07, d: 0.7, color: IRON, bevel: 0.02 }), rake), kx, 0.9, kz));
     const onPanel = (geo, u, v, lift = 0.05) => moved(geo, kx + u, 0.9 + Math.cos(rake) * lift - Math.sin(rake) * v, kz + Math.sin(rake) * lift + Math.cos(rake) * v);
-    glow.push(onPanel(turnedX(box({ w: 0.58, h: 0.02, d: 0.42, color: "#0f2a4a", emissive: 0.9 }), rake), -0.33, 0));
-    for (const part of cycleIcon(0.12, 0.022)) glow.push(onPanel(turnedX(part, rake - Math.PI / 2), -0.33, 0, 0.07));
+    flat.push(box({ w: 0.08, h: 0.14, d: 0.08, color: IRON_DK, offset: { x: kx - 0.33, y: 0.99, z: kz - 0.1 } }), bevelBox({ w: 0.68, h: 0.52, d: 0.08, color: IRON_DK, bevel: 0.03, offset: { x: kx - 0.33, y: 1.3, z: kz - 0.1 } }));
+    glow.push(box({ w: 0.58, h: 0.42, d: 0.02, color: "#0f2a4a", emissive: 0.9, offset: { x: kx - 0.33, y: 1.3, z: kz - 0.05 } }));
+    for (const part of cycleIcon(0.12, 0.022)) glow.push(moved(part, kx - 0.33, 1.3, kz - 0.03));
     [["#e8342a", 0.12, -0.14], ["#ffd23a", 0.26, -0.14], ["#4fd08a", 0.12, 0.02], ["#e8342a", 0.26, 0.02], ["#ffd23a", 0.12, 0.18], ["#4fd08a", 0.26, 0.18]].forEach(([color, u, v]) => glow.push(onPanel(ball(0.035, color, 1, 8), u, v, 0.06)));
     round.push(beam(kx + 0.55, 0.95, kz, kx + 0.58, 1.3, kz + 0.06, 0.04, IRON_LT), moved(ball(0.07, "#e8342a", 0.4, 10), kx + 0.58, 1.33, kz + 0.06));
     // The sign on its posts, with the arrows chasing round beside the lettering.
@@ -1884,6 +1973,10 @@
     }
     flat.push(bevelBox({ w: 2.4, h: 0.3, d: 2.4, color: TIMBER_LT, bevel: 0.05, offset: { y: h } }));
     round.push(turn([[0.95, h + 0.15], [0.95, h + 0.28], [0.8, h + 0.34], [0, h + 0.34]], 16, BRASS));
+    // A spindle and bearing support the rotating optic, leaving the lantern room open around it.
+    round.push(turn([[0.3, h + 0.34], [0.3, h + 0.42], [0.2, h + 0.46], [0.2, h + 0.53], [0.1, h + 0.56], [0.1, h + 0.94], [0, h + 0.94]], 20, BRONZE));
+    round.push(moved(torus(0.25, 0.025, BRASS), 0, h + 0.44, 0));
+    flat.push(bevelBox({ w: 0.42, h: 0.045, d: 0.52, color: IRON_DK, bevel: 0.01, offset: { x: -0.48, y: h + 0.35, z: 0.38 } }));
     for (let k = 0; k < 8; k++) {
       const a = k / 8 * TAU;
       flat.push(bevelBox({ w: 0.08, h: 1.5, d: 0.08, color: BRASS, bevel: 0.02, offset: { x: Math.cos(a) * 0.86, y: h + 1.05, z: Math.sin(a) * 0.86 } }));
@@ -1897,16 +1990,46 @@
     return shaded(round, flat);
   });
   const lookoutLamp = cached(() => {
-    const h = LAYOUT.lookout.tower;
-    const build = (on) => noShadow(shaded([turn([[0.62, h + 0.34], [0.72, h + 0.9], [0.62, h + 1.72], [0, h + 1.8]], 16, on ? "#ffe29a" : "#4a3a22", on ? 1 : 0.1)]));
+    // The bulb sits at the reflector's focus; all optical parts are local to this centre.
+    const build = (on) => noShadow(shaded([ball(0.13, on ? "#fff1c7" : "#8c8675", on ? 1 : 0, 16)]));
     return { on: build(true), off: build(false) };
   });
-  // The beam: a long, thin cone of pale light from the lamp, turned by the scene about the tower's axis.
+  const lookoutOptics = cached(() => {
+    const round = [], flat = [], axis = (g) => turnedZ(g, -Math.PI / 2);
+    // A hollow reflector opens towards +x, behind the bulb, with a pale reflective interior.
+    round.push(axis(turn([[0, -0.49], [0.16, -0.46], [0.32, -0.37], [0.47, -0.2], [0.56, 0.04],
+      [0.54, 0.04], [0.45, -0.18], [0.3, -0.34], [0.14, -0.43], [0, -0.46]], 32, (t) => t < 0.5 ? BRONZE : "#d6d0bb")));
+    round.push(moved(axis(torus(0.55, 0.028, BRASS, 0, 32)), 0.04, 0, 0));
+    round.push(moved(axis(torus(0.52, 0.035, BRASS, 0, 32)), 0.48, 0, 0));
+    round.push(turn([[0.07, -0.36], [0.07, -0.15], [0, -0.15]], 12, IRON_DK));
+    round.push(moved(ball(0.065, BRASS, 0, 12), 0, -0.16, 0));
+    // Three slender stays hold the lens ahead of the light without hiding its centre.
+    for (let k = 0; k < 3; k++) {
+      const a = k / 3 * TAU, y = Math.cos(a) * 0.52, z = Math.sin(a) * 0.52;
+      flat.push(beam(0.04, y, z, 0.48, y, z, 0.035, BRONZE));
+    }
+    flat.push(beam(-0.3, -0.38, 0, 0.3, -0.38, 0, 0.08, BRONZE));
+    // Concentric stepped rings keep a Fresnel lens thin instead of filling the room with glass.
+    const profile = [[0, 0.49]];
+    for (let k = 1; k <= 7; k++) {
+      const r = k / 7 * 0.49;
+      profile.push([r, 0.435], [r, 0.49]);
+    }
+    profile.push([0.49, 0.42], [0, 0.42]);
+    const lens = noShadow(shaded([axis(turn(profile, 32, "#cde7df", 0.08))]));
+    lens.glass = 0.26;
+    return { frame: shaded(round, flat), lens };
+  });
+  const LOOKOUT_BEAM = { range: 48, inner: 7 * Math.PI / 180, outer: 11 * Math.PI / 180, pitch: -0.2 };
+  // A faint cone through the dusty air; the matching spotlight lights the surfaces in its path.
   const lookoutBeam = cached(() => {
-    const g = lathe({ profile: [[0.1, 0], [2, 13], [0, 13]], segments: 8, color: "#fff2c0", emissive: 0.7 });
+    const range = LOOKOUT_BEAM.range;
+    const g = lathe({ profile: [[0.04, 0], [Math.tan(LOOKOUT_BEAM.outer) * range, range], [0, range]], segments: 24, color: "#fff2c0", emissive: 1 });
     const v = g.verts;
-    for (let i = 0; i < v.length; i += 3) { const y = v[i + 1]; v[i + 1] = v[i] * 0.3; v[i] = y; }
+    for (let i = 0; i < v.length; i += 3) { const y = v[i + 1]; v[i + 1] = v[i]; v[i] = y; }
     g.faces.forEach((f) => f.i.reverse());
+    g.glass = 0.055;
+    g.lightBeam = range;
     return noShadow(g);
   });
 
@@ -2081,7 +2204,8 @@
     { ring: "#6fff9a", sky: "#1f5a3a", ground: "#2f5a2a", accent: "#1f4a24" },
     { ring: "#6fb8ff", sky: "#1f3a6a", ground: "#4a6a8a", accent: "#e8e0d0" }
   ];
-  const TUNNEL_SIGN = { y: 6.15, z: 0.7 }, TUNNEL_POST = 3.95, TUNNEL_BOX = [-1.55, 0.85];
+  // Crossing reverses the lateral offset, so keep both sides of the aperture clear of consoles.
+  const TUNNEL_SIGN = { y: 6.15, z: 0.7 }, TUNNEL_POST = 3.95, TUNNEL_BOX = [-3.5, 0.95];
   const tunnel = (theme) => {
     const T = TUNNEL_THEMES[theme], geos = [], glow = [], lit = [], rand = mulberry32(theme * 11 + 3), cy = 2.6;
     for (const [r, n, depth, z] of [[2.5, 12, 1.4, 0], [3.2, 16, 1.1, -0.15]]) for (let k = 0; k <= n; k++) {
@@ -2118,6 +2242,7 @@
     for (const x of [-0.5, 0.5]) geos.push(box({ w: 0.08, h: 0.08, d: 4.2, color: IRON_LT, offset: { x, y: 0.1, z: -1 } }));
     for (let z = 0.9; z > -3; z -= 0.5) geos.push(box({ w: 1.3, h: 0.06, d: 0.18, color: TIMBER_DK, offset: { y: 0.04, z } }));
     // The console box by the door, with the bolt lit on its screen.
+    geos.push(bevelBox({ w: 0.9, h: 0.4, d: 0.8, color: STONE[2], bevel: 0.05, offset: { x: TUNNEL_BOX[0], y: -0.2, z: TUNNEL_BOX[1] } }));
     geos.push(bevelBox({ w: 0.62, h: 0.72, d: 0.5, color: TIMBER, bevel: 0.05, offset: { x: TUNNEL_BOX[0], y: 0.36, z: TUNNEL_BOX[1] } }));
     lit.push(box({ w: 0.44, h: 0.44, d: 0.03, color: "#12305a", emissive: 0.8, offset: { x: TUNNEL_BOX[0], y: 0.42, z: TUNNEL_BOX[1] + 0.26 } }));
     lit.push(moved(smoothBolt(0.36, 0.03, "#8fd8ff", 1), TUNNEL_BOX[0], 0.42, TUNNEL_BOX[1] + 0.29));
@@ -3046,10 +3171,10 @@
 
   BL.factoryModels = {
     LAYOUT, LEVEL, HALL, WALL_LEAN, STATION_BACK, stationX, stationZ, SHIELD_Z, porchOf, FORGE_TRACKS, FORGE_STORES, FORGE_CY, SHAFTS, LINE_STEP, COIN_R,
-    forgeSign, forgeWave, forgeLines, forgeTrack, forgeShafts, mintCoin, COILS, teslaCoil, banner, statusLantern, peerPipes, peerMirrors, TUNNEL_SIGN, TUNNEL_POST, EXIT_Z, CONDUIT_SAMPLES, TUNNEL_THEMES, STEP, supportAt, clearAt, walkable,
+    forgeSign, forgeWave, forgeLines, forgeTrack, forgeShafts, mintCoin, COILS, teslaCoil, banner, statusLantern, peerPipes, peerMirrors, TUNNEL_SIGN, TUNNEL_POST, EXIT_Z, CONDUIT_SAMPLES, TUNNEL_THEMES, STEP, supportAt, stairCeilingAt, clearAt, walkable, resolveFall,
     hall, scaffold, coreBody, coreChamber, conduits, sat, satFailed, stationFrame, capacitor, forge, forgeFire, cart,
     switchboard, switchScreens, REB, TRE, rebalancerBase, rebalancerRing, rebalancerFlow, treasuryBody, goldPile, hopperFill, beltNugget, goldCrate, dataBoard, moveBoard,
-    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutBeam, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, hubWindow, exitTunnel, outsideView,
+    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutOptics, lookoutBeam, LOOKOUT_BEAM, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, hubWindow, exitTunnel, outsideView,
     beam, moved, turnedY, smoothBolt, smoothBitcoin
   };
 })();

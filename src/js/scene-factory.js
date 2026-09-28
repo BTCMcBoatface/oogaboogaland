@@ -40,17 +40,17 @@
   // The shield across the way out, as wide as the mouth's opening, as on the hub's side; and how far past where the
   // hub took its picture of the island the picture hangs.
   const GATE_OPENING = { minX: -2.5, maxX: 2.5, floorY: 0, ceilingY: 3 }, OUTSIDE_DISTANCE = 34;
-  // Each peer tunnel's shield, across the inside of its arch in the tunnel's frame, and its blue; and where on the
-  // node's walkway it sets down whoever walks into it.
-  const PEER_OPENING = { minX: -2.1, maxX: 2.1, floorY: 0.1, ceilingY: 4.65 }, PEER_PLANE = 0.45, PEER_TINT = [0.3, 0.72, 1], NODE_RETURN = { x: 0, z: 1.6 };
+  // Paired peer mirrors share their arch coordinates. A half turn carries an
+  // incoming walk out of the other face, retaining height and distance crossed.
+  const PEER_OPENING = { minX: -2.1, maxX: 2.1, floorY: 0.1, ceilingY: 4.65 }, PEER_PLANE = 0.45, PEER_TINT = [0.3, 0.72, 1];
   const view = (x, y, z, yaw, pitch, dist) => ({ yaw, pitch, dist, target: { x, y, z } });
   const bay = (i, dist = 11) => { const b = LAYOUT.bays[i]; return view(b.x * 0.9, b.y + 2, b.z, b.x < 0 ? 0.55 : -0.55, 0.22, dist); };
   // Where whoever walked in stands: a step inside the gate, facing the core (yaw 0 turns the Ooga to PI), seen over
-  // its shoulder at the shoulder view's own pitch.
-  const ARRIVAL = { yaw: 0, pitch: 0.42, dist: FOLLOW.max, position: { x: 0, y: LAYOUT.entrance.y, z: LAYOUT.entrance.z + 1 } };
+  // its shoulder looking horizontally across the hall.
+  const ARRIVAL = { yaw: 0, pitch: 0, dist: FOLLOW.max, position: { x: 0, y: LAYOUT.entrance.y, z: LAYOUT.entrance.z + 1 } };
   // `entrance` is the balcony's view across the core; the rest frame one station each.
   const PRESETS = {
-    entrance: view(0, 9, -6, 0, 0.07, 33),
+    entrance: view(0, 9, -6, 0, 0, 33),
     core: view(0, 8, -4, 0.35, 0.12, 15),
     lines: view(0, 8.5, -8, 0, 0.18, 20),
     lineA: bay(0), lineB: bay(1), lineC: bay(2), lineD: bay(3),
@@ -67,6 +67,8 @@
     direct: [0.6, 0.45, 0.32], directStrength: 0.35, ambientFloor: 0.34,
     sun: { x: 0.25, y: 0.9, z: 0.3 }, shadowCenter: { x: 0, y: 6, z: -4 }, shadowExtent: 30,
     lights: new Float32Array(BL.glRenderer.POINT_LIGHT_CAPACITY * 8), lightCount: 0, bloomStrength: 0.85,
+    // Spotlight: origin/range, unit direction/outer cosine, colour/inner cosine.
+    spotLight: new Float32Array(12),
     fog: [0.1, 0.07, 0.05], fogNear: 40, fogFar: 110
   };
   // Seconds a flash, a sputter, the forge's heat and the rebalancer's run last.
@@ -123,6 +125,7 @@
   const targets = [];
   const SAT_POS = { x: 0, y: 0, z: 0 }, SAT_ROT = { x: 0, y: 0, z: 0 }, SAT_SCALE = { x: 1, y: 1, z: 1 };
   const SAT_M = mat4.create();
+  const PEER_ROTATION = math.quat.create();
 
   // The dressing: crates and coal by the forge, a gauge by the switchboard, and vines over the way
   // out. One set, built once for the page.
@@ -387,6 +390,7 @@
     go("hub");
   };
   const onKey = (e) => {
+    if ((e.key === "1" || e.key === "2") && pilot.weaponMode(Number(e.key))) return true;
     if (e.key === "Escape") {
       leaveCave();
       return true;
@@ -410,7 +414,9 @@
       surge: 0, surgeT: -1
     };
     const hall = FM.hall(), cond = FM.conduits();
-    addChild(root, createNode({ geometry: hall.rock }), createNode({ geometry: hall.walls }), createNode({ geometry: hall.glow, sightHidden: true }), createNode({ geometry: FM.scaffold() }),
+    s.ceiling = createNode({ geometry: hall.ceiling });
+    s.walls = createNode({ geometry: hall.walls });
+    addChild(root, s.ceiling, createNode({ geometry: hall.rock }), s.walls, createNode({ geometry: hall.glow, sightHidden: true }), createNode({ geometry: FM.scaffold() }),
       createNode({ geometry: FM.coreBody() }), createNode({ geometry: cond.pipe }), createNode({ geometry: cond.glass, sightHidden: true }), createNode({ geometry: cond.glow }), createNode({ geometry: FM.forge() }));
     // The surge's rings round the chamber and the coils' arcs, hidden until a big forward comes through.
     s.coreRings = [0, 1, 2].map(() => createNode({ position: { x: L.core.x, y: 0, z: L.core.z }, geometry: FM.coreRing(), visible: false, sightHidden: true }));
@@ -469,15 +475,19 @@
       const lbl = labelNode(node, 0, FM.TUNNEL_SIGN.y, FM.TUNNEL_SIGN.z);
       addChild(node, createNode({ position: { x: -(FM.TUNNEL_POST + 0.75), y: 5.9, z: 0.6 }, geometry: FM.banner(2.2) }));
       addChild(root, node);
-      // The peer's shield across the arch: the lab's phase plane in the concept's blue, humming like the gate.
-      const phase = BL.labPhase.create(node, { x: t.x, z: t.z, ry: t.turn, floorY: t.y, room: { w: 4.2, h: 4.7, from: 0, to: 3 } }, PEER_OPENING, PEER_PLANE, PEER_TINT);
-      // Its face is a mirror, a reflector of its own, and takes the shield's ripples, so the blue waves run over the
-      // reflection; the shield's own plane only keeps the ripples.
+      // The OBL mirror's exact mesh-section contact atlas highlights the limbs
+      // touching this glass, over the peer's own blue reflection.
       const face = createNode({ geometry: FM.peerMirrors()[i], position: { x: 0, y: 0, z: PEER_PLANE }, rippleTint: PEER_TINT, sightHidden: true });
-      face.mirrorRipples = phase.ripples;
-      phase.node.visible = false;
       addChild(node, face);
-      s.tunnels.push({ at: t, node, stone, label: lbl, phase, face, hum: Math.random() * 0.3 });
+      const ripples = BL.mirrorRipples.create(face), body = BL.mirrorBody.create(face, new Map());
+      const other = L.tunnels[i ^ 1], yaw = other.turn - t.turn + Math.PI, c = Math.cos(yaw), sn = Math.sin(yaw);
+      const sx = t.x + Math.sin(t.turn) * PEER_PLANE, sz = t.z + Math.cos(t.turn) * PEER_PLANE;
+      const transform = mat4.create();
+      transform[0] = transform[10] = c; transform[2] = -sn; transform[8] = sn;
+      transform[12] = other.x + Math.sin(other.turn) * PEER_PLANE - sx * c - sz * sn;
+      transform[13] = other.y - t.y;
+      transform[14] = other.z + Math.cos(other.turn) * PEER_PLANE + sx * sn - sz * c;
+      s.tunnels.push({ at: t, node, stone, label: lbl, face, ripples, body, transform, yaw, crossings: 0, hum: Math.random() * 0.3 });
     });
     // Gallery stands along the top decks.
     const gcaps = FM.galleryCaps();
@@ -531,10 +541,12 @@
     s.statsBoard = labelNode(trNode, tbr[0], tbr[1], tbr[2]);
     // The watchtower on the top deck: tower, lamp and the beam that sweeps round it.
     const lkNode = createNode({ position: { x: lk.x, y: lk.y, z: lk.z } });
-    s.lamp = createNode({ geometry: FM.lookoutLamp().on });
-    s.beam = createNode({ position: { x: 0, y: lk.tower + 1, z: 0 }, geometry: FM.lookoutBeam(), sightHidden: true });
+    s.lamp = createNode({ position: { x: 0, y: lk.tower + 1, z: 0 }, rotation: { x: 0, y: 0, z: FM.LOOKOUT_BEAM.pitch }, geometry: FM.lookoutLamp().on });
+    s.beam = createNode({ geometry: FM.lookoutBeam(), sightHidden: true });
+    const optics = FM.lookoutOptics();
+    addChild(s.lamp, createNode({ geometry: optics.frame }), createNode({ geometry: optics.lens }), s.beam);
     const lkBody = createNode({ geometry: FM.lookoutTower() });
-    addChild(lkNode, lkBody, s.lamp, s.beam);
+    addChild(lkNode, lkBody, s.lamp);
     s.lookoutLabel = labelNode(lkNode, 2.2, 2.6, 2.3);
     // The study hall in the right wall, facing into the hall: locked for now.
     const stNode = createNode({ position: { x: st.x, y: st.y, z: st.z }, rotation: { x: 0, y: -Math.PI / 2, z: 0 } });
@@ -617,7 +629,7 @@
       b.gorilla = worker(FM.stationX(d) + (d.x < 0 ? 1.8 : -1.8), d.y, FM.stationZ(d) + 2.1, 0.6, d.w, d.d);
     });
     worker(L.switchboard.x, L.switchboard.y, L.switchboard.z + 0.9, 0.8, L.switchboard.w, L.switchboard.d, Math.PI);
-    s.rebalanceCrew = worker(L.rebalancer.x + FM.REB.operator[0], L.rebalancer.y, L.rebalancer.z + FM.REB.operator[1], 0.4, L.rebalancer.w, L.rebalancer.d, Math.PI);
+    s.rebalanceCrew = worker(L.rebalancer.x + FM.REB.operator[0], L.rebalancer.y, L.rebalancer.z + FM.REB.operator[1], 0.25, L.rebalancer.w, L.rebalancer.d, Math.PI);
     worker(L.treasury.x + FM.TRE.operator[0], L.treasury.y, L.treasury.z + FM.TRE.operator[1], 0.6, L.treasury.w, L.treasury.d);
     worker(L.lookout.x + 1.8, L.lookout.y, L.lookout.z + 1.6, 0.8, L.lookout.w, L.lookout.d);
   };
@@ -639,7 +651,11 @@
     lamp(LIGHT.switchboard, L.switchboard.x, L.switchboard.y + 2.2, L.switchboard.z + 0.8, 9, 0.35, 0.6, 1);
     lamp(LIGHT.rebalancer, L.rebalancer.x, L.rebalancer.y + 1.6, L.rebalancer.z + 0.6, 9, 0.35, 0.9, 1);
     lamp(LIGHT.treasury, L.treasury.x, L.treasury.y + 2, L.treasury.z + 1, 9, 1, 0.8, 0.35);
-    lamp(LIGHT.lookout, L.lookout.x, L.lookout.y + L.lookout.tower + 1, L.lookout.z, 14, 1, 0.82, 0.45);
+    lamp(LIGHT.lookout, L.lookout.x, L.lookout.y + L.lookout.tower + 1, L.lookout.z, 3, 1, 0.82, 0.45);
+    const spot = RENDER_OPTS.spotLight, beam = FM.LOOKOUT_BEAM;
+    spot[0] = L.lookout.x; spot[1] = L.lookout.y + L.lookout.tower + 1; spot[2] = L.lookout.z; spot[3] = 0;
+    spot[4] = Math.cos(beam.pitch); spot[5] = Math.sin(beam.pitch); spot[6] = 0; spot[7] = Math.cos(beam.outer);
+    spot[8] = 12; spot[9] = 9.84; spot[10] = 5.4; spot[11] = Math.cos(beam.inner);
     RENDER_OPTS.lightCount = Math.min(BL.glRenderer.POINT_LIGHT_CAPACITY, FIXED + lightPool().length / 8);
   };
   // The shared lights, [x, y, z, radius, r, g, b, flicker] each: flicker 0 is steady, otherwise the flame's phase.
@@ -683,8 +699,53 @@
   // The crew's support and step test on the hall's floor: the highest surface within a step of the feet, clear of
   // what stands there, and never off an edge.
   const groundFor = (x, z, feet) => FM.supportAt(x, z, feet);
-  const walkableFor = (ax, az, bx, bz, y, height, actor) => FM.walkable(ax, az, bx, bz, y, actor.bodyRadius || 0.35);
+  // There is no banana pile in the hall. Space must jump even when the rifle needs ammunition.
+  const reloadPolicy = { near: () => false, available: () => false };
+  const walkableFor = (ax, az, bx, bz, y, height, actor) => FM.walkable(ax, az, bx, bz, y, actor.bodyRadius || 0.35, height);
+  const ceilingFor = (x, z, feet, actor) => FM.stairCeilingAt(x, z, feet, actor.bodyRadius || 0.35);
+  // In the air, keep the same obstacle clearance without requiring the floor to be within a step.
+  const flyableFor = (ax, az, bx, bz, y, height, actor) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.2)), radius = actor.bodyRadius || 0.35;
+    for (let i = 1; i <= steps; i++) {
+      if (!FM.clearAt(ax + (bx - ax) * i / steps, az + (bz - az) * i / steps, y, radius, height,
+        ax + (bx - ax) * (i - 1) / steps, az + (bz - az) * (i - 1) / steps)) return false;
+    }
+    return true;
+  };
+  const resolveLanding = (actor, x, y, z) => {
+    if (actor.ladder && actor.ladder.plane) return;
+    const p = actor.root.position, feet = p.y - actor.baseY;
+    if (!FM.resolveFall(p, x, z, y - actor.baseY, feet, actor.bodyRadius || 0.35)) return;
+    const floor = FM.supportAt(p.x, p.z, feet);
+    p.y = actor.baseY + Math.max(feet, floor);
+    actor.hop = Math.max(0, feet - floor);
+    if (actor.hop === 0 && actor.hopV < 0) actor.hopV = 0;
+  };
+  // Clip against the nearest shield before scenery behind it, then emit at the actual banana crossing.
+  // Both paths reuse the mirrors' cached transforms and fixed ripple pools.
+  const clipProjectileTarget = (from, to) => {
+    let clipped = scene.gate.phase.ripples.absorb(from.x, from.y, from.z, to);
+    for (const t of scene.tunnels) if (t.ripples.absorb(from.x, from.y, from.z, to)) clipped = true;
+    return clipped;
+  };
+  const absorbProjectile = (ax, ay, az, point, dt) => {
+    const gate = scene.gate.phase.ripples, bx = point.x, by = point.y, bz = point.z;
+    let hit = gate.absorb(ax, ay, az, point) ? gate : null;
+    for (const t of scene.tunnels) {
+      if (t.ripples.absorb(ax, ay, az, point)) hit = t.ripples;
+    }
+    return !!hit && hit.cross(ax, ay, az, bx, by, bz, dt);
+  };
   const feetOf = () => avatar ? avatar.root.position.y - avatar.baseY : 0;
+  const peerPassage = (p) => {
+    for (const t of LAYOUT.tunnels) {
+      const dx = p.x - t.x, dz = p.z - t.z, c = Math.cos(t.turn), sn = Math.sin(t.turn);
+      const across = dx * c - dz * sn, along = dx * sn + dz * c;
+      if (Math.abs(across) < PEER_OPENING.maxX && along >= -0.5 && along <= 2.5
+        && p.y >= t.y && p.y <= t.y + PEER_OPENING.ceilingY) return true;
+    }
+    return false;
+  };
 
   const enter = (ctx) => {
     ({ renderer, game, world, go, agentPlay } = ctx);
@@ -695,12 +756,14 @@
     hooks = {};
     input = interactMod.create({ canvas: ctx.canvas, renderer, camera, hooks });
     const clampTarget = (p) => {
+      if (peerPassage(p)) return;
       p.x = clamp(p.x, -HALL.halfW + 3, HALL.halfW - 3);
       p.y = clamp(p.y, 0.5, HALL.h - 3);
       p.z = clamp(p.z, HALL.back + 2.5, HALL.front - 2);
     };
     // Out of the walls, which lean in as they rise; only the tunnel out lets the eye nearer the front.
     const clampCamera = (p) => {
+      if (peerPassage(p)) return;
       p.y = clamp(p.y, 0.6, HALL.h - 2);
       const lean = p.y / HALL.h * FM.WALL_LEAN;
       p.x = clamp(p.x, -HALL.halfW + 2 + lean, HALL.halfW - 2 - lean);
@@ -739,6 +802,7 @@
     hud.onAction((action) => {
       if (action === "leave") leaveCave();
       else if (action === "reset-view") pilot.goPreset("entrance");
+      else if (action.startsWith("weapon-") || action === "magazine-swap") pilot.weaponAction(action);
     });
     fx = fxMod.create({ root, input, hooks, hud, game, world, renderer, camera, overlay: ctx.overlay, tickerAt: { x: 0, y: 14, z: -4 } });
     dust = BL.dressing.motes({ count: 240, span: 22, low: 0.5, high: 16 });
@@ -756,7 +820,12 @@
     world.pilot = null;
     if (playerName) {
       playerWorld = { level: 0, weapons: new Map(), magazine: { owned: false, count: 0, ammo: 0, carrier: null } };
-      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor };
+      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor, flyable: flyableFor, ceilingAt: ceilingFor, ladders: LAYOUT.ladders, onBodyMove: resolveLanding, clipProjectileTarget, absorbProjectile, reloadPolicy };
+      shared.onModelChange = () => {
+        if (!avatar) return;
+        scene.gate.phase.body.refresh(avatar.root);
+        for (const t of scene.tunnels) t.body.refresh(avatar.root);
+      };
       people = shared.crew = BL.crew.create(shared);
       pilot.bind(shared);
       avatar = people.cavemen.get(playerName);
@@ -765,6 +834,7 @@
       // settled over its shoulder, never sweeping in from wherever the new camera began.
       pilot.navigate(ARRIVAL);
       scene.gate.phase.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
+      for (const t of scene.tunnels) t.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
     }
     lightUp();
     LIGHT_BASE.set(RENDER_OPTS.lights);
@@ -793,20 +863,30 @@
     };
   };
 
-  // A peer tunnel's shield lets nobody through yet: whoever walks into it sends a ripple across it and is set back
-  // down on the node's walkway, facing the core.
-  const peerShield = (s) => {
-    const p = avatar.root.position, feet = p.y - avatar.baseY;
+  // Cross only the actual glass plane, using the movement segment so a long
+  // step retains its overshoot. Emerging points face out and cannot bounce back
+  // until the player turns and physically crosses the destination again.
+  const peerPortal = (s, previousX, previousY, previousZ) => {
+    if (people.player !== avatar) return;
+    const p = avatar.root.position;
     for (let i = 0; i < s.tunnels.length; i++) {
       const t = s.tunnels[i], at = t.at, c = Math.cos(at.turn), sn = Math.sin(at.turn), dx = p.x - at.x, dz = p.z - at.z;
-      const across = dx * c - dz * sn, along = dx * sn + dz * c;
-      if (along > PEER_PLANE + 0.35 || along < -1 || Math.abs(across) > PEER_OPENING.maxX || Math.abs(feet - at.y) > 0.6) continue;
-      for (let k = 0; k < 3; k++) t.phase.ripples.pulse(across, 0.6 + k * 0.7, 0);
-      p.x = NODE_RETURN.x;
-      p.y = LEVEL.main + avatar.baseY;
-      p.z = NODE_RETURN.z;
-      avatar.root.rotation.y = Math.PI;
-      hud.toast("The peer's shield holds. Back to the node.");
+      const px = previousX - at.x, pz = previousZ - at.z;
+      const from = px * sn + pz * c - PEER_PLANE, to = dx * sn + dz * c - PEER_PLANE;
+      if (from < -1e-7 || to > 0 || from - to < 1e-8) continue;
+      const fraction = from / (from - to), across = (px + (dx - px) * fraction) * c - (pz + (dz - pz) * fraction) * sn;
+      const feet = previousY + (p.y - previousY) * fraction - avatar.baseY - at.y;
+      if (across < PEER_OPENING.minX || across > PEER_OPENING.maxX || feet < PEER_OPENING.floorY - 0.12 || feet + avatar.bodyHeight > PEER_OPENING.ceilingY) continue;
+      const m = t.transform, x = p.x, z = p.z, vx = avatar.leap.vx, vz = avatar.leap.vz;
+      p.x = m[0] * x + m[8] * z + m[12]; p.y += m[13]; p.z = m[2] * x + m[10] * z + m[14];
+      avatar.root.rotation.y += t.yaw;
+      if (avatar.root.quaternion) {
+        math.quat.fromEuler(PEER_ROTATION, 0, t.yaw, 0);
+        math.quat.multiply(avatar.root.quaternion, PEER_ROTATION, avatar.root.quaternion);
+      }
+      avatar.leap.vx = m[0] * vx + m[8] * vz; avatar.leap.vz = m[2] * vx + m[10] * vz;
+      pilot.transformView(m, t.yaw);
+      t.crossings++;
       return;
     }
   };
@@ -954,9 +1034,13 @@
 
   const update = (dt, elapsed) => {
     const s = scene;
+    const previousX = avatar ? avatar.root.position.x : 0, previousY = avatar ? avatar.root.position.y : 0, previousZ = avatar ? avatar.root.position.z : 0;
     pilot.readInput(dt);
     if (people) people.update(dt, elapsed);
     pilot.update(dt);
+    // Cut the vault and inward-leaning walls away so the outer decks stay visible.
+    // Restore them only after the birdseye blend fully returns, including reversals.
+    s.ceiling.visible = s.walls.visible = !pilot.birdsEye && pilot.birdsEyeMix === 0;
     // The gate's shield hums, and shows the outline of whoever walks through it.
     const g = s.gate;
     g.phase.update(dt, elapsed);
@@ -970,11 +1054,13 @@
     // The peer tunnels' shields hum in their blue.
     for (let i = 0; i < s.tunnels.length; i++) {
       const t = s.tunnels[i];
-      t.phase.update(dt, elapsed);
+      t.ripples.update(dt, elapsed);
+      t.body.update(dt);
+      t.body.time = t.ripples.time;
       t.hum -= dt;
       if (t.hum <= 0) {
         t.hum = 0.16 + Math.random() * 0.3;
-        t.phase.ripples.pulse(PEER_OPENING.minX + Math.random() * (PEER_OPENING.maxX - PEER_OPENING.minX), PEER_OPENING.floorY + Math.random() * (PEER_OPENING.ceilingY - PEER_OPENING.floorY), 0);
+        t.ripples.pulse(PEER_OPENING.minX + Math.random() * (PEER_OPENING.maxX - PEER_OPENING.minX), PEER_OPENING.floorY + Math.random() * (PEER_OPENING.ceilingY - PEER_OPENING.floorY), 0);
       }
     }
     shared.tick(dt);
@@ -986,7 +1072,7 @@
       const inOpening = p.x >= GATE_OPENING.minX && p.x <= GATE_OPENING.maxX && y >= GATE_OPENING.floorY - 0.12 && y < GATE_OPENING.ceilingY;
       if (avatar) {
         if (inOpening && p.z > HALL.front - 1.3) leaveCave();
-        else peerShield(s);
+        else peerPortal(s, previousX, previousY, previousZ);
       } else {
         const a = pilot.controls.read();
         if (inOpening && Math.hypot(a.x, a.y) > 0.05 && p.z > HALL.front - 2.2) leaveCave();
@@ -1078,7 +1164,12 @@
     const ll = FM.lookoutLamp(), lampGeo = live ? ll.on : ll.off;
     if (s.lamp.geometry !== lampGeo) s.lamp.geometry = lampGeo;
     s.beam.visible = live;
-    s.beam.rotation.y += dt * 0.9;
+    s.lamp.rotation.y += dt * 0.9;
+    const spot = RENDER_OPTS.spotLight, beam = FM.LOOKOUT_BEAM, horizontal = Math.cos(beam.pitch);
+    spot[3] = live ? beam.range : 0;
+    spot[4] = Math.cos(s.lamp.rotation.y) * horizontal;
+    spot[5] = Math.sin(beam.pitch);
+    spot[6] = -Math.sin(s.lamp.rotation.y) * horizontal;
     for (let k = 4; k < 7; k++) L[LIGHT.lookout * 8 + k] = B[LIGHT.lookout * 8 + k] * (live ? 1 : 0.08);
     // Sats: in along a conduit to the core, then out along another to the line the forward left by, or back.
     const q = s.sats, data = s.satNode.instanceData, red = s.redNode.instanceData;
@@ -1141,7 +1232,7 @@
     }
     for (const g of scene.crew) g.agent.dispose();
     scene.gate.phase.dispose();
-    for (const t of scene.tunnels) { t.phase.dispose(); t.face.mirrorRipples = null; }
+    for (const t of scene.tunnels) { t.ripples.dispose(); t.body.dispose(); }
     if (people) people.dispose();
     fx.dispose();
     pilot.dispose();
@@ -1165,7 +1256,6 @@
     if (scene) {
       for (const g of scene.crew) g.agent.liveGeometry(set);
       scene.gate.phase.liveGeometry(set);
-      for (const t of scene.tunnels) t.phase.liveGeometry(set);
     }
     if (avatar) set.add(avatar.headOpen).add(avatar.headClosed);
   };
