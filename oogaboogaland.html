@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; script-src 'sha256-3dJv2nYuGZPA3mL5HNMcMU8+/ywJq1wCsSmVWaja96A='; style-src 'sha256-3+s/+JeMCr4OayIBnZPjXMQAK6cjlGOAcJKWf0ce0OA='; img-src 'self' data:; media-src https://stream.noderunnersradio.com; connect-src https: wss:; base-uri 'none'; form-action 'none'">
+    content="default-src 'none'; script-src 'sha256-vOa4WshlIDGBMh536Np/SnrLI0QoZEoruZ4/c8xIdXA='; style-src 'sha256-TglkszS6SkXiGF/z/wYYen9b++WV3XmuM18TrRQNAM0='; img-src 'self' data:; media-src https://stream.noderunnersradio.com; connect-src https: wss:; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0a0a0b">
@@ -2476,7 +2476,7 @@ body[data-active-scene="mine"] .mode-hud {
 .chalk-frame canvas { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; touch-action: none; cursor: crosshair; }
 .chalk-frame.has-tool canvas { cursor: none; }
 .chalk-frame.typing canvas { cursor: text; }
-.chalk-caret { position: absolute; width: 3px; height: 8%; background: #f2f3d6; box-shadow: 0 0 5px #f2f3d6; pointer-events: none; animation: chalk-caret-blink 1s steps(1) infinite; }
+.chalk-caret { position: absolute; width: 3px; height: 12%; background: #f2f3d6; box-shadow: 0 0 5px #f2f3d6; pointer-events: none; animation: chalk-caret-blink 1s steps(1) infinite; }
 .chalk-caret[hidden] { display: none; }
 .chalk-type-input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 @keyframes chalk-caret-blink { 50% { opacity: 0; } }
@@ -8740,7 +8740,7 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
   const BL = window.BL = window.BL || {};
   const { mat4, mulberry32, hexToRgb, sortByKey, sortScratch } = BL.math;
   const { createNode, addChild, removeChild, boundsOf } = BL.scene;
-  const PANEL_DAMAGE = 20, PANEL_HEALTH = 1, PANEL_LIMIT = 48, DEBRIS_LIMIT = 48, DEBRIS_LIFE = 1.2, HEAL_DELAY = 3, HEAL_RATE = 2;
+  const PANEL_DAMAGE = 20, PANEL_HEALTH = 2, PANEL_LIMIT = 48, DEBRIS_LIMIT = 48, DEBRIS_LIFE = 1.2, HEAL_DELAY = 3, HEAL_RATE = 2;
   const MAX_DAMAGE = PANEL_DAMAGE + PANEL_LIMIT * PANEL_HEALTH, DAMAGE_STEP = 0.5, STATE_LIMIT = MAX_DAMAGE / DAMAGE_STEP;
   const PANEL_HEAL_RATE = HEAL_RATE / PANEL_LIMIT;
   const CRACK_HEAL_TIME = 1.5, CRACK_STEPS = 6, REPAIR_STEPS = 96, REPAIR_CACHES = 2;
@@ -9128,7 +9128,7 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
       sortByKey(order, 0, pieces.length, keys, 1, 0, hitSort);
       if (preserved && Number.isFinite(keys[order[0]])) {
         // Other panels retain their exact repair and crack contours. Further
-        // force is absorbed by the nearest remaining glass, one HP per pane.
+        // force is absorbed by the nearest remaining glass, two HP per pane.
         fractureDamage[order[0]] = Math.max(fractureDamage[order[0]], state.crackDamage); fractureLevel[order[0]] = 1;
       }
       for (let i = 0; i < pieces.length && remaining > 0 && Number.isFinite(keys[order[i]]); i++) {
@@ -9153,10 +9153,10 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
         repairCache = null;
         return true;
       }
-      const full = new Float64Array(pieces.length).fill(1);
+      const full = new Float64Array(pieces.length).fill(1), fullHealth = new Float64Array(pieces.length).fill(PANEL_HEALTH);
       for (let step = 0; step <= CRACK_STEPS; step++) {
         const shape = buildShape(full, fractureDamage, fractureLevel, 1 - step / CRACK_STEPS);
-        shape.health = full;
+        shape.health = fullHealth;
         shape.preserve = !!preserved;
         crackStates[step] = shape;
       }
@@ -9759,6 +9759,7 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
   const INSTANCE_FLOATS = 20;
   const NO_OBJECT_CLIP = new Float32Array([0, 0, 0, -1]);
   const NO_OBJECT_SLAB = new Float32Array(4);
+  const NO_SPOT_LIGHT = new Float32Array(12);
   // MAX_PIXELS caps the pixel ratio to bound buffer memory.
   const MAX_PIXELS = 2.6e6;
   const DEFAULT_LIGHT = { x: 0.45, y: 0.85, z: 0.3 };
@@ -9960,6 +9961,7 @@ uniform sampler2DShadow uShadow;
 uniform float uShadowTexel;
 uniform vec4 uLights[64];
 uniform int uLightCount;
+uniform vec4 uSpotLight[3];
 ${VIEW_DIRECTION_GLSL}
 uniform vec3 uFog;
 uniform vec2 uFogRange;
@@ -9968,6 +9970,7 @@ uniform vec3 uMatrixOrigin;
 uniform float uMatrixGlyph;
 // Glass: below 1, a geometry drawn in the glass pass is that see-through, and thicker toward its silhouette.
 uniform float uGlass;
+uniform float uLightBeam;
 uniform float uMatrixCave;
 uniform vec4 uMatrixCaves[8];
 uniform vec4 uMatrixCaveBounds[8];
@@ -10156,6 +10159,17 @@ vec3 lightFactorAt(vec3 n) {
     float a = clamp(1.0 - dist / lp.w, 0.0, 1.0);
     a *= a;
     factor += uLights[i * 2 + 1].rgb * a * max(dot(n, ld), 0.0) / max(dist, 0.0001);
+  }
+  if (uSpotLight[0].w > 0.0) {
+    vec3 toSurface = vWorld - uSpotLight[0].xyz;
+    float dist = length(toSurface);
+    if (dist > 0.0001 && dist < uSpotLight[0].w) {
+      vec3 direction = toSurface / dist;
+      float cone = smoothstep(uSpotLight[1].w, uSpotLight[2].w, dot(direction, uSpotLight[1].xyz));
+      float fade = 1.0 - dist / uSpotLight[0].w;
+      float energy = cone * fade * fade / (1.0 + 0.005 * dist * dist);
+      factor += uSpotLight[2].rgb * energy * max(dot(n, -direction), 0.0);
+    }
   }
   return factor;
 }
@@ -10468,6 +10482,11 @@ void main() {
   vec3 normalColor = clamp(mix(col, uFog, fog), 0.0, 1.0);
   vec3 normalBright = clamp((col * (emissive * 0.9 + vParams.y * 0.5 + tip * 0.85) + surfaceBright) * (1.0 - fog), 0.0, 1.0);
   float glassAlpha = uGlass < 1.0 ? clamp(uGlass + pow(1.0 - abs(dot(n, normalize(uEye - vWorld))), 2.0) * 0.55, 0.0, 1.0) : 1.0;
+  // Dust scatters faint light without a glass rim; its intensity fades toward the far end.
+  if (uLightBeam > 0.0) {
+    float fade = clamp(1.0 - vLocal.x / uLightBeam, 0.0, 1.0);
+    glassAlpha = uGlass * fade * fade;
+  }
   if (uGlassOpacity > 0.0) {
     vec3 view = normalize(viewTowardEye(vWorld));
     float grazing = pow(1.0 - abs(dot(n, view)), 3.0);
@@ -11141,7 +11160,7 @@ void main() {
       const meshFragment = matrixSampling ? MESH_FS.replace("#version 300 es", "#version 300 es\n#extension GL_OES_shader_multisample_interpolation : require\n#define MATRIX_SAMPLE_INTERPOLATION") : MESH_FS;
       res.programs = {
         image: compile(IMAGE_VS, IMAGE_FS, ["uViewProj", "uRect", "uImage", "uReady", "uClipMaxY"]),
-        mesh: compile(MESH_VS, meshFragment, ["uViewProj", "uLightViewProj", "uEye", "uViewDirection", "uLightDir", "uSky", "uGround", "uSun", "uDirectStrength", "uAmbientFloor", "uDiffuseFloor", "uShadowStrength", "uShadowFloor", "uShadowBias", "uShadow", "uShadowTexel", "uLights", "uLightCount", "uFog", "uFogRange", "uMatrixParams", "uMatrixOrigin", "uMatrixGlyph", "uMatrixCave", "uMatrixCaves", "uMatrixCaveBounds", "uMatrixCaveNear", "uMatrixPermanentCave", "uMatrixPermanentPlane", "uMatrixPermanentAperture", "uMatrixLivingGlobal", "uMatrixGlyphTex", "uMatrixSamples", "uClipMinY", "uClipMaxY", "uObjectClip", "uObjectSlab", "uProjective", "uMatrixGlyphOpacity", "uGlassOpacity", "uVoxel", "uWindTime", "uSway", "uSwing", "uGlass"]),
+        mesh: compile(MESH_VS, meshFragment, ["uViewProj", "uLightViewProj", "uEye", "uViewDirection", "uLightDir", "uSky", "uGround", "uSun", "uDirectStrength", "uAmbientFloor", "uDiffuseFloor", "uShadowStrength", "uShadowFloor", "uShadowBias", "uShadow", "uShadowTexel", "uLights", "uLightCount", "uSpotLight", "uFog", "uFogRange", "uMatrixParams", "uMatrixOrigin", "uMatrixGlyph", "uMatrixCave", "uMatrixCaves", "uMatrixCaveBounds", "uMatrixCaveNear", "uMatrixPermanentCave", "uMatrixPermanentPlane", "uMatrixPermanentAperture", "uMatrixLivingGlobal", "uMatrixGlyphTex", "uMatrixSamples", "uClipMinY", "uClipMaxY", "uObjectClip", "uObjectSlab", "uProjective", "uMatrixGlyphOpacity", "uGlassOpacity", "uVoxel", "uWindTime", "uSway", "uSwing", "uGlass", "uLightBeam"]),
         shadow: compile(SHADOW_VS, SHADOW_FS, ["uLightViewProj", "uClipMinY", "uClipMaxY", "uObjectClip"]),
         line: compile(LINE_VS, LINE_FS, ["uViewProj", "uViewport", "uWidth", "uClipMaxY", "uObjectClip"]),
         sky: compile(QUAD_VS, SKY_FS, ["uInvViewProj", "uHorizon", "uZenith", "uSun", "uSunDir", "uMoonDir", "uStarMatrix", "uStars", "uTime", "uHazeDrop", "uClouds", "uSea", "uSeaEye"]),
@@ -12114,6 +12133,7 @@ void main() {
       drawParts("mesh", "mesh", true, cull);
       glassPass = false;
       gl.uniform1f(mesh.u.uGlass, 1);
+      gl.uniform1f(mesh.u.uLightBeam, 0);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     };
@@ -12125,7 +12145,10 @@ void main() {
         if (excludeMirror && (rec === mirror.record || rec.geometry.mirrorSource)) continue;
         if (rec.geometry.reflector && (reflectorPass === null || rec === reflectorPass)) continue;
         if (useProgram === "mesh" && !rec.geometry.glass !== !glassPass) continue;
-        if (glassPass) gl.uniform1f(res.programs.mesh.u.uGlass, rec.geometry.glass);
+        if (glassPass) {
+          gl.uniform1f(res.programs.mesh.u.uGlass, rec.geometry.glass);
+          gl.uniform1f(res.programs.mesh.u.uLightBeam, rec.geometry.lightBeam || 0);
+        }
         const part = rec[kind], n = rec.batch && rec.batch.drawInstanceCount !== undefined ? rec.drawCount : cull ? rec.drawCount : rec.count;
         if (!part || !n) continue;
         if (cull && rec.offscreen) continue;
@@ -12235,7 +12258,7 @@ void main() {
       gl.depthMask(true);
       gl.depthFunc(gl.LESS);
     };
-    const renderMirrorCapture = (clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, lightCount, skyOn, fog, fogNear, fogFar, matrix, environmentFace = -1, target = mirror) => {
+    const renderMirrorCapture = (clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, lightCount, skyOn, fog, fogNear, fogFar, matrix, spotLight, environmentFace = -1, target = mirror) => {
       const cube = environmentFace >= 0;
       if (target !== mirror) ensureReflectorTarget(target);
       else if (!cube) ensureMirrorTarget();
@@ -12275,6 +12298,7 @@ void main() {
       bindMatrixTexture(pg.mesh);
       if (lights) gl.uniform4fv(pg.mesh.u.uLights, lights);
       gl.uniform1i(pg.mesh.u.uLightCount, lightCount);
+      gl.uniform4fv(pg.mesh.u.uSpotLight, spotLight);
       gl.uniform3fv(pg.mesh.u.uFog, fog);
       gl.uniform2f(pg.mesh.u.uFogRange, fogNear, fogFar);
       // The mirror closes before the retreat reaches the pile; its reflection must still show the same partially
@@ -12441,10 +12465,30 @@ void main() {
         gl.uniformMatrix4fv(pg.u.uReflectionViewProj, false, t.viewProj);
         gl.uniformMatrix4fv(pg.u.uMirrorWorld, false, w);
         gl.uniform2f(pg.u.uReflectionScale, t.renderWidth / t.size, t.renderHeight / t.size);
-        const tint = node.rippleTint, ripples = node.mirrorRipples;
+        const tint = node.rippleTint, ripples = node.mirrorRipples, body = node.mirrorBody;
+        const bodyActive = body && (body.contacts || body.active);
+        gl.activeTexture(gl.TEXTURE4);
+        if (bodyActive) {
+          if (!rec.rippleBodyTexture) {
+            rec.rippleBodyTexture = createTexture(body.width, body.height * body.layers, gl.RGBA8, gl.LINEAR);
+            rippleBodyTextures++;
+          }
+          gl.bindTexture(gl.TEXTURE_2D, rec.rippleBodyTexture);
+          if (rec.rippleBodyState !== body || rec.rippleBodyVersion !== body.version) {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, body.width, body.height * body.layers, gl.RGBA, gl.UNSIGNED_BYTE, body.pixels);
+            rec.rippleBodyState = body; rec.rippleBodyVersion = body.version;
+          }
+          const bounds = boundsOf(node.geometry);
+          gl.uniform4f(pg.u.uBodyBounds, bounds.min[0], bounds.min[1], bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]);
+          gl.uniform2f(pg.u.uBodyTexel, 1 / body.width, 1 / body.height);
+        } else gl.bindTexture(gl.TEXTURE_2D, res.matrixTexture);
+        gl.uniform1i(pg.u.uBodyContacts, bodyActive ? body.contacts : 0);
+        gl.uniform1i(pg.u.uBodyActive, bodyActive ? body.active : 0);
+        gl.uniform4fv(pg.u.uBodyWaves, body ? body.waves : NO_MIRROR_BODY_WAVES);
+        gl.activeTexture(gl.TEXTURE2);
         gl.uniform3f(pg.u.uCrestTint, tint ? tint[0] : -1, tint ? tint[1] : 0, tint ? tint[2] : 0);
         gl.uniform1i(pg.u.uRippleActive, ripples ? ripples.active : 0);
-        gl.uniform1f(pg.u.uRippleTime, ripples ? ripples.time : 0);
+        gl.uniform1f(pg.u.uRippleTime, bodyActive ? body.time : ripples ? ripples.time : 0);
         gl.uniform4fv(pg.u.uRipples, ripples ? ripples.waves : NO_MIRROR_RIPPLES);
         gl.bindTexture(gl.TEXTURE_2D, t.tex);
         gl.bindVertexArray(rec.mesh.vao);
@@ -12577,6 +12621,7 @@ void main() {
         time = 0,
         lights,
         lightCount = 0,
+        spotLight = NO_SPOT_LIGHT,
         fog = null,
         fogNear = 0,
         fogFar = 0,
@@ -12720,14 +12765,14 @@ void main() {
           skipMirrorPass("portal-open");
         } else if (prepareMirrorCamera(camera)) {
           if (!ensureMirrorProgram()) skipMirrorPass("shader-pending");
-          else renderMirrorCapture(clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, nLights, skyOn, fogColor, fogA, fogB, matrix);
+          else renderMirrorCapture(clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, nLights, skyOn, fogColor, fogA, fogB, matrix, spotLight);
         }
         if (mirror.shards && ensureShardProgram()) {
           ensureEnvironment(clear);
           if (environment.valid !== 63 || environment.frame++ % settings.environmentCadence === 0) {
             const face = environment.next;
             prepareEnvironmentCamera(camera, face);
-            renderMirrorCapture(clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, nLights, skyOn, fogColor, fogA, fogB, matrix, face);
+            renderMirrorCapture(clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, nLights, skyOn, fogColor, fogA, fogB, matrix, spotLight, face);
             environment.next = (face + 1) % 6;
           }
         }
@@ -12756,7 +12801,7 @@ void main() {
           const i = pass ? turn : best;
           if (i < 0) continue;
           const node = reflectorNodes[i], t = reflectorTargets.get(node.geometry);
-          if (prepareMirrorCamera(camera, node, t)) renderMirrorCapture(clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, nLights, skyOn, fogColor, fogA, fogB, matrix, -1, t);
+          if (prepareMirrorCamera(camera, node, t)) renderMirrorCapture(clear, sky, ground, direct, directStrength, ambientFloor, diffuseFloor, shadowStrength, shadowFloor, shadowBias, lx, ly, lz, sh, lights, nLights, skyOn, fogColor, fogA, fogB, matrix, spotLight, -1, t);
         }
       }
       const viewActor = opts.beforeView?.();
@@ -12811,6 +12856,7 @@ void main() {
       bindMatrixTexture(pg.mesh);
       if (lights) gl.uniform4fv(pg.mesh.u.uLights, lights);
       gl.uniform1i(pg.mesh.u.uLightCount, nLights);
+      gl.uniform4fv(pg.mesh.u.uSpotLight, spotLight);
       gl.uniform3fv(pg.mesh.u.uFog, fogColor);
       gl.uniform2f(pg.mesh.u.uFogRange, fogA, fogB);
       gl.uniform4f(pg.mesh.u.uMatrixParams, matrix ? matrix.active : 0, matrix ? matrix.radius : 0, matrix ? matrix.time : time, matrix ? matrix.density : 0);
@@ -13278,6 +13324,15 @@ void main() {
     let eye = { x: 0, y: 0, z: 0 }, near = 0.2, cutawayMaxY = Infinity;
     const lightDir = new Float32Array([0, 1, 0]);
     let directStrength = 1, ambientFloor = 0.3, diffuseFloor = 0, skyLuma = 0.5, groundLuma = 0.2;
+    let spotLight = null;
+    const spotEnergy = (x, y, z, nx, ny, nz) => {
+      if (!spotLight || spotLight[3] <= 0) return 0;
+      const dx = x - spotLight[0], dy = y - spotLight[1], dz = z - spotLight[2], dist = Math.hypot(dx, dy, dz);
+      if (dist < 0.0001 || dist >= spotLight[3]) return 0;
+      const angle = (dx * spotLight[4] + dy * spotLight[5] + dz * spotLight[6]) / dist;
+      const cone = smooth((angle - spotLight[7]) / (spotLight[11] - spotLight[7])), fade = 1 - dist / spotLight[3];
+      return cone * fade * fade * Math.max(0, -(nx * dx + ny * dy + nz * dz) / dist) / (1 + 0.005 * dist * dist);
+    };
     // Fog toward a colour; fogNear/fogFar start at 1e8/1e8+1 so it stays off until a frame sets one.
     const fogRgb = [0, 0, 0];
     let fogNear = 1e8, fogFar = 1e8 + 1;
@@ -13428,6 +13483,12 @@ void main() {
           centerX /= count;
           centerY /= count;
           centerZ /= count;
+          let faceOpacity = opacity;
+          if (node.geometry.lightBeam) {
+            const along = ((centerX - w[12]) * w[0] + (centerY - w[13]) * w[1] + (centerZ - w[14]) * w[2]) / (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+            const fade = Math.max(0, Math.min(1, 1 - along / node.geometry.lightBeam));
+            faceOpacity *= fade * fade;
+          }
           // Mode 5 keeps its own palette in the Matrix; clouds are mode 4.
           const matrixNative = matrixMode > 4.5;
           const matrixCloud = matrixMode > 3.5 && !matrixNative;
@@ -13588,7 +13649,7 @@ void main() {
               rec.n = clipped;
               rec.depth = zsum / clipped - (node.depthBias || 0);
               rec.line = false;
-              rec.smokeOpacity = opacity;
+              rec.smokeOpacity = faceOpacity;
               rec.mirror = mirrorFace;
               rec.mirrorNode = mirrorFace ? node : null;
               rec.imageNode = node.geometry.imageSurface ? node : null;
@@ -13647,9 +13708,10 @@ void main() {
               const cb = lerp(c[2] * scorch, heat * (0.01 + ember * ember * ember * 0.74), ember * 0.9);
               const tip = node.tip > 1.5 ? 0 : node.tip || 0;
               const fog = localMatrixGlyph ? smooth((glyphDistance - fogNear) / (fogFar - fogNear)) : Math.min(1, Math.max(0, (-rec.depth - fogNear) / (fogFar - fogNear)));
-              let red = lerp(lerp(cr * k, 214, tip * 0.88), fogRgb[0], fog);
-              let green = lerp(lerp(cg * k, 255, tip * 0.88), fogRgb[1], fog);
-              let blue = lerp(lerp(cb * k, 227, tip * 0.88), fogRgb[2], fog);
+              const beam = localMatrixGlyph ? 0 : spotEnergy(centerX, centerY, centerZ, nx, ny, nz) * (1 - Math.min(1, emissive));
+              let red = lerp(lerp(cr * (k + (beam ? beam * spotLight[8] : 0)), 214, tip * 0.88), fogRgb[0], fog);
+              let green = lerp(lerp(cg * (k + (beam ? beam * spotLight[9] : 0)), 255, tip * 0.88), fogRgb[1], fog);
+              let blue = lerp(lerp(cb * (k + (beam ? beam * spotLight[10] : 0)), 227, tip * 0.88), fogRgb[2], fog);
               if (liquid) {
                 const time = node.portalTime, radius = Math.hypot(liquidX, liquidZ);
                 const interference = Math.sin(Math.hypot(liquidX - 0.22, liquidZ + 0.17) * 32 - time * 4)
@@ -14414,6 +14476,7 @@ void main() {
         cutawayPlanes[at + 19] = s * x + c * z - region.halfDepth;
       }
       const { light = DEFAULT_LIGHT, directStrength: strength = 1, ambientFloor: ambient = 0.3, diffuseFloor: diffuse = 0, clear = null, sky = DEFAULT_SKY, ground = DEFAULT_GROUND, horizon = null, zenith = null, fog = null, fogNear: near0 = 0, fogFar: far0 = 0, matrix = null } = opts;
+      spotLight = opts.spotLight || null;
       matrixActive = matrix ? matrix.active : 0;
       matrixRadius = matrix ? matrix.radius : 0;
       matrixTime = matrix ? matrix.time : 0;
@@ -21354,10 +21417,13 @@ void main() {
       for (const geometry of boatGeometry[i % 3]) BL.scene.addChild(node, BL.scene.createNode({ geometry, sightHidden: true }));
       const seated = (i & 1) === 0;
       const passenger = BL.models.caveman(BL.contributors.traitsFor(`boat-ooga-${i % 2}`));
-      const figure = passenger.root, size = 0.78, deck = 3 * U;
-      figure.scale.x = figure.scale.y = figure.scale.z = size;
+      const figure = passenger.root, size = 1 / s, deck = 3 * U;
+      // Horizon rafts are enlarged scenery; their passengers retain the
+      // same world scale and proportions as the Oogas on the island.
+      figure.scale.x = figure.scale.z = size;
+      figure.scale.y = size / 0.85;
       figure.position.x = seated ? -0.3 : 0.3;
-      figure.position.y = deck + size * passenger.traits.height * 5 / 16 * (seated ? 0.4 : 1);
+      figure.position.y = deck + figure.scale.y * passenger.traits.height * 5 / 16 * (seated ? 0.4 : 1);
       figure.position.z = -0.65;
       figure.rotation.y = seated ? -0.12 : 0.12;
       passenger.parts.club.visible = false;
@@ -21394,7 +21460,7 @@ void main() {
   const KEY = "ooga-chalkboard-v2", OLD_KEY = "ooga-chalkboard-v1", MAX_STROKES = 550, MAX_POINTS = 10000;
   const W = 800, H = 500, BOARD_W = 1.5, BOARD_H = 0.875, BOARD_FACE_Z = -1 / 16 + 0.002;
   const GRID_W = 160, GRID_H = 100, WASH_MS = 650, DRAW_MS = 700, WASH_BANDS = 6, WORLD_UPDATE_MS = 100;
-  const TEXT_FONT = "38.75px 'Bradley Hand', 'Marker Felt', cursive", TEXT_SIZE = 40, TEXT_LINE = 56.25, TEXT_MARGIN = 32;
+  const TEXT_FONT = "58.125px 'Bradley Hand', 'Marker Felt', cursive", TEXT_SIZE = 60, TEXT_LINE = 84.375, TEXT_MARGIN = 32;
   const clamp = (v) => Math.max(0, Math.min(1, v));
   const initial = () => {
     const marks = [];
@@ -21985,7 +22051,7 @@ void main() {
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  BL.jumbotronData = {"meta":{"generated_at":"2026-09-28T12:17:09.989Z","org":"OogaBoogaX","schema_version":3},"totals":{"contributors":50,"commits":1385,"prs":500,"reviews":58,"issues":33,"comments":413},"leaderboards":{"commits":[{"login":"portlandhodl","count":402},{"login":"w-s-bitcoin","count":395},{"login":"MrHodlX","count":168},{"login":"timechainb","count":85},{"login":"2140data","count":61},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":31},{"login":"pdubl22","count":23},{"login":"YellowBrokeIt","count":20},{"login":"Hero-Gamer","count":17},{"login":"rules-without-rulers","count":16},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"drneski","count":11},{"login":"J25dunn","count":10},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"knorrium","count":7},{"login":"Jdelg718","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"SaniExp","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":118},{"login":"portlandhodl","count":86},{"login":"w-s-bitcoin","count":68},{"login":"timechainb","count":35},{"login":"2140data","count":31},{"login":"ottoz0r","count":19},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"rules-without-rulers","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"drneski","count":7},{"login":"tmmmemcee","count":6},{"login":"Jdelg718","count":5},{"login":"knorrium","count":5},{"login":"RandyMcMillan","count":4},{"login":"SaniExp","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"YellowBrokeIt","count":3},{"login":"dani69654","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":29},{"login":"J25dunn","count":14},{"login":"w-s-bitcoin","count":9},{"login":"portlandhodl","count":5},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":102},{"login":"portlandhodl","count":88},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":48},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"rules-without-rulers","count":8},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"Jdelg718","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"YellowBrokeIt","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"drneski","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":16},{"login":"rules-without-rulers","count":12},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"repos":[{"name":"entropylab","totals":{"contributors":46,"commits":1086,"prs":411,"reviews":52,"issues":21,"comments":401},"weekly":[{"week":"2026-W35","commits":333,"prs":134,"reviews":2,"issues":1,"comments":69},{"week":"2026-W36","commits":399,"prs":136,"reviews":16,"issues":0,"comments":130},{"week":"2026-W37","commits":82,"prs":36,"reviews":18,"issues":2,"comments":76},{"week":"2026-W38","commits":132,"prs":51,"reviews":5,"issues":2,"comments":39},{"week":"2026-W39","commits":134,"prs":53,"reviews":11,"issues":15,"comments":79},{"week":"2026-W40","commits":6,"prs":1,"reviews":0,"issues":1,"comments":8}],"last_activity_at":"2026-09-28T10:26:26Z","leaderboards":{"commits":[{"login":"portlandhodl","count":402},{"login":"w-s-bitcoin","count":218},{"login":"MrHodlX","count":163},{"login":"timechainb","count":85},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":24},{"login":"pdubl22","count":23},{"login":"Hero-Gamer","count":17},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"J25dunn","count":10},{"login":"2140data","count":9},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"Jdelg718","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"SaniExp","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"rules-without-rulers","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":114},{"login":"portlandhodl","count":86},{"login":"w-s-bitcoin","count":37},{"login":"timechainb","count":35},{"login":"ottoz0r","count":18},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"2140data","count":10},{"login":"Jdelg718","count":5},{"login":"RandyMcMillan","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"SaniExp","count":3},{"login":"dani69654","count":3},{"login":"tmmmemcee","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"rules-without-rulers","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":29},{"login":"J25dunn","count":14},{"login":"portlandhodl","count":5},{"login":"w-s-bitcoin","count":3},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":102},{"login":"portlandhodl","count":88},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":46},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Jdelg718","count":2},{"login":"rules-without-rulers","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":16},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-25T20:27:53Z"},{"login":"timechainb","last_seen_at":"2026-09-27T22:12:43Z"},{"login":"portlandhodl","last_seen_at":"2026-09-27T17:43:47Z"},{"login":"MrHodlX","last_seen_at":"2026-09-28T10:26:26Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T00:52:02Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-02T02:19:20Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"SaniExp","last_seen_at":"2026-09-02T16:47:02Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"2140data","last_seen_at":"2026-08-31T04:54:04Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-12T17:11:11Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-17T00:58:54Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"}]},{"name":"oogaboogaland","totals":{"contributors":11,"commits":280,"prs":83,"reviews":6,"issues":12,"comments":12},"weekly":[{"week":"2026-W37","commits":45,"prs":19,"reviews":0,"issues":0,"comments":1},{"week":"2026-W38","commits":80,"prs":30,"reviews":3,"issues":0,"comments":0},{"week":"2026-W39","commits":149,"prs":31,"reviews":3,"issues":11,"comments":11},{"week":"2026-W40","commits":6,"prs":3,"reviews":0,"issues":1,"comments":0}],"last_activity_at":"2026-09-28T11:54:35Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":164},{"login":"2140data","count":52},{"login":"YellowBrokeIt","count":20},{"login":"rules-without-rulers","count":14},{"login":"drneski","count":11},{"login":"knorrium","count":7},{"login":"MrHodlX","count":5},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ottoz0r","count":1}],"prs":[{"login":"w-s-bitcoin","count":25},{"login":"2140data","count":21},{"login":"rules-without-rulers","count":11},{"login":"drneski","count":7},{"login":"knorrium","count":5},{"login":"MrHodlX","count":4},{"login":"YellowBrokeIt","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ottoz0r","count":1}],"reviews":[{"login":"w-s-bitcoin","count":6}],"comments":[{"login":"rules-without-rulers","count":6},{"login":"Holo-Elfstone","count":2},{"login":"w-s-bitcoin","count":2},{"login":"YellowBrokeIt","count":1},{"login":"drneski","count":1}],"issues":[{"login":"rules-without-rulers","count":12}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-28T11:54:35Z"},{"login":"MrHodlX","last_seen_at":"2026-09-27T07:53:30Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"2140data","last_seen_at":"2026-09-27T03:48:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-28T00:36:49Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"drneski","last_seen_at":"2026-09-28T05:51:16Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"}]},{"name":"bedrock","totals":{"contributors":2,"commits":19,"prs":6,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W36","commits":16,"prs":6,"reviews":0,"issues":0,"comments":0},{"week":"2026-W37","commits":3,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-07T05:21:02Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":13},{"login":"ottoz0r","count":6}],"prs":[{"login":"w-s-bitcoin","count":6}],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-07T05:21:02Z"},{"login":"ottoz0r","last_seen_at":"2026-09-04T21:29:31Z"}]}],"recent":[{"login":"w-s-bitcoin","repo":"oogaboogaland","type":"merge","occurred_at":"2026-09-28T11:54:35Z"},{"login":"w-s-bitcoin","repo":"oogaboogaland","type":"pr","occurred_at":"2026-09-28T11:52:23Z"},{"login":"w-s-bitcoin","repo":"oogaboogaland","type":"commit","occurred_at":"2026-09-28T11:49:34Z"},{"login":"MrHodlX","repo":"entropylab","type":"merge","occurred_at":"2026-09-28T10:26:26Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T10:18:53Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T10:14:48Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-28T10:13:56Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T10:02:21Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T09:43:47Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-28T09:39:13Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T09:30:19Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T09:09:32Z"}],"contributors":[{"login":"portlandhodl","last_seen_at":"2026-09-27T17:43:47Z"},{"login":"w-s-bitcoin","last_seen_at":"2026-09-28T11:54:35Z"},{"login":"MrHodlX","last_seen_at":"2026-09-28T10:26:26Z"},{"login":"timechainb","last_seen_at":"2026-09-27T22:12:43Z"},{"login":"2140data","last_seen_at":"2026-09-27T03:48:46Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T12:31:24Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-28T00:36:49Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"drneski","last_seen_at":"2026-09-28T05:51:16Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"}]};
+  BL.jumbotronData = {"meta":{"generated_at":"2026-09-28T15:07:03.299Z","org":"OogaBoogaX","schema_version":3},"totals":{"contributors":50,"commits":1397,"prs":503,"reviews":58,"issues":33,"comments":417},"leaderboards":{"commits":[{"login":"portlandhodl","count":402},{"login":"w-s-bitcoin","count":397},{"login":"MrHodlX","count":173},{"login":"timechainb","count":85},{"login":"2140data","count":61},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":31},{"login":"pdubl22","count":23},{"login":"YellowBrokeIt","count":20},{"login":"Hero-Gamer","count":17},{"login":"drneski","count":16},{"login":"rules-without-rulers","count":16},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"J25dunn","count":10},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"knorrium","count":7},{"login":"Jdelg718","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"SaniExp","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":120},{"login":"portlandhodl","count":86},{"login":"w-s-bitcoin","count":69},{"login":"timechainb","count":35},{"login":"2140data","count":31},{"login":"ottoz0r","count":19},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"rules-without-rulers","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"drneski","count":7},{"login":"tmmmemcee","count":6},{"login":"Jdelg718","count":5},{"login":"knorrium","count":5},{"login":"RandyMcMillan","count":4},{"login":"SaniExp","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"YellowBrokeIt","count":3},{"login":"dani69654","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":29},{"login":"J25dunn","count":14},{"login":"w-s-bitcoin","count":9},{"login":"portlandhodl","count":5},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":106},{"login":"portlandhodl","count":88},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":48},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"rules-without-rulers","count":8},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"Jdelg718","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"YellowBrokeIt","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"drneski","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":16},{"login":"rules-without-rulers","count":12},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"repos":[{"name":"entropylab","totals":{"contributors":46,"commits":1091,"prs":413,"reviews":52,"issues":21,"comments":405},"weekly":[{"week":"2026-W35","commits":333,"prs":134,"reviews":2,"issues":1,"comments":69},{"week":"2026-W36","commits":399,"prs":136,"reviews":16,"issues":0,"comments":130},{"week":"2026-W37","commits":82,"prs":36,"reviews":18,"issues":2,"comments":76},{"week":"2026-W38","commits":132,"prs":51,"reviews":5,"issues":2,"comments":39},{"week":"2026-W39","commits":134,"prs":53,"reviews":11,"issues":15,"comments":79},{"week":"2026-W40","commits":11,"prs":3,"reviews":0,"issues":1,"comments":12}],"last_activity_at":"2026-09-28T14:40:22Z","leaderboards":{"commits":[{"login":"portlandhodl","count":402},{"login":"w-s-bitcoin","count":218},{"login":"MrHodlX","count":168},{"login":"timechainb","count":85},{"login":"dplusplus1024","count":44},{"login":"ottoz0r","count":24},{"login":"pdubl22","count":23},{"login":"Hero-Gamer","count":17},{"login":"itme-brain","count":13},{"login":"claude","count":12},{"login":"RandyMcMillan","count":11},{"login":"J25dunn","count":10},{"login":"2140data","count":9},{"login":"MHODL","count":7},{"login":"Rob1Ham","count":7},{"login":"Jdelg718","count":5},{"login":"email:0ca1dda35e422a0f","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"BTCMcBoatface","count":3},{"login":"codex","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"SaniExp","count":2},{"login":"csuwildcat","count":2},{"login":"dani69654","count":2},{"login":"hotpixelgroup","count":2},{"login":"rules-without-rulers","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"HodlDee","count":1},{"login":"doggyballs","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"kaloudis","count":1},{"login":"zmeyer44","count":1}],"prs":[{"login":"MrHodlX","count":116},{"login":"portlandhodl","count":86},{"login":"w-s-bitcoin","count":37},{"login":"timechainb","count":35},{"login":"ottoz0r","count":18},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"2140data","count":10},{"login":"Jdelg718","count":5},{"login":"RandyMcMillan","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"SaniExp","count":3},{"login":"dani69654","count":3},{"login":"tmmmemcee","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"rules-without-rulers","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":29},{"login":"J25dunn","count":14},{"login":"portlandhodl","count":5},{"login":"w-s-bitcoin","count":3},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":106},{"login":"portlandhodl","count":88},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":46},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"timechainb","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Jdelg718","count":2},{"login":"rules-without-rulers","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":16},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-25T20:27:53Z"},{"login":"timechainb","last_seen_at":"2026-09-27T22:12:43Z"},{"login":"portlandhodl","last_seen_at":"2026-09-27T17:43:47Z"},{"login":"MrHodlX","last_seen_at":"2026-09-28T14:40:22Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T00:52:02Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-02T02:19:20Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"SaniExp","last_seen_at":"2026-09-02T16:47:02Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"2140data","last_seen_at":"2026-08-31T04:54:04Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-12T17:11:11Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-17T00:58:54Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"}]},{"name":"oogaboogaland","totals":{"contributors":11,"commits":287,"prs":84,"reviews":6,"issues":12,"comments":12},"weekly":[{"week":"2026-W37","commits":45,"prs":19,"reviews":0,"issues":0,"comments":1},{"week":"2026-W38","commits":80,"prs":30,"reviews":3,"issues":0,"comments":0},{"week":"2026-W39","commits":149,"prs":31,"reviews":3,"issues":11,"comments":11},{"week":"2026-W40","commits":13,"prs":4,"reviews":0,"issues":1,"comments":0}],"last_activity_at":"2026-09-28T13:54:52Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":166},{"login":"2140data","count":52},{"login":"YellowBrokeIt","count":20},{"login":"drneski","count":16},{"login":"rules-without-rulers","count":14},{"login":"knorrium","count":7},{"login":"MrHodlX","count":5},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ottoz0r","count":1}],"prs":[{"login":"w-s-bitcoin","count":26},{"login":"2140data","count":21},{"login":"rules-without-rulers","count":11},{"login":"drneski","count":7},{"login":"knorrium","count":5},{"login":"MrHodlX","count":4},{"login":"YellowBrokeIt","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ottoz0r","count":1}],"reviews":[{"login":"w-s-bitcoin","count":6}],"comments":[{"login":"rules-without-rulers","count":6},{"login":"Holo-Elfstone","count":2},{"login":"w-s-bitcoin","count":2},{"login":"YellowBrokeIt","count":1},{"login":"drneski","count":1}],"issues":[{"login":"rules-without-rulers","count":12}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-28T13:54:52Z"},{"login":"MrHodlX","last_seen_at":"2026-09-27T07:53:30Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"2140data","last_seen_at":"2026-09-27T03:48:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-28T00:36:49Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"drneski","last_seen_at":"2026-09-28T07:18:57Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"}]},{"name":"bedrock","totals":{"contributors":2,"commits":19,"prs":6,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W36","commits":16,"prs":6,"reviews":0,"issues":0,"comments":0},{"week":"2026-W37","commits":3,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-07T05:21:02Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":13},{"login":"ottoz0r","count":6}],"prs":[{"login":"w-s-bitcoin","count":6}],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-07T05:21:02Z"},{"login":"ottoz0r","last_seen_at":"2026-09-04T21:29:31Z"}]}],"recent":[{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T14:40:22Z"},{"login":"MrHodlX","repo":"entropylab","type":"merge","occurred_at":"2026-09-28T14:34:08Z"},{"login":"MrHodlX","repo":"entropylab","type":"pr","occurred_at":"2026-09-28T14:22:25Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-28T14:15:47Z"},{"login":"w-s-bitcoin","repo":"oogaboogaland","type":"pr","occurred_at":"2026-09-28T13:54:52Z"},{"login":"MrHodlX","repo":"entropylab","type":"merge","occurred_at":"2026-09-28T13:17:38Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T12:50:41Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T12:46:55Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-28T12:44:38Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-28T12:28:06Z"},{"login":"MrHodlX","repo":"entropylab","type":"pr","occurred_at":"2026-09-28T12:23:24Z"},{"login":"MrHodlX","repo":"entropylab","type":"commit","occurred_at":"2026-09-28T12:21:36Z"}],"contributors":[{"login":"portlandhodl","last_seen_at":"2026-09-27T17:43:47Z"},{"login":"w-s-bitcoin","last_seen_at":"2026-09-28T13:54:52Z"},{"login":"MrHodlX","last_seen_at":"2026-09-28T14:40:22Z"},{"login":"timechainb","last_seen_at":"2026-09-27T22:12:43Z"},{"login":"2140data","last_seen_at":"2026-09-27T03:48:46Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T12:31:24Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-28T00:36:49Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:24:12Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"drneski","last_seen_at":"2026-09-28T07:18:57Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:18:34Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:06:04Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"},{"login":"Korg1970","last_seen_at":"2026-09-12T17:42:58Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"}]};
 })();
 
 // ---- js/jumbotron.js ----
@@ -27903,14 +27969,14 @@ void main() {
 // ---- js/contributors.js ----
 // The roster, built from the character registry, with bounded repository activity from oogatron snapshots
 // (schemas 1-3; a schema-3 snapshot's `repos[].contributors` fans last-seen onto per-repository keys so
-// work routes pick the matching cave). It gives each contributor a working (<1h), chilling (<24h) or
+// work routes pick the matching cave). It gives each contributor a working (<2h), chilling (<24h) or
 // sleeping state, the active solo roster, and hashed traits with each character's `look` laid over them.
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  // Clanking (working) within the hour, chillin until a day has passed,
+  // Clanking (working) within two hours, chillin until a day has passed,
   // asleep after that. The 60s hub interval re-samples these thresholds.
-  const MINUTE = 60 * 1e3, HOUR = 60 * MINUTE, WORK_WINDOW = 1 * HOUR, CHILL_WINDOW = 24 * HOUR;
+  const MINUTE = 60 * 1e3, HOUR = 60 * MINUTE, WORK_WINDOW = 2 * HOUR, CHILL_WINDOW = 24 * HOUR;
   const ENTROPY = "oogaboogax/entropylab", MAX_REPOS = 64;
   const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
   // Historical EntropyLab activity; a backend can refresh it with applyActivity.
@@ -31136,7 +31202,9 @@ void main() {
       assistedTargetActive = assistedTargetInRange = assistedTargetClose = false;
       assistedTargetDistance = Infinity;
       assistedTargetWait = 0;
-      if (!Number.isNaN(assistedReticleX)) {
+      // The HUD survives scene visits; its offset may belong to the previous
+      // pilot even when this visit has never positioned the overhead reticle.
+      if (!Number.isNaN(assistedReticleX) || reticle.style.left || reticle.style.top) {
         assistedReticleX = assistedReticleY = NaN;
         reticle.style.removeProperty("left");
         reticle.style.removeProperty("top");
@@ -33108,6 +33176,43 @@ void main() {
       previousAnchor.x = motionAnchor.x; previousAnchor.y = motionAnchor.y; previousAnchor.z = motionAnchor.z;
       eyeMotionValid = true;
     };
+    // A connected doorway changes the world frame, not the control mode or
+    // camera blend. Keep its cached anchors and orientations in that frame too.
+    const portalPoints = [camera.position, camera.target, freeTarget, followTarget, entryPosition, previousEye,
+      previousAnchor, motionAnchor, overheadAim, aimEntryBody, aimEntry, aimPoint, cursorItem, cursorPoint, targetOrigin, buttonTarget];
+    const portalVectors = [headOrbitOffset, overheadEntry, eyeVelocity, dollyVelocity, anchorVelocity, sleepCameraUp, cursorUp];
+    const portalRotations = [orbitRotation, headRotation, cameraRotation, releaseRotation, overheadRotation,
+      overheadStartRotation, overheadViewRotation, carryStartRotation, aimEntryRotation, aimLookRotation, aimPanRotation];
+    const portalRotation = quat.create();
+    const transformView = (m, yaw) => {
+      for (const p of portalPoints) {
+        const x = p.x, y = p.y, z = p.z;
+        p.x = m[0] * x + m[4] * y + m[8] * z + m[12];
+        p.y = m[1] * x + m[5] * y + m[9] * z + m[13];
+        p.z = m[2] * x + m[6] * y + m[10] * z + m[14];
+      }
+      for (const v of portalVectors) {
+        const x = v.x, z = v.z;
+        v.x = m[0] * x + m[8] * z; v.z = m[2] * x + m[10] * z;
+      }
+      if (camera.up && camera.up !== sleepCameraUp && camera.up !== cursorUp) {
+        const x = camera.up.x, z = camera.up.z;
+        camera.up.x = m[0] * x + m[8] * z; camera.up.z = m[2] * x + m[10] * z;
+      }
+      const x = orbit.tx, z = orbit.tz, ex = exitBodyX, ez = exitBodyZ, gx = groundX, gz = groundZ;
+      orbit.tx = m[0] * x + m[8] * z + m[12]; orbit.ty += m[13]; orbit.tz = m[2] * x + m[10] * z + m[14];
+      exitBodyX = m[0] * ex + m[8] * ez + m[12]; exitBodyY += m[13]; exitBodyZ = m[2] * ex + m[10] * ez + m[14];
+      groundX = m[0] * gx + m[8] * gz + m[12]; groundZ = m[2] * gx + m[10] * gz + m[14];
+      groundView += m[13]; groundTarget += m[13]; groundValid = false;
+      orbit.yaw += yaw; orbit.tYaw += yaw; freeMoveYaw += yaw; lyingYaw += yaw;
+      overheadYaw += yaw; overheadTargetYaw += yaw; overheadEntryYaw += yaw; aimEntryYaw += yaw; aimBodyYaw += yaw;
+      aimWeaponYaw += yaw; overheadWeaponYaw += yaw;
+      quat.fromEuler(portalRotation, 0, yaw, 0);
+      for (const q of portalRotations) quat.multiply(q, portalRotation, q);
+      restoredPose = null;
+      clearFeedback();
+      assistedTargetActive = false; assistedTargetWait = 0;
+    };
     // The scene supplies a safe arrival and resets its collision history first.
     // navigate changes location only, never the visitor's mode or chosen Ooga.
     const navigate = (destination) => {
@@ -33332,6 +33437,7 @@ void main() {
       unlockAim();
       carryCursor.dispose();
       clearFeedback();
+      resetAssist();
       reticle.hidden = true;
       camera.near = savedNear;
       camera.orthoMix = camera.orthoHeight = 0;
@@ -33361,7 +33467,7 @@ void main() {
       get birdsEye() { return birdsEye(); }, get birdsEyeMix() { return camera.orthoMix || 0; }, get birdsEyeHeight() { return overheadHeight; }, get birdsEyeNorthUp() { return overheadNorthUp; },
       get birdsEyeCeiling() { return overheadCeiling; },
       get shoulderEntryMix() { return aimMix; },
-      bind, setActive, readInput, update, goPreset, navigate, enterClose, possess, release, action, modeAction, weaponAction, weaponMode, showAct, dispose, get player() {
+      bind, setActive, readInput, update, goPreset, navigate, transformView, enterClose, possess, release, action, modeAction, weaponAction, weaponMode, showAct, dispose, get player() {
       return player();
     }, get assistedTarget() {
       if (birdsEye() && assistedTargetActive) return assistedTargetHit;
@@ -36355,6 +36461,7 @@ void main() {
   const { WALK } = BL.pilot;
   const WANDER_SPEED = 1.3, RUSH_SPEED = 2.8, PLAYER_SPEED = WALK.speed;
   const PLAYER_STEP = 0.125;
+  const LADDER_SPEED = 2.4;
   const SHOULDER_GAP = 0.68, SHOULDER_REACH = 1.3, SHOULDER_TWIST = 1.05;
   // A body the scene owns rather than the roster can be bigger than an Ooga, so
   // the gap kept from it is wider than the one walkers keep from each other.
@@ -36809,6 +36916,8 @@ void main() {
         progress: { x: NaN, z: NaN, stalled: 0, motionless: 0, retry: 0, replanned: false, navigationHop: false, escaped: false,
           backoff: 0, backX: 0, backZ: 0, detours: 0, replans: 0, resets: 0, roofTime: 0 },
         roofEscape: { active: false, jumping: false, blocked: 0 },
+        ladder: ctx.ladders ? { plane: null, cooldown: 0, across: 0, along: 0, descentHeld: false, mix: 0,
+          flat: { width: 0, depth: 0, overlap: 0 }, vertical: { width: 0, height: 0, overlap: 0 } } : null,
         avoidance: { active: false, side: i & 1 ? 1 : -1, stalled: 0, best: Infinity, tx: NaN, tz: NaN,
           detour: { site: -1, phase: 0, side: 1, entryX: 0, goalX: NaN, goalZ: NaN, x: 0, z: 0 },
           navigation: { mode: 0, x: 0, z: 0, count: 0, index: 0, searches: 0, expansions: 0,
@@ -37009,6 +37118,7 @@ void main() {
       if (ctx.refreshMirrorObject) ctx.refreshMirrorObject(cave.root);
     };
     const resetPose = (cave) => {
+      if (cave.ladder) { cave.ladder.plane = null; cave.ladder.mix = 0; cave.ladder.cooldown = 0; }
       cave.roofEscape.active = cave.roofEscape.jumping = false; cave.roofEscape.blocked = 0;
       clearMeleeThrust(cave);
       takeBedWeapons(cave);
@@ -40466,7 +40576,84 @@ void main() {
       cave.hop = limit;
       cave.hopV = held ? 0 : Math.min(cave.hopV, 0);
     };
+    // A ladder owns a vertical body rectangle and a separate horizontal footprint. The top quarter of the
+    // vertical rectangle clearing the landing starts the inward handoff; feet still rise at climbing speed.
+    const ladderPose = (cave) => {
+      const l = cave.ladder, parts = cave.parts, wave = Math.sin(cave.act.phase), mix = l.mix;
+      standPose(cave);
+      parts.torso.rotation.x = -0.12 * mix;
+      parts.armL.rotation.x = lerp(-0.2, -2.2 + wave * 0.2, mix);
+      parts.armR.rotation.x = lerp(-0.2, -2.2 - wave * 0.2, mix);
+      parts.legL.rotation.x = wave * 0.35 * mix;
+      parts.legR.rotation.x = -wave * 0.35 * mix;
+      parts.head.rotation.x = -0.1 * mix;
+      parts.snack.visible = false;
+    };
+    const leaveLadder = (cave) => {
+      const l = cave.ladder;
+      l.plane = null; l.cooldown = 0.35; l.mix = 0; l.descentHeld = false;
+      cave.hop = Math.max(0, cave.root.position.y - groundY(cave));
+      cave.hopV = 0; cave.jumps = cave.hop > 0 ? 1 : 0;
+      standPose(cave);
+    };
+    const runLadder = (cave, dt, driving) => {
+      const l = cave.ladder;
+      if (!l) return false;
+      const p = cave.root.position, feet = p.y - cave.baseY;
+      l.cooldown = Math.max(0, l.cooldown - dt);
+      if (!l.plane && driving && l.cooldown === 0 && !(cave.jet && cave.jet.thrust)) {
+        for (const plane of ctx.ladders) {
+          const dx = p.x - plane.x, dz = p.z - plane.z, along = dx * plane.nx + dz * plane.nz;
+          const across = dx * plane.nz - dz * plane.nx, outward = steer.x * plane.nx + steer.z * plane.nz;
+          const gap = cave.bodyRadius * 0.5, half = plane.width / 2;
+          // At the top the outward walking command becomes descent until released, so a held W cannot
+          // immediately reverse the mount and put the character back on the deck.
+          const fromTop = Math.abs(feet - plane.top) < 0.15 && outward > 0.05;
+          const fromFace = feet >= plane.bottom - 0.1 && feet < plane.top - 0.15 && outward < -0.05;
+          if ((!fromTop && !fromFace) || Math.abs(across) > half - 0.1
+            || along < -cave.bodyRadius || along > gap + 0.08) continue;
+          l.plane = plane; l.across = across; l.along = along;
+          l.descentHeld = fromTop && steer.forward > 0.05;
+          l.flat.width = l.vertical.width = cave.bodyRadius * 2;
+          l.flat.depth = cave.bodyRadius * 2; l.vertical.height = cave.bodyHeight;
+          clearShoulder(cave);
+          cave.hopV = 0; cave.leap.vx = cave.leap.vz = cave.leap.land = 0;
+          break;
+        }
+      }
+      if (!l.plane) return false;
+      const plane = l.plane, height = l.vertical.height;
+      if (steer.forward <= 0.05) l.descentHeld = false;
+      const axis = driving ? (l.descentHeld ? -steer.forward : steer.forward) : -1;
+      const side = driving ? steer.strafe : 0, length = Math.max(1, Math.hypot(axis, side));
+      const speed = LADDER_SPEED * (driving ? steer.speed : 1), step = speed * dt / length;
+      const nextFeet = clamp(feet + axis * step, plane.bottom, plane.top);
+      const across = clamp(l.across - side * step, -plane.width / 2 + 0.1, plane.width / 2 - 0.1);
+      // The exposed vertical fraction and the footprint's landing fraction are kept separate. Start moving
+      // over the lip at 25% exposure, with no flip animation or pause in the held movement.
+      const exposed = clamp((nextFeet + height - plane.top) / height, 0, 1);
+      const blend = clamp((exposed - 0.25) / 0.75, 0, 1);
+      const gap = cave.bodyRadius * 0.5, inset = plane.inset, landingTarget = lerp(gap, -inset, blend);
+      const target = axis < 0 ? Math.max(l.along, landingTarget) : axis > 0 ? Math.min(l.along, landingTarget) : l.along;
+      const along = l.along + clamp(target - l.along, -speed * dt, speed * dt);
+      const nx = plane.x + plane.nz * across + plane.nx * along;
+      const nz = plane.z - plane.nx * across + plane.nz * along;
+      // Check scenery at the actual feet height; a ladder never grants passage through a machine or wall.
+      if (!flyable(p.x, p.z, nx, nz, Math.min(feet, nextFeet), cave.bodyHeight, cave)) return true;
+      l.along = along; l.across = across; p.x = nx; p.z = nz; p.y = cave.baseY + nextFeet;
+      cave.hop = Math.max(0, p.y - groundY(cave)); cave.hopV = 0;
+      cave.root.rotation.y = Math.atan2(-plane.nx, -plane.nz);
+      l.vertical.overlap = 1 - exposed;
+      l.flat.overlap = clamp((l.flat.depth / 2 - along) / l.flat.depth, 0, 1);
+      l.mix = 1 - blend;
+      cave.act.phase += Math.hypot(axis, side) * dt * 8;
+      ladderPose(cave);
+      if (axis > 0 && nextFeet >= plane.top && along <= -inset + 1e-6
+        || axis < 0 && nextFeet <= plane.bottom && along >= gap - 1e-6) leaveLadder(cave);
+      return true;
+    };
     const runPlayer = (cave, dt, driving = true) => {
+      if (runLadder(cave, dt, driving)) return;
       const p = cave.root.position, leap = cave.leap;
       const fromX = p.x, fromZ = p.z;
       const wasGround = groundY(cave);
@@ -40631,7 +40818,7 @@ void main() {
       clearHeadLook(cave);
       const parts = cave.parts;
       if (ctx.prepareCloudSupport && (!cave.bedTravel.mode || cave.bedTravel.mode === "landing" || cave.bedTravel.mode === "waiting")) ctx.prepareCloudSupport(cave);
-      if (cave.root.visible && (cave.state === "working" || cave.state === "chilling" || cave.bedTravel.mode === "landing" || cave.bedTravel.mode === "waiting" || cave.bedTravel.mode === "walk")) {
+      if (!(cave.ladder && cave.ladder.plane) && cave.root.visible && (cave.state === "working" || cave.state === "chilling" || cave.bedTravel.mode === "landing" || cave.bedTravel.mode === "waiting" || cave.bedTravel.mode === "walk")) {
         // Hop is relative to support but the body lives at a world height; rebase before gravity when support changes.
         const floor = groundY(cave), p = cave.root.position;
         cave.hop = Math.max(0, p.y - floor);
@@ -40665,7 +40852,7 @@ void main() {
           cave.tintTime = tintWait();
         }
       }
-      if (cave.hopV > 0 || cave.hop > 0) {
+      if (!(cave.ladder && cave.ladder.plane) && (cave.hopV > 0 || cave.hop > 0)) {
         cave.hopV -= WALK.gravity * dt;
         // Fruit halves vertical travel without changing ballistic momentum; leaving restores normal movement at once.
         const verticalScale = inBananas(cave) ? 0.5 : 1;
@@ -40708,6 +40895,7 @@ void main() {
         }
         return;
       }
+      if (cave !== player && cave.ladder && cave.ladder.plane) { runLadder(cave, dt, false); return; }
       if (ctx.playerName && cave !== player) { standPose(cave); poseWeapon(cave); return; }
       if (cave === player) {
         runPlayer(cave, dt);
@@ -41260,6 +41448,7 @@ void main() {
     const relocatePlayer = (position, heading) => {
       const cave = player;
       if (!cave) return;
+      if (cave.ladder) { cave.ladder.plane = null; cave.ladder.mix = 0; cave.ladder.cooldown = 0; }
       stopReload(cave);
       clearShoulder(cave);
       if (cave.camp.seat) { cave.camp.seat.sitter = null; cave.camp.seat = null; }
@@ -41350,6 +41539,13 @@ void main() {
     };
     const jumpPlayer = () => {
       if (!player || player.health.stunned || player.bedTravel.manual || player.camp.seat || player.camp.rolling || player.jet && !player.jetRecovering) return false;
+      if (player.ladder && player.ladder.plane) {
+        const plane = player.ladder.plane;
+        leaveLadder(player);
+        player.hopV = JUMP_SPEED; player.jumps = 1;
+        player.leap.vx = plane.nx * WALK.ledgeSpeed; player.leap.vz = plane.nz * WALK.ledgeSpeed;
+        return true;
+      }
       if (player.traits.footRockets && !player.jet) {
         if (!grounded(player)) return false;
         elevatePlayer(0);
@@ -41731,6 +41927,7 @@ void main() {
       if (cave.parts.chuk) poseNunchaku(cave, dt);
       if (cave === player) posePeek(cave, dt);
       poseWeapon(cave);
+      if (cave.ladder && cave.ladder.plane) ladderPose(cave);
       if (bashBefore > GUN_BASH_IMPACT && w.bashTime <= GUN_BASH_IMPACT && cave === player && w.equipped && !w.reloading && !w.swapTime && !w.reloadHandoff && !cave.health.stunned && !cave.camp.seat && !cave.bedTravel.mode) {
         weaponOrigin(weaponStart, cave, true);
         hitMeleeTarget(cave, GUN_BASH_POWER);
@@ -51641,6 +51838,28 @@ void main() {
       }
       return -1;
     };
+    const chillZones = ctx.chillZones || [];
+    const autonomousChill = (e) => e.mode === "chilling" && e.phase === "chill" && !e.controlled && !e.debugMove.active;
+    const chillCaveClear = (x, y, z, nx = x, ny = y, nz = z, escaping = false) => {
+      for (let i = 0; i < chillZones.length; i++) {
+        const zone = chillZones[i];
+        if (Math.min(y, ny) >= zone.top) continue;
+        const dx = x - zone.x, dz = z - zone.z;
+        const across = dx * zone.cr - dz * zone.sr, along = dx * zone.sr + dz * zone.cr;
+        const ax = (nx - x) * zone.cr - (nz - z) * zone.sr;
+        const az = (nx - x) * zone.sr + (nz - z) * zone.cr;
+        if (escaping) {
+          // A former worker or released player can already be inside a reserved
+          // approach. Allow planted turns and steps toward its nearest boundary.
+          const depth = Math.min(zone.half - Math.abs(across), along - zone.from, zone.to - along, zone.top - y);
+          const next = Math.min(zone.half - Math.abs(across + ax), along + az - zone.from, zone.to - along - az, zone.top - ny);
+          if (depth > 0 && (next < depth - 1e-9 || x === nx && y === ny && z === nz)) continue;
+        }
+        if (!BL.terrain.segmentBoxClear(across, y, along, ax, ny - y, az, 0, 0,
+          -zone.half, -Infinity, zone.from, zone.half, zone.top, zone.to)) return false;
+      }
+      return true;
+    };
     const peerShape = (x, y, z, bx, by, bz) => {
       return torso || footprint;
     };
@@ -51674,6 +51893,7 @@ void main() {
       return true;
     };
     const grass = (x, y, z, foot = FOOT) => Number.isFinite(y) && Math.hypot(x, z) < roamRadius
+      && chillCaveClear(x, y, z)
       && (!ctx.restSurfaceClear || ctx.restSurfaceClear(x, y, z, foot))
       && (!ctx.onLand || ctx.onLand(x, z)) && (!ctx.isGrass || ctx.isGrass(x, z, y)
         && ctx.isGrass(x - foot, z, y) && ctx.isGrass(x + foot, z, y)
@@ -51684,7 +51904,8 @@ void main() {
       // A real floor beneath the centre also admits their inward handoff.
       && (landing(x, y, z) || Number.isFinite(y) && Math.abs(pointSupportAt(x, z, y + 0.02) - y) < 0.05);
     const staticClear = (e, x, y, z, nx = x, ny = y, nz = z, fromHeading = e.heading, toHeading = fromHeading) =>
-      clear(x, y, z, nx, ny, nz, e.radius, e.height, e, null, fromHeading, toHeading);
+      (!autonomousChill(e) || chillCaveClear(x, y, z, nx, ny, nz, true))
+      && clear(x, y, z, nx, ny, nz, e.radius, e.height, e, null, fromHeading, toHeading);
     // Retained routes double as short-lived space/time reservations. Predict
     // from the actual position, so a late worker never leaves a phantom path
     // behind it. Unplanned, controlled and working actors keep their real spot.
@@ -52574,6 +52795,7 @@ void main() {
         && staticClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.root.rotation.y, e.root.rotation.y);
     };
     const restSpace = (e, pose, x, y, z, heading) => {
+      if (!chillCaveClear(x, y, z)) return false;
       if (ctx.restSiteClear && !ctx.restSiteClear(e, x, y, z, heading)) return false;
       if (ctx.restPoseClear) {
         if (!ctx.restPoseClear(e, 2, pose, true, x, y, z, heading)) return false;
@@ -52925,7 +53147,7 @@ void main() {
           if (stayLevel && Math.hypot(x - p.x, z - p.z) > 12) continue;
           // Worker assignments can change after the resting-spot cache was
           // built. Recheck the live firing lanes for cached candidates too.
-          if (trafficAt(x, y, z)) continue;
+          if (trafficAt(x, y, z) || !chillCaveClear(x, y, z)) continue;
           const distance = Math.hypot(x - p.x, z - p.z);
           if (roofTour && !pass && roof && roofAt(x, y, z) === currentRoof) continue;
           const tripLimit = roofTour && roof ? 24 : !stayLevel && roof !== onRoof ? 18 : 12;
@@ -53470,6 +53692,7 @@ void main() {
       return fits;
     };
     const climbClear = (e, x, y, z, nx = x, ny = y, nz = z, heading = e.climb.active ? e.climb.heading : e.heading, actors = true, wallTravel = false) => {
+      if (autonomousChill(e) && !chillCaveClear(x, y, z, nx, ny, nz, true)) return false;
       if (!wallTravel && ctx.climbRidersClear && !ctx.climbRidersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
       if (!wallTravel && actors && !e.controlled && ctx.climbPeersClear
         && !ctx.climbPeersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
@@ -53481,6 +53704,7 @@ void main() {
         : clear(x, y + 0.85, z, nx, ny + 0.85, nz, radius, 0.5, e);
     };
     const climbWalkClear = (e, x, y, z, nx, ny, nz, heading, actors = true) => {
+      if (autonomousChill(e) && !chillCaveClear(x, y, z, nx, ny, nz, true)) return false;
       if (ctx.climbRidersClear && !ctx.climbRidersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
       if (actors && ctx.climbPeersClear && !ctx.climbPeersClear(e, x, y, z, nx, ny, nz, heading, heading)) return false;
       return ctx.climbClear ? ctx.climbClear(e, x, y + 0.65, z, nx, ny + 0.65, nz,
@@ -54302,7 +54526,7 @@ void main() {
       e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
     };
     const openingLanding = (e, x, y, z, heading, platform = null, descending = false) => {
-      if (!ctx.climbOpeningClear) return false;
+      if (!ctx.climbOpeningClear || autonomousChill(e)) return false;
       const c = e.climb, sx = Math.sin(heading), sz = Math.cos(heading);
       // Balcony floors extend inward from a spherical overhang. Measure the
       // landing and outward clearance from that geometry, not the root.
@@ -54386,6 +54610,19 @@ void main() {
       }
       const length = Math.max(1, Math.hypot(side, vertical)); side /= length; vertical /= length;
       const distance = CLIMB_SPEED * (e.controlled && d.run ? 2 : 1) * dt;
+      if (autonomousChill(e) && vertical < 0
+        && !chillCaveClear(p.x, p.y, p.z, p.x, p.y - Math.max(distance, 0.4), p.z, true)) {
+        // Cross above the entrance to the nearest corner before descending,
+        // rather than stopping at its reserved ceiling or entering the room.
+        vertical = 0;
+        for (let i = 0; i < chillZones.length; i++) {
+          const zone = chillZones[i], dx = p.x - zone.x, dz = p.z - zone.z;
+          const across = dx * zone.cr - dz * zone.sr, along = dx * zone.sr + dz * zone.cr;
+          if (p.y - 0.4 >= zone.top || Math.abs(across) >= zone.half || along <= zone.from || along >= zone.to) continue;
+          side = (across < 0 ? -1 : across > 0 ? 1 : e.turn) * (zone.cr * sz + zone.sr * sx < 0 ? -1 : 1);
+          break;
+        }
+      }
       m.climb = m.climbBlend = 1; m.openingSettle = 0; m.mantle = 0;
       m.climbDirection = vertical; m.climbSide = side;
       e.compact = false; e.footprintMode = "pound";
@@ -55433,6 +55670,11 @@ void main() {
       const p = e.root.position, dx = e.goalX - p.x, dz = e.goalZ - p.z, distance = Math.hypot(dx, dz);
       if (distance < (e.motion.lab ? 0.06 : 0.15)) { e.speed = damp(e.speed, 0, 12, dt); return; }
       const desired = Math.atan2(dx, dz), step = Math.min(distance, speed * dt);
+      // Include sideways and outward steps when skirting a reserved entrance;
+      // the ordinary forward-only steering fan cannot escape its front edge.
+      const avoidEntrance = autonomousChill(e) && !chillCaveClear(p.x, p.y, p.z,
+        p.x + Math.sin(desired) * Math.min(distance, 2), p.y, p.z + Math.cos(desired) * Math.min(distance, 2));
+      const steering = avoidEntrance ? FIRE_STEERING : STEERING;
       const inCave = caveAt(p.x, p.y, p.z) >= 0;
       const onProp = raisedSupport(e);
       const doorway = e.lab.yielding || e.route === "exit" && e.fromSite >= 0 || e.route === "enter" || e.route === "apron";
@@ -55468,8 +55710,8 @@ void main() {
       e.steerFor = Math.max(0, e.steerFor - dt);
       let chosen = NaN, chosenFacing = e.heading, chosenMode = initialMode, chosenCompact = initialCompact;
       let best = -Infinity, chosenY = p.y, chosenStep = 0, directAhead = false;
-      for (let i = 0; i < STEERING.length; i++) {
-        const heading = desired + STEERING[i] * e.turn, sx = Math.sin(heading), sz = Math.cos(heading);
+      for (let i = 0; i < steering.length; i++) {
+        const heading = desired + steering[i] * e.turn, sx = Math.sin(heading), sz = Math.cos(heading);
         const turn = Math.atan2(Math.sin(heading - e.heading), Math.cos(heading - e.heading));
         const labStation = e.motion.lab && e.phase === "work" && !e.lab.yielding
           && e.lab.pathIndex + 1 >= e.lab.pathCount && labStations[e.lab.stage === "fetch" || e.lab.stage === "return" ? e.lab.bench : e.lab.station];
@@ -55517,7 +55759,7 @@ void main() {
           && !occupied(e, ax, ay, az, true, aheadFacing)
           && (aheadPropStep ? propStepClear : staticClear)(e, p.x, p.y, p.z, ax, ay, az, e.heading, aheadFacing);
         if (!i) directAhead = goodAhead;
-        const side = Math.sign(STEERING[i] * e.turn);
+        const side = Math.sign(steering[i] * e.turn);
         const commitment = e.steerFor > 0 && side && e.steerSide ? side === e.steerSide ? 0.45 : -1.25 : 0;
         const score = Math.cos(heading - desired) * 2 + Math.cos(heading - e.steerHeading) * 0.5
           + (goodAhead ? 3 : 0) + commitment - i * 0.008;
@@ -56798,6 +57040,12 @@ void main() {
           if (e.fromSite >= 0) { e.phase = "leave"; e.route = "exit"; }
           else { e.phase = "chill"; e.rest = 0; chooseChill(e); }
         }
+      }
+      if (autonomousChill(e) && !chillCaveClear(p.x, p.y, p.z)) {
+        e.rest = 0;
+        if (e.lounge) leaveLounge(e);
+        if (!chillCaveClear(e.goalX, e.goalY, e.goalZ)
+          || Math.hypot(e.goalX - p.x, e.goalZ - p.z) < 0.15) chooseChill(e);
       }
       if (e.exitFootprint) {
         // Clearing the arch does not instantly make space for the relaxed
@@ -61495,7 +61743,9 @@ void main() {
   const updateBirdsEyeCutaway = (dt) => {
     clearCutawayHidden();
     const gorilla = clankerPlay && clankerPlay.active, player = gorilla ? clankerPlay.player : pilot.player;
-    const cameraMix = gorilla ? clankerPlay.birdsEyeMix : player && pilot.birdsEye ? pilot.birdsEyeMix : 0;
+    const cameraMix = player ? gorilla ? clankerPlay.birdsEyeMix : pilot.birdsEyeMix : 0;
+    const overhead = player && (gorilla ? clankerPlay.birdsEye : pilot.birdsEye);
+    const subterranean = player && player.root.position.y - (gorilla ? 0 : player.baseY) < -STEP_MAX;
     const showRampMarkers = cameraMix > 0.5;
     for (const lintel of headquartersRimLintels) lintel.visible = !showRampMarkers;
     for (const marker of headquarters.rampMarkers) {
@@ -61509,11 +61759,17 @@ void main() {
       const z = up.x * downhill.x + up.y * downhill.y + up.z * downhill.z;
       marker.node.rotation.y = Math.atan2(-x, -z);
     }
-    const mix = cameraMix, active = mix > 0;
-    // Scan through the full camera blend in both directions, including reversals.
-    const rockMix = mix;
+    const mix = cameraMix;
+    // A perspective handoff can finish its projection blend before the eye
+    // clears the ceiling. Keep the cut until the actual camera is inside again.
+    const active = !!player && (overhead || mix > 0
+      || subterranean && camera.position.y > birdsEyeCeiling(player, gorilla));
+    // Below ground, camera interpolation must never restore upstairs rock or
+    // props. Floor/ramp progress still moves the cut as the character travels.
+    const rockMix = active && subterranean ? 1 : mix;
     RENDER_OPTS.birdsEyeCutaway = active;
-    RENDER_OPTS.cutawayFade = RENDER_OPTS.cutawayCloudMix = mix;
+    RENDER_OPTS.cutawayFade = rockMix;
+    RENDER_OPTS.cutawayCloudMix = mix;
     RENDER_OPTS.cutawayRockMix = rockMix;
     RENDER_OPTS.cutawayRegionCount = 0;
     if (!active) {
@@ -61525,7 +61781,7 @@ void main() {
       return;
     }
     const hq = island.headquarters;
-    if (cameraMix > 0) {
+    if (active) {
       const p = player.root.position, fresh = player !== cutawayPlayer || !Number.isFinite(cutawayProgress);
       // Hop is relative to the next supporting floor, including the abyss
       // sentinel. Only world-space feet describe the level actually on screen.
@@ -61556,7 +61812,7 @@ void main() {
     // Scan between floor ceilings across the ramp's travel so upper levels
     // peel away progressively instead of switching in a narrow midpoint band.
     // Head clearance remains authoritative during a jump, jet flight or fall.
-    if (cameraMix > 0) {
+    if (active) {
       let target = cutawayLevel <= 1 ? lerp(CUTAWAY_TOP, hq.ceiling - 0.06, cutawayLevel)
         : lerp(hq.ceiling - 0.06, hq.basement.ceiling - 0.06, cutawayLevel - 1);
       if (feet < hq.basement.floor - STEP_MAX) target = Math.min(target, birdsEyeCeiling(player, gorilla));
@@ -63346,11 +63602,13 @@ void main() {
     } else if (name === "lab" || name === "mirror" || name === "factory") {
       const id = name === "lab" ? "c11" : name === "factory" ? "c2" : "c1", m = island.mouths.find((mouth) => mouth.id === id);
       yaw = m.ry;
-      const approach = close ? 6 : 4;
+      // Leave enough distance to frame the sign above the mouth, including
+      // arrivals viewed from the controlled character's first-person eye.
+      const approach = close ? 10 : 8;
       x = m.x + Math.sin(yaw) * approach; z = m.z + Math.cos(yaw) * approach;
       setVec(target, m.x, m.floorY + (close ? 2.5 : 2.1), m.z);
       pitch = player ? 0.06 : 0.16;
-      dist = player ? 8 : 9;
+      dist = player ? 8 : 12;
     } else if (name === "timechain" && timechainIsland) {
       const site = timechainIsland.place;
       yaw = site.ry;
@@ -66039,20 +66297,29 @@ void main() {
     for (const cave of crew.list) cave.clankerRide = { entry: null, node: null, x: 0, y: 0, z: 0, nextJumpAt: 0,
       carrierX: 0, carrierY: 0, carrierZ: 0, heading: 0, localX: 0, localY: 0, localZ: 0 };
     headquarters.solids.companions = clankerMeshes;
-    const loungeRoofs = [], climbRoofs = [];
+    const loungeRoofs = [], climbRoofs = [], chillZones = [];
     for (const mouth of island.mouths) {
+      const slot = caves.slots.find(slot => slot.id === mouth.id);
+      const site = shared.workSites.find(site => site.mouth === mouth), room = site?.room || mouth.room;
+      const sr = Math.sin(mouth.ry), cr = Math.cos(mouth.ry);
+      // Reserve cave interiors at every lower level, leaving the roof above
+      // the room ceiling available. Working and controlled gorillas bypass it.
+      chillZones.push({ x: mouth.x, z: mouth.z, sr, cr, half: room.w / 2 + 0.6,
+        from: -room.to - 0.6, to: 0.5, top: mouth.floorY + room.h - 0.1 });
+      if (slot.status !== "dark") chillZones.push({ x: mouth.x, z: mouth.z, sr, cr,
+        half: 3.5, from: -0.5, to: 6.5, top: mouth.floorY + 2.6 });
       const x = mouth.x - Math.sin(mouth.ry) * 4.8, z = mouth.z - Math.cos(mouth.ry) * 4.8;
       const y = island.surfaceAt(x, z);
       if (!Number.isFinite(y)) continue;
       const roof = { x, y, z, angle: mouth.ry };
       climbRoofs.push(roof);
-      if (caves.slots.find(slot => slot.id === mouth.id)?.status === "dark") loungeRoofs.push(roof);
+      if (slot.status === "dark") loungeRoofs.push(roof);
     }
     const labSiteIndex = shared.workSites.findIndex(site => site.mouth === entropyLab.mouth);
     const debugLabShuttle = DEBUG && !contributors.solo && !contributors.debugState && labSiteIndex >= 0
       ? crew.list.find(cave => cave.state === "working" && cave.work.site === labSiteIndex) || crew.list[0] : null;
     if (debugLabShuttle) debugLabShuttle.override = "working";
-    clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, climbRoofs,
+    clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, climbRoofs, chillZones,
       debugMovement: DEBUG_GORILLA_MOVE, debugMinY: ABYSS_RESPAWN_Y,
       labSite: labSiteIndex,
       labInside: entropyLab.phase.inside, labStations: entropyLab.stations,
@@ -68131,11 +68398,18 @@ void main() {
       { bay: 3, x: 20.8, y: LEVEL.main, z: -2, turn: -Math.PI / 2 }
     ],
     switchboard: { x: -12, y: LEVEL.low, z: 6, w: 7, d: 5 },
-    rebalancer: { x: 14, y: LEVEL.low, z: 4.2, w: 6, d: 6 },
+    rebalancer: { x: 14, y: LEVEL.low, z: 4.2, w: 8, d: 10 },
     treasury: { x: 12, y: LEVEL.low, z: 12.5, w: 7, d: 5 },
     // In front of the core's stone foot, whose face is at z 0.2 there.
     forge: { x: 0, z: 0.7 },
     lookout: { x: -16, y: LEVEL.top, z: -14, w: 6, d: 6, tower: 5.5 },
+    lookoutDeck: { x: -16, y: LEVEL.top + 5.65, z: -14, w: 5, d: 5 },
+    lookoutApproach: { x: -16, y: LEVEL.top, z: -10.8, w: 2, d: 1.5 },
+    // Vertical climbing planes; normals point out from the upper landing.
+    ladders: [
+      { x: 10.1, z: 6.8, bottom: 0, top: LEVEL.low, nx: -1, nz: 0, width: 1.4, inset: 0.3 },
+      { x: -16, z: -11.6, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: 1, width: 1.4, inset: 0.3 }
+    ],
     study: { x: 21.4, y: LEVEL.main, z: 12, w: 4, d: 7 },
     // Level 2, the balcony's level: the walkway from the balcony's right side round the right wall, past the study
     // hall, to the Harbor line's porch, as decks [x0, x1, z0, z1]; each line's porch out to its peer tunnel comes
@@ -68618,10 +68892,10 @@ void main() {
   // ---- the hall ---------------------------------------------------------------------------------------
 
   // The cavern itself: a stone floor, craggy walls in stacked blocks, a vault hung with stalactites, rock
-  // ledges under the high decks, and blue crystal and the glow of water running down the back. Stone is one
-  // mesh; the crystal and the falls, which glow, are another with no shadow.
+  // ledges under the high decks, and blue crystal and the glow of water running down the back. The vault has
+  // its own mesh for birdseye views; the crystal and the falls, which glow, have no shadow.
   const hall = cached(() => {
-    const rand = mulberry32(2112), rock = [], glow = [];
+    const rand = mulberry32(2112), rock = [], ceiling = [], glow = [];
     const { halfW: W, back: B, front: F, h: H } = HALL;
     for (let x = -W; x < W; x += 4) for (let z = B; z < F; z += 4) {
       rock.push(box({ w: 4, h: 0.4, d: 4, color: STONE[Math.floor(rand() * 4)], offset: { x: x + 2, y: -0.2 - rand() * 0.06, z: z + 2 } }));
@@ -68666,11 +68940,11 @@ void main() {
     shell("right", B, F, 4, (iu, iy, depth, d, c) => v.set(cell(W - depth) + d, iy, iu, c));
     const walls = voxelGeometry(v, { unit: C, palette: [null, ...STONE, ROCK_LT] });
     // The vault: slabs across the top and stalactites hanging from them in three tapering courses.
-    for (let x = -W; x < W; x += 5) for (let z = B; z < F; z += 5) rock.push(box({ w: 5.4, h: 2, d: 5.4, color: STONE[Math.floor(rand() * 4)], offset: { x: x + 2.5, y: H + rand() * 1.2, z: z + 2.5 } }));
+    for (let x = -W; x < W; x += 5) for (let z = B; z < F; z += 5) ceiling.push(box({ w: 5.4, h: 2, d: 5.4, color: STONE[Math.floor(rand() * 4)], offset: { x: x + 2.5, y: H + rand() * 1.2, z: z + 2.5 } }));
     for (let i = 0; i < 70; i++) {
       const x = (rand() * 2 - 1) * (W - 3), z = B + 2 + rand() * (F - B - 5), len = 1.4 + rand() * 3.6, s = 0.8 + rand() * 0.8;
       const top = H - 0.8, color = STONE[Math.floor(rand() * 4)];
-      rock.push(
+      ceiling.push(
         box({ w: 0.9 * s, h: len * 0.45, d: 0.9 * s, color, offset: { x, y: top - len * 0.22, z } }),
         box({ w: 0.55 * s, h: len * 0.35, d: 0.55 * s, color, offset: { x, y: top - len * 0.62, z } }),
         box({ w: 0.25 * s, h: len * 0.22, d: 0.25 * s, color, offset: { x, y: top - len * 0.9, z } })
@@ -68717,7 +68991,7 @@ void main() {
       // The pool each fall lands in.
       glow.push(moved(lathe({ profile: [[1.6, 0.05], [0, 0.05]], segments: 10, color: "#4a9bff", emissive: 0.5 }), fx, 0, B + 2.6));
     }
-    return { rock: merge(...rock), walls, glow: noShadow(merge(...glow)) };
+    return { rock: merge(...rock), ceiling: merge(...ceiling), walls, glow: noShadow(merge(...glow)) };
   });
 
   // The highest thing standing under (x, z) below the height y, for a post to rest on: a walkable floor, a tunnel's
@@ -68782,6 +69056,10 @@ void main() {
       const l = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / l, dz = (bz - az) / l;
       landings.push([ax, ay, az, w / 2 + 0.05, dx, dz], [bx, by, bz, w / 2 + 0.05, -dx, -dz]);
     }
+    for (const l of L.ladders) {
+      landings.push([l.x, l.top, l.z, l.width / 2 + 0.15, l.nx, l.nz]);
+      landings.push([l.x, l.bottom, l.z, l.width / 2 + 0.15, l.nx, l.nz]);
+    }
     const cutAcross = ([p, q], y) => landings.push([(p[0] + q[0]) / 2, y, (p[1] + q[1]) / 2, Math.hypot(p[0] - q[0], p[1] - q[1]) / 2]);
     for (const bd of ringBridges) cutAcross(bd.sides.map((sd) => sd.b), LEVEL.main);
     for (const bd of topBridges) for (const end of ["a", "b"]) cutAcross(bd.sides.map((sd) => sd[end]), LEVEL.top);
@@ -68802,6 +69080,22 @@ void main() {
     for (const b of L.bays) deckAt(b, "nsew");
     for (const d of [L.switchboard, L.rebalancer, L.treasury]) deckAt(d, "nsew");
     deckAt(L.lookout, "nsew");
+    deckAt(L.lookoutDeck, "nsew", 0);
+    deckAt(L.lookoutApproach, "ew", 0);
+    // Brackets carry the lantern deck out from the tower's four legs.
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) geos.push(beam(L.lookout.x + sx * 0.9, L.lookoutDeck.y - 1.4, L.lookout.z + sz * 0.9,
+      L.lookout.x + sx * 2.2, L.lookoutDeck.y - 0.4, L.lookout.z + sz * 2.2, 0.16, TIMBER_DK));
+    // Rails extend above the landing as handholds; the rungs stop below the deck lip.
+    for (const l of L.ladders) {
+      const tx = l.nz, tz = -l.nx;
+      for (const side of [-1, 1]) geos.push(beam(l.x + tx * side * l.width / 2, l.bottom, l.z + tz * side * l.width / 2,
+        l.x + tx * side * l.width / 2, l.top + 1, l.z + tz * side * l.width / 2, 0.12, TIMBER_DK));
+      const count = Math.ceil((l.top - l.bottom) / 0.3);
+      for (let i = 1; i <= count; i++) {
+        const y = l.bottom + (l.top - l.bottom - 0.15) * i / count;
+        geos.push(beam(l.x - tx * l.width / 2, y, l.z - tz * l.width / 2, l.x + tx * l.width / 2, y, l.z + tz * l.width / 2, 0.09, TIMBER_LT));
+      }
+    }
     deckAt(L.landing, "s");
     for (const g of L.galleries) {
       deckAt(g, "swe", 0);
@@ -68929,9 +69223,9 @@ void main() {
   // walks under it. `clearAt` keeps bodies out of what stands on the floors. Both allocate nothing.
   const STEP = 0.6;
   const FLOOR = cached(() => {
-    const L = LAYOUT, rects = [], strips = [], blocks = [];
+    const L = LAYOUT, rects = [], strips = [], blocks = [], discs = [];
     const rect = (d, y = d.y) => rects.push(d.x - d.w / 2 + 0.15, d.x + d.w / 2 - 0.15, d.z - d.d / 2 + 0.15, d.z + d.d / 2 - 0.15, y);
-    for (const d of [...L.bays, L.switchboard, L.rebalancer, L.treasury, L.lookout, ...L.galleries]) rect(d);
+    for (const d of [...L.bays, L.switchboard, L.rebalancer, L.treasury, L.lookout, L.lookoutDeck, L.lookoutApproach, ...L.galleries]) rect(d);
     // The landing runs on into the first gallery it opens onto.
     const ld = L.landing;
     rects.push(ld.x - ld.w / 2 + 0.15, ld.x + ld.w / 2 - 0.15, ld.z - ld.d / 2 - 0.4, ld.z + ld.d / 2 - 0.15, ld.y);
@@ -68941,7 +69235,9 @@ void main() {
     rects.push(ax0 - 0.3, ax1 + 0.3, az0 + 0.15, az1 - 0.15, y2, bx0 + 0.15, bx1 - 0.15, bz0 - 0.3, bz1 - 0.15, y2);
     for (const t of L.tunnels) {
       const [x0, x1, z0, z1] = porchOf(t);
-      if (t.turn === 0) rects.push(x0 + 0.15, x1 - 0.15, z0, z1 + 0.3, t.y);
+      // Continue the threshold underneath the glass: a walker must retain
+      // support until its centre crosses the connected mirror plane.
+      if (t.turn === 0) rects.push(x0 + 0.15, x1 - 0.15, t.z - 0.35, z1 + 0.3, t.y);
       else rects.push(x0 - 0.3, x1 + 0.3, z0 + 0.15, z1 - 0.15, t.y);
     }
     // A strip runs from one end to the other, `w` wide, rising from y0 to y1: bridges and stairs.
@@ -68992,14 +69288,17 @@ void main() {
       block(sw.x + CONSOLE.x + Math.sin(b) * CONSOLE.desk, sw.z + CONSOLE.z - Math.cos(b) * CONSOLE.desk, 0.65, sw.y - 0.5, sw.y + 3);
     }
     block(sw.x - 3, sw.z + 1.4, 0.75, sw.y - 0.5, sw.y + 2);
-    // The rebalancer's platform, the pipes' feet, the console, the crates and the sign's posts.
-    block(rb.x, rb.z + REB.cz, 1.95, rb.y - 0.5, rb.y + 4);
+    // The low drum is a step, not a four-metre invisible wall. Its column and glass tubes have their own shells.
+    discs.push(rb.x, rb.z + REB.cz, 1.85, rb.y + 0.56);
+    block(rb.x, rb.z + REB.cz, 0.36, rb.y + 0.54, rb.y + REB.top + 0.36);
+    for (const s of [-1, 1]) block(rb.x + s * 1.15, rb.z + REB.cz - 0.95, 0.22, rb.y + 0.54, rb.y + 1.68);
+    // The pipes' feet, console, crates and sign posts.
     for (const s of [-1, 1]) {
       block(rb.x + s * REB.leg, rb.z + REB.cz, 0.4, rb.y - 0.5, rb.y + 4);
       block(rb.x + s * REB.post, rb.z + REB.postZ, 0.25, rb.y - 0.5, rb.y + 6);
       block(tr.x + s * TRE.post, tr.z + TRE.postZ, 0.25, tr.y - 0.5, tr.y + 6);
     }
-    block(rb.x + REB.console[0], rb.z + REB.console[1], 0.8, rb.y - 0.5, rb.y + 1.5);
+    for (const x of [-0.42, 0, 0.42]) block(rb.x + REB.console[0] + x, rb.z + REB.console[1], 0.36, rb.y - 0.5, rb.y + 1.5);
     for (const [x, z] of REB.crates) block(rb.x + x, rb.z + z, 0.55, rb.y - 0.5, rb.y + 1);
     // The treasury's vault, its belt and crate, the desk, the cart and the crate of gold.
     block(tr.x, tr.z + TRE.vz, 1.9, tr.y - 0.5, tr.y + 4);
@@ -69008,9 +69307,10 @@ void main() {
     block(tr.x + TRE.desk[0], tr.z + TRE.desk[1], 0.6, tr.y - 0.5, tr.y + 1.6);
     block(tr.x + TRE.cart[0], tr.z + TRE.cart[1], 0.65, tr.y - 0.5, tr.y + 1.3);
     for (const [x, z] of TRE.crates) block(tr.x + x, tr.z + z, 0.55, tr.y - 0.5, tr.y + 1);
-    block(lk.x, lk.z, 1.35, lk.y - 0.5, lk.y + 6);
-    // Each peer tunnel's console box; its shield stays walkable, since the scene sends whoever reaches it back to the
-    // node. And the study hall's locked door.
+    block(lk.x, lk.z, 1.35, lk.y - 0.5, L.lookoutDeck.y - 0.3);
+    block(lk.x, lk.z, 1, L.lookoutDeck.y - 0.3, lk.y + lk.tower + 3);
+    // Each peer tunnel's console box; the connected glass stays walkable.
+    // And the study hall's locked door.
     for (const t of L.tunnels) {
       const [bx, bz] = TUNNEL_BOX, c = Math.cos(t.turn), sn = Math.sin(t.turn);
       block(t.x + bx * c + bz * sn, t.z - bx * sn + bz * c, 0.45, t.y - 0.5, t.y + 1.5);
@@ -69021,7 +69321,8 @@ void main() {
     for (const s of [-1, 1]) block(st.x - S.z, st.z + s * S.post, 0.35, st.y - 0.5, st.y + 8);
     block(st.x - S.crate[1], st.z + S.crate[0], 0.4, st.y - 0.5, st.y + 1.2);
     block(st.x - S.easel[1], st.z + S.easel[0], 0.5, st.y - 0.5, st.y + 2.8);
-    return { rects: new Float32Array(rects), strips: new Float32Array(strips), blocks: new Float32Array(blocks), ring: L.ring };
+    return { rects: new Float32Array(rects), strips: new Float32Array(strips), blocks: new Float32Array(blocks), discs: new Float32Array(discs),
+      stairs: new Float32Array([L.stairway, ...L.stairs].flat()), ring: L.ring };
   });
   const supportAt = (x, z, feet) => {
     const F = FLOOR(), reach = feet + STEP;
@@ -69030,6 +69331,11 @@ void main() {
     for (let i = 0; i < R.length; i += 5) {
       const y = R[i + 4];
       if (y > best && y <= reach && x >= R[i] && x <= R[i + 1] && z >= R[i + 2] && z <= R[i + 3]) best = y;
+    }
+    const D = F.discs;
+    for (let i = 0; i < D.length; i += 4) {
+      const dx = x - D[i], dz = z - D[i + 1], y = D[i + 3];
+      if (y > best && y <= reach && dx * dx + dz * dz <= D[i + 2] * D[i + 2]) best = y;
     }
     const S = F.strips;
     for (let i = 0; i < S.length; i += 7) {
@@ -69048,23 +69354,72 @@ void main() {
   };
   // Whether a walker of `radius` whose feet are at `feet` can step from (ax, az) to (bx, bz): clear of everything
   // standing on the floors all the way, and never dropping more than a step. The scene's walkers and the tests share it.
-  const walkable = (ax, az, bx, bz, feet, radius) => {
+  const walkable = (ax, az, bx, bz, feet, radius, height = 0) => {
     const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.2));
     for (let i = 1; i <= steps; i++) {
       const x = ax + (bx - ax) * i / steps, z = az + (bz - az) * i / steps;
-      if (!clearAt(x, z, feet, radius) || supportAt(x, z, feet) < feet - STEP) return false;
+      const floor = supportAt(x, z, feet);
+      const px = ax + (bx - ax) * (i - 1) / steps, pz = az + (bz - az) * (i - 1) / steps;
+      if (!clearAt(x, z, Math.max(feet, floor), radius, height, px, pz) || floor < feet - STEP) return false;
     }
     return true;
   };
-  const clearAt = (x, z, feet, radius) => {
+  // The treads share a continuous thin collision shell with their walking surface. Its underside is solid,
+  // while the air below it stays open. A body already standing on the treads is above this shell.
+  const stairCeilingAt = (x, z, feet, radius) => {
+    const S = FLOOR().stairs;
+    let ceiling = Infinity;
+    for (let i = 0; i < S.length; i += 7) {
+      const dx = S[i + 3] - S[i], dz = S[i + 5] - S[i + 2], len = Math.hypot(dx, dz);
+      const along = ((x - S[i]) * dx + (z - S[i + 2]) * dz) / len;
+      if (along < -radius || along > len + radius) continue;
+      const across = Math.abs((x - S[i]) * dz - (z - S[i + 2]) * dx) / len;
+      const end = Math.max(0, -along, along - len), side = Math.max(0, across - S[i + 6] / 2);
+      if (end * end + side * side > radius * radius) continue;
+      const top = S[i + 1] + (S[i + 4] - S[i + 1]) * Math.max(0, Math.min(1, along / len));
+      if (feet < top - 0.02) ceiling = Math.min(ceiling, top - 0.28);
+    }
+    return ceiling;
+  };
+  // A movement query may escape an existing overlap, provided every overlapping shell gets farther away.
+  // Ordinary point queries still report that overlap, and a sweep cannot enter any new shell.
+  const clearAt = (x, z, feet, radius, height = 0, fromX = x, fromZ = z) => {
     if (Math.abs(x) > HALL.halfW - 2 || z < HALL.back + 2 || z > HALL.front - 0.4) return false;
+    if (feet + height > stairCeilingAt(x, z, feet, radius) + 1e-6) return false;
     const B = FLOOR().blocks;
     for (let i = 0; i < B.length; i += 5) {
       if (feet < B[i + 3] || feet > B[i + 4]) continue;
       const dx = x - B[i], dz = z - B[i + 1], r = B[i + 2] + radius;
-      if (dx * dx + dz * dz < r * r) return false;
+      const distance2 = dx * dx + dz * dz;
+      if (distance2 >= r * r) continue;
+      const ox = fromX - B[i], oz = fromZ - B[i + 1], old2 = ox * ox + oz * oz;
+      if (old2 >= r * r || distance2 <= old2 + 1e-12 || ox * (x - fromX) + oz * (z - fromZ) < -1e-12) return false;
     }
     return true;
+  };
+  // Horizontal clearance alone cannot stop a fall entering a lower layer's obstacle. Resolve the new
+  // contact at its rim as the feet cross its top, before the walker can land trapped inside it.
+  const resolveFall = (p, fromX, fromZ, previousFeet, feet, radius) => {
+    if (feet >= previousFeet || clearAt(p.x, p.z, feet, radius)) return false;
+    const B = FLOOR().blocks;
+    let moved = false;
+    for (let pass = 0; pass < 4; pass++) {
+      let contact = false;
+      for (let i = 0; i < B.length; i += 5) {
+        if (feet < B[i + 3] || feet > B[i + 4] || pass === 0 && previousFeet <= B[i + 4]) continue;
+        let dx = p.x - B[i], dz = p.z - B[i + 1], distance = Math.hypot(dx, dz);
+        const r = B[i + 2] + radius + 1e-4;
+        if (distance >= r) continue;
+        if (distance < 1e-8) {
+          dx = fromX - B[i]; dz = fromZ - B[i + 1]; distance = Math.hypot(dx, dz);
+          if (distance < 1e-8) { dx = 0; dz = 1; distance = 1; }
+        }
+        p.x = B[i] + dx / distance * r; p.z = B[i + 1] + dz / distance * r;
+        contact = moved = true;
+      }
+      if (!contact || clearAt(p.x, p.z, feet, radius)) break;
+    }
+    return moved;
   };
 
   // ---- the node core ------------------------------------------------------------------------------------
@@ -69278,11 +69633,11 @@ void main() {
     }
     // Arms out from the posts' tops for the station's two lanterns.
     for (const s of [-1, 1]) flat.push(beam(s * 2.25, 3.95, -0.6, s * 3.1, 3.95, -0.6, 0.14, TIMBER_DK), beam(s * 2.4, 3.4, -0.6, s * 2.85, 3.92, -0.6, 0.08, TIMBER));
-    // The control panel between the tanks: a pedestal, a raked screen with green bars, and keys.
+    // The control panel between the tanks: a pedestal, an upright screen with green bars, and keys.
     flat.push(bevelBox({ w: 0.62, h: 0.85, d: 0.42, color: IRON_DK, bevel: 0.04, offset: { y: 0.425, z: 0.62 } }));
     const panel = [bevelBox({ w: 0.6, h: 0.42, d: 0.08, color: IRON, bevel: 0.03 }), box({ w: 0.5, h: 0.32, d: 0.02, color: "#123a2a", emissive: 0.8, offset: { z: 0.05 } })];
     for (let k = 0; k < 4; k++) panel.push(box({ w: 0.07, h: 0.06 + k * 0.05, d: 0.02, color: "#5fff7a", emissive: 1, offset: { x: -0.15 + k * 0.1, y: -0.12 + (0.06 + k * 0.05) / 2, z: 0.07 } }));
-    flat.push(moved(turnedX(merge(...panel), 0.5), 0, 1.05, 0.72));
+    flat.push(moved(merge(...panel), 0, 1.05, 0.72));
     for (let k = 0; k < 5; k++) flat.push(box({ w: 0.08, h: 0.03, d: 0.07, color: ["#ff5a3a", "#ffc83a", "#5fb8ff", "#5fe36a", "#ff5a3a"][k], emissive: 0.95, offset: { x: -0.2 + k * 0.1, y: 0.86, z: 0.8 } }));
     flat.push(bevelBox({ w: 4.4, h: 3.7, d: 0.16, color: "#7c4424", bevel: 0.05, offset: { y: 2, z: -0.95 } }));
     for (let i = 0; i < 13; i++) for (const y of [0.3, 3.7]) round.push(moved(ball(0.05, BRASS, 0, 6), -2 + i * 0.333, y, -0.86));
@@ -69375,12 +69730,12 @@ void main() {
       for (const y of [3.95, 4.62]) geos.push(bevelBox({ w: 0.62, h: 0.12, d: 0.6, color: IRON_DK, bevel: 0.02, offset: { x: s * 3.7, y, z: 0.75 } }));
     }
     geos.push(bevelBox({ w: 8.3, h: 0.5, d: 0.56, color: TIMBER, bevel: 0.07, offset: { y: 4.3, z: 0.75 } }));
-    // The forge's control: a console with a raked screen of green bars and a lever with a red knob.
+    // The forge's control: a console with an upright screen of green bars and a lever with a red knob.
     const cx = FORGE_CONSOLE[0], cz = FORGE_CONSOLE[1];
     geos.push(bevelBox({ w: 0.7, h: 0.95, d: 0.5, color: IRON_DK, bevel: 0.05, offset: { x: cx, y: 0.475, z: cz } }));
     const screen = [bevelBox({ w: 0.62, h: 0.44, d: 0.08, color: IRON, bevel: 0.03 }), box({ w: 0.52, h: 0.34, d: 0.02, color: "#123a2a", emissive: 0.8, offset: { z: 0.05 } })];
     for (let k = 0; k < 4; k++) screen.push(box({ w: 0.08, h: 0.07 + k * 0.05, d: 0.02, color: "#5fff7a", emissive: 1, offset: { x: -0.16 + k * 0.1, y: -0.12 + (0.07 + k * 0.05) / 2, z: 0.07 } }));
-    geos.push(moved(turnedX(merge(...screen), 0.45), cx - 0.08, 1.15, cz + 0.08), beam(cx + 0.22, 0.95, cz, cx + 0.34, 1.42, cz + 0.1, 0.05, IRON_LT), moved(ball(0.08, "#e8342a", 0.4, 8), cx + 0.35, 1.46, cz + 0.11));
+    geos.push(moved(merge(...screen), cx - 0.08, 1.15, cz + 0.08), beam(cx + 0.22, 0.95, cz, cx + 0.34, 1.42, cz + 0.1, 0.05, IRON_LT), moved(ball(0.08, "#e8342a", 0.4, 8), cx + 0.35, 1.46, cz + 0.11));
     return moved(shaded([rim], geos), f.x, 0, f.z);
   });
   // A flame: a teardrop of orange with a smaller one of yellow in front of it.
@@ -69615,16 +69970,16 @@ void main() {
 
   // The switchboard, a cockpit of screens round the operator as the concept draws it. Everything is placed round
   // `CONSOLE`, where the operator stands, facing -z: a curved timber desk wrapped round him, its front a row of
-  // raked control decks studded with lit buttons, a lower row of five monitors on necks along its back, tipped back
-  // toward him, an upper row of four on posts leaning in over him, and the big routing board above the middle. A
-  // monitor is [bearing, reach, height, width, tall, tilt, kind]: bearing 0 is straight ahead, tilt leans its top
-  // back (negative) or in (positive), and kind is what its lit face shows (`switchScreens`). A cart of gold stands by.
+  // raked control decks studded with lit buttons, a lower row of five upright monitors on necks along its back,
+  // an upper row of four on posts, and the upright routing board above the middle. A monitor is
+  // [bearing, reach, height, width, tall, tilt, kind]: bearing 0 is straight ahead, tilt is 0 for upright screens,
+  // and kind is what its lit face shows (`switchScreens`). A cart of gold stands by.
   const CONSOLE = { x: 0, z: 0.9, desk: 2, deep: 0.9, top: 1, arc: 1.3 };
   const MONITORS = [
-    [-1.05, 2.25, 1.6, 1.05, 0.66, -0.3, "bars"], [-0.52, 2.25, 1.6, 1.05, 0.66, -0.3, "text"], [0, 2.25, 1.6, 1.05, 0.66, -0.3, "line"],
-    [0.52, 2.25, 1.6, 1.05, 0.66, -0.3, "text"], [1.05, 2.25, 1.6, 1.05, 0.66, -0.3, "bars"],
-    [-0.78, 2.5, 2.45, 1.05, 0.66, 0.14, "text"], [-0.26, 2.5, 2.45, 1.05, 0.66, 0.14, "line"], [0.26, 2.5, 2.45, 1.05, 0.66, 0.14, "bars"], [0.78, 2.5, 2.45, 1.05, 0.66, 0.14, "text"],
-    [0, 2.7, 3.3, 1.6, 0.95, 0.2, "graph"]
+    [-1.05, 2.25, 1.6, 1.05, 0.66, 0, "bars"], [-0.52, 2.25, 1.6, 1.05, 0.66, 0, "text"], [0, 2.25, 1.6, 1.05, 0.66, 0, "line"],
+    [0.52, 2.25, 1.6, 1.05, 0.66, 0, "text"], [1.05, 2.25, 1.6, 1.05, 0.66, 0, "bars"],
+    [-0.78, 2.5, 2.45, 1.05, 0.66, 0, "text"], [-0.26, 2.5, 2.45, 1.05, 0.66, 0, "line"], [0.26, 2.5, 2.45, 1.05, 0.66, 0, "bars"], [0.78, 2.5, 2.45, 1.05, 0.66, 0, "text"],
+    [0, 2.7, 3.3, 1.6, 0.95, 0, "graph"]
   ];
   // Stands a part built facing +z at the origin where a monitor or a deck at `bearing` and `reach` puts it.
   const consoleAt = (geo, bearing, reach, y, tilt) => moved(turnedY(turnedX(geo, tilt), -bearing), CONSOLE.x + Math.sin(bearing) * reach, y, CONSOLE.z - Math.cos(bearing) * reach);
@@ -69780,7 +70135,7 @@ void main() {
   // the lanterns, and the operator's and the crates' spots.
   const REB = {
     cz: -0.6, leg: 2.5, top: 3.4, pipe: 0.19, post: 2.8, postZ: -2.75, sign: [0.5, 4.55, -2.45], boards: [[-1.75, 2.35, -0.22], [0, 2.35, -0.2], [1.75, 2.35, -0.22]],
-    lamps: [[-2.8, 5.24, -2.25], [2.8, 5.24, -2.25]], console: [0, 1.85], crates: [[-2.2, 1.95], [2.2, 1.95]], operator: [0, 2.55]
+    lamps: [[-2.8, 5.24, -2.25], [2.8, 5.24, -2.25]], console: [0, 3], crates: [[-2.2, 1.95], [2.2, 1.95]], operator: [0, 4.1]
   };
   const rebalancerPaths = cached(() => ({
     from: roundedPath([[-REB.leg, 0.3, REB.cz], [-REB.leg, REB.top, REB.cz], [-0.36, REB.top, REB.cz]], 0.7),
@@ -69808,13 +70163,14 @@ void main() {
     round.push(moved(ball(0.36, BRONZE, 0, 16), 0, REB.top, cz), moved(turn([[0.2, 1.85], [0.27, 1.88], [0.27, 2], [0.2, 2.03], [0.2, 2.6], [0.26, 2.63], [0.26, 2.72], [0.2, 2.75], [0.2, 3.1]], 16, BRONZE), 0, 0, cz));
     // The boards' chains from the pipes, and their iron backs.
     for (const [bx, , bz] of REB.boards) for (const dx of bx ? [-0.55, 0.55] : [-0.35, 0.35]) round.push(...chain(bx + dx, 2.7, bz, bx + dx, REB.top - REB.pipe, cz, 0.04, IRON_DK));
-    // The console: a raked panel with the rebalancer's sign on its screen, buttons and a lever.
+    // The console: an upright monitor above a raked button panel and a lever.
     const [kx, kz] = REB.console, rake = 0.35;
     flat.push(bevelBox({ w: 1.5, h: 0.85, d: 0.6, color: IRON_DK, bevel: 0.06, offset: { x: kx, y: 0.425, z: kz } }));
     flat.push(moved(turnedX(bevelBox({ w: 1.56, h: 0.07, d: 0.7, color: IRON, bevel: 0.02 }), rake), kx, 0.9, kz));
     const onPanel = (geo, u, v, lift = 0.05) => moved(geo, kx + u, 0.9 + Math.cos(rake) * lift - Math.sin(rake) * v, kz + Math.sin(rake) * lift + Math.cos(rake) * v);
-    glow.push(onPanel(turnedX(box({ w: 0.58, h: 0.02, d: 0.42, color: "#0f2a4a", emissive: 0.9 }), rake), -0.33, 0));
-    for (const part of cycleIcon(0.12, 0.022)) glow.push(onPanel(turnedX(part, rake - Math.PI / 2), -0.33, 0, 0.07));
+    flat.push(box({ w: 0.08, h: 0.14, d: 0.08, color: IRON_DK, offset: { x: kx - 0.33, y: 0.99, z: kz - 0.1 } }), bevelBox({ w: 0.68, h: 0.52, d: 0.08, color: IRON_DK, bevel: 0.03, offset: { x: kx - 0.33, y: 1.3, z: kz - 0.1 } }));
+    glow.push(box({ w: 0.58, h: 0.42, d: 0.02, color: "#0f2a4a", emissive: 0.9, offset: { x: kx - 0.33, y: 1.3, z: kz - 0.05 } }));
+    for (const part of cycleIcon(0.12, 0.022)) glow.push(moved(part, kx - 0.33, 1.3, kz - 0.03));
     [["#e8342a", 0.12, -0.14], ["#ffd23a", 0.26, -0.14], ["#4fd08a", 0.12, 0.02], ["#e8342a", 0.26, 0.02], ["#ffd23a", 0.12, 0.18], ["#4fd08a", 0.26, 0.18]].forEach(([color, u, v]) => glow.push(onPanel(ball(0.035, color, 1, 8), u, v, 0.06)));
     round.push(beam(kx + 0.55, 0.95, kz, kx + 0.58, 1.3, kz + 0.06, 0.04, IRON_LT), moved(ball(0.07, "#e8342a", 0.4, 10), kx + 0.58, 1.33, kz + 0.06));
     // The sign on its posts, with the arrows chasing round beside the lettering.
@@ -69949,6 +70305,10 @@ void main() {
     }
     flat.push(bevelBox({ w: 2.4, h: 0.3, d: 2.4, color: TIMBER_LT, bevel: 0.05, offset: { y: h } }));
     round.push(turn([[0.95, h + 0.15], [0.95, h + 0.28], [0.8, h + 0.34], [0, h + 0.34]], 16, BRASS));
+    // A spindle and bearing support the rotating optic, leaving the lantern room open around it.
+    round.push(turn([[0.3, h + 0.34], [0.3, h + 0.42], [0.2, h + 0.46], [0.2, h + 0.53], [0.1, h + 0.56], [0.1, h + 0.94], [0, h + 0.94]], 20, BRONZE));
+    round.push(moved(torus(0.25, 0.025, BRASS), 0, h + 0.44, 0));
+    flat.push(bevelBox({ w: 0.42, h: 0.045, d: 0.52, color: IRON_DK, bevel: 0.01, offset: { x: -0.48, y: h + 0.35, z: 0.38 } }));
     for (let k = 0; k < 8; k++) {
       const a = k / 8 * TAU;
       flat.push(bevelBox({ w: 0.08, h: 1.5, d: 0.08, color: BRASS, bevel: 0.02, offset: { x: Math.cos(a) * 0.86, y: h + 1.05, z: Math.sin(a) * 0.86 } }));
@@ -69962,16 +70322,46 @@ void main() {
     return shaded(round, flat);
   });
   const lookoutLamp = cached(() => {
-    const h = LAYOUT.lookout.tower;
-    const build = (on) => noShadow(shaded([turn([[0.62, h + 0.34], [0.72, h + 0.9], [0.62, h + 1.72], [0, h + 1.8]], 16, on ? "#ffe29a" : "#4a3a22", on ? 1 : 0.1)]));
+    // The bulb sits at the reflector's focus; all optical parts are local to this centre.
+    const build = (on) => noShadow(shaded([ball(0.13, on ? "#fff1c7" : "#8c8675", on ? 1 : 0, 16)]));
     return { on: build(true), off: build(false) };
   });
-  // The beam: a long, thin cone of pale light from the lamp, turned by the scene about the tower's axis.
+  const lookoutOptics = cached(() => {
+    const round = [], flat = [], axis = (g) => turnedZ(g, -Math.PI / 2);
+    // A hollow reflector opens towards +x, behind the bulb, with a pale reflective interior.
+    round.push(axis(turn([[0, -0.49], [0.16, -0.46], [0.32, -0.37], [0.47, -0.2], [0.56, 0.04],
+      [0.54, 0.04], [0.45, -0.18], [0.3, -0.34], [0.14, -0.43], [0, -0.46]], 32, (t) => t < 0.5 ? BRONZE : "#d6d0bb")));
+    round.push(moved(axis(torus(0.55, 0.028, BRASS, 0, 32)), 0.04, 0, 0));
+    round.push(moved(axis(torus(0.52, 0.035, BRASS, 0, 32)), 0.48, 0, 0));
+    round.push(turn([[0.07, -0.36], [0.07, -0.15], [0, -0.15]], 12, IRON_DK));
+    round.push(moved(ball(0.065, BRASS, 0, 12), 0, -0.16, 0));
+    // Three slender stays hold the lens ahead of the light without hiding its centre.
+    for (let k = 0; k < 3; k++) {
+      const a = k / 3 * TAU, y = Math.cos(a) * 0.52, z = Math.sin(a) * 0.52;
+      flat.push(beam(0.04, y, z, 0.48, y, z, 0.035, BRONZE));
+    }
+    flat.push(beam(-0.3, -0.38, 0, 0.3, -0.38, 0, 0.08, BRONZE));
+    // Concentric stepped rings keep a Fresnel lens thin instead of filling the room with glass.
+    const profile = [[0, 0.49]];
+    for (let k = 1; k <= 7; k++) {
+      const r = k / 7 * 0.49;
+      profile.push([r, 0.435], [r, 0.49]);
+    }
+    profile.push([0.49, 0.42], [0, 0.42]);
+    const lens = noShadow(shaded([axis(turn(profile, 32, "#cde7df", 0.08))]));
+    lens.glass = 0.26;
+    return { frame: shaded(round, flat), lens };
+  });
+  const LOOKOUT_BEAM = { range: 48, inner: 7 * Math.PI / 180, outer: 11 * Math.PI / 180, pitch: -0.2 };
+  // A faint cone through the dusty air; the matching spotlight lights the surfaces in its path.
   const lookoutBeam = cached(() => {
-    const g = lathe({ profile: [[0.1, 0], [2, 13], [0, 13]], segments: 8, color: "#fff2c0", emissive: 0.7 });
+    const range = LOOKOUT_BEAM.range;
+    const g = lathe({ profile: [[0.04, 0], [Math.tan(LOOKOUT_BEAM.outer) * range, range], [0, range]], segments: 24, color: "#fff2c0", emissive: 1 });
     const v = g.verts;
-    for (let i = 0; i < v.length; i += 3) { const y = v[i + 1]; v[i + 1] = v[i] * 0.3; v[i] = y; }
+    for (let i = 0; i < v.length; i += 3) { const y = v[i + 1]; v[i + 1] = v[i]; v[i] = y; }
     g.faces.forEach((f) => f.i.reverse());
+    g.glass = 0.055;
+    g.lightBeam = range;
     return noShadow(g);
   });
 
@@ -70146,7 +70536,8 @@ void main() {
     { ring: "#6fff9a", sky: "#1f5a3a", ground: "#2f5a2a", accent: "#1f4a24" },
     { ring: "#6fb8ff", sky: "#1f3a6a", ground: "#4a6a8a", accent: "#e8e0d0" }
   ];
-  const TUNNEL_SIGN = { y: 6.15, z: 0.7 }, TUNNEL_POST = 3.95, TUNNEL_BOX = [-1.55, 0.85];
+  // Crossing reverses the lateral offset, so keep both sides of the aperture clear of consoles.
+  const TUNNEL_SIGN = { y: 6.15, z: 0.7 }, TUNNEL_POST = 3.95, TUNNEL_BOX = [-3.5, 0.95];
   const tunnel = (theme) => {
     const T = TUNNEL_THEMES[theme], geos = [], glow = [], lit = [], rand = mulberry32(theme * 11 + 3), cy = 2.6;
     for (const [r, n, depth, z] of [[2.5, 12, 1.4, 0], [3.2, 16, 1.1, -0.15]]) for (let k = 0; k <= n; k++) {
@@ -70183,6 +70574,7 @@ void main() {
     for (const x of [-0.5, 0.5]) geos.push(box({ w: 0.08, h: 0.08, d: 4.2, color: IRON_LT, offset: { x, y: 0.1, z: -1 } }));
     for (let z = 0.9; z > -3; z -= 0.5) geos.push(box({ w: 1.3, h: 0.06, d: 0.18, color: TIMBER_DK, offset: { y: 0.04, z } }));
     // The console box by the door, with the bolt lit on its screen.
+    geos.push(bevelBox({ w: 0.9, h: 0.4, d: 0.8, color: STONE[2], bevel: 0.05, offset: { x: TUNNEL_BOX[0], y: -0.2, z: TUNNEL_BOX[1] } }));
     geos.push(bevelBox({ w: 0.62, h: 0.72, d: 0.5, color: TIMBER, bevel: 0.05, offset: { x: TUNNEL_BOX[0], y: 0.36, z: TUNNEL_BOX[1] } }));
     lit.push(box({ w: 0.44, h: 0.44, d: 0.03, color: "#12305a", emissive: 0.8, offset: { x: TUNNEL_BOX[0], y: 0.42, z: TUNNEL_BOX[1] + 0.26 } }));
     lit.push(moved(smoothBolt(0.36, 0.03, "#8fd8ff", 1), TUNNEL_BOX[0], 0.42, TUNNEL_BOX[1] + 0.29));
@@ -71111,10 +71503,10 @@ void main() {
 
   BL.factoryModels = {
     LAYOUT, LEVEL, HALL, WALL_LEAN, STATION_BACK, stationX, stationZ, SHIELD_Z, porchOf, FORGE_TRACKS, FORGE_STORES, FORGE_CY, SHAFTS, LINE_STEP, COIN_R,
-    forgeSign, forgeWave, forgeLines, forgeTrack, forgeShafts, mintCoin, COILS, teslaCoil, banner, statusLantern, peerPipes, peerMirrors, TUNNEL_SIGN, TUNNEL_POST, EXIT_Z, CONDUIT_SAMPLES, TUNNEL_THEMES, STEP, supportAt, clearAt, walkable,
+    forgeSign, forgeWave, forgeLines, forgeTrack, forgeShafts, mintCoin, COILS, teslaCoil, banner, statusLantern, peerPipes, peerMirrors, TUNNEL_SIGN, TUNNEL_POST, EXIT_Z, CONDUIT_SAMPLES, TUNNEL_THEMES, STEP, supportAt, stairCeilingAt, clearAt, walkable, resolveFall,
     hall, scaffold, coreBody, coreChamber, conduits, sat, satFailed, stationFrame, capacitor, forge, forgeFire, cart,
     switchboard, switchScreens, REB, TRE, rebalancerBase, rebalancerRing, rebalancerFlow, treasuryBody, goldPile, hopperFill, beltNugget, goldCrate, dataBoard, moveBoard,
-    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutBeam, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, hubWindow, exitTunnel, outsideView,
+    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutOptics, lookoutBeam, LOOKOUT_BEAM, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, hubWindow, exitTunnel, outsideView,
     beam, moved, turnedY, smoothBolt, smoothBitcoin
   };
 })();
@@ -71453,17 +71845,17 @@ void main() {
   // The shield across the way out, as wide as the mouth's opening, as on the hub's side; and how far past where the
   // hub took its picture of the island the picture hangs.
   const GATE_OPENING = { minX: -2.5, maxX: 2.5, floorY: 0, ceilingY: 3 }, OUTSIDE_DISTANCE = 34;
-  // Each peer tunnel's shield, across the inside of its arch in the tunnel's frame, and its blue; and where on the
-  // node's walkway it sets down whoever walks into it.
-  const PEER_OPENING = { minX: -2.1, maxX: 2.1, floorY: 0.1, ceilingY: 4.65 }, PEER_PLANE = 0.45, PEER_TINT = [0.3, 0.72, 1], NODE_RETURN = { x: 0, z: 1.6 };
+  // Paired peer mirrors share their arch coordinates. A half turn carries an
+  // incoming walk out of the other face, retaining height and distance crossed.
+  const PEER_OPENING = { minX: -2.1, maxX: 2.1, floorY: 0.1, ceilingY: 4.65 }, PEER_PLANE = 0.45, PEER_TINT = [0.3, 0.72, 1];
   const view = (x, y, z, yaw, pitch, dist) => ({ yaw, pitch, dist, target: { x, y, z } });
   const bay = (i, dist = 11) => { const b = LAYOUT.bays[i]; return view(b.x * 0.9, b.y + 2, b.z, b.x < 0 ? 0.55 : -0.55, 0.22, dist); };
   // Where whoever walked in stands: a step inside the gate, facing the core (yaw 0 turns the Ooga to PI), seen over
-  // its shoulder at the shoulder view's own pitch.
-  const ARRIVAL = { yaw: 0, pitch: 0.42, dist: FOLLOW.max, position: { x: 0, y: LAYOUT.entrance.y, z: LAYOUT.entrance.z + 1 } };
+  // its shoulder looking horizontally across the hall.
+  const ARRIVAL = { yaw: 0, pitch: 0, dist: FOLLOW.max, position: { x: 0, y: LAYOUT.entrance.y, z: LAYOUT.entrance.z + 1 } };
   // `entrance` is the balcony's view across the core; the rest frame one station each.
   const PRESETS = {
-    entrance: view(0, 9, -6, 0, 0.07, 33),
+    entrance: view(0, 9, -6, 0, 0, 33),
     core: view(0, 8, -4, 0.35, 0.12, 15),
     lines: view(0, 8.5, -8, 0, 0.18, 20),
     lineA: bay(0), lineB: bay(1), lineC: bay(2), lineD: bay(3),
@@ -71480,6 +71872,8 @@ void main() {
     direct: [0.6, 0.45, 0.32], directStrength: 0.35, ambientFloor: 0.34,
     sun: { x: 0.25, y: 0.9, z: 0.3 }, shadowCenter: { x: 0, y: 6, z: -4 }, shadowExtent: 30,
     lights: new Float32Array(BL.glRenderer.POINT_LIGHT_CAPACITY * 8), lightCount: 0, bloomStrength: 0.85,
+    // Spotlight: origin/range, unit direction/outer cosine, colour/inner cosine.
+    spotLight: new Float32Array(12),
     fog: [0.1, 0.07, 0.05], fogNear: 40, fogFar: 110
   };
   // Seconds a flash, a sputter, the forge's heat and the rebalancer's run last.
@@ -71536,6 +71930,7 @@ void main() {
   const targets = [];
   const SAT_POS = { x: 0, y: 0, z: 0 }, SAT_ROT = { x: 0, y: 0, z: 0 }, SAT_SCALE = { x: 1, y: 1, z: 1 };
   const SAT_M = mat4.create();
+  const PEER_ROTATION = math.quat.create();
 
   // The dressing: crates and coal by the forge, a gauge by the switchboard, and vines over the way
   // out. One set, built once for the page.
@@ -71800,6 +72195,7 @@ void main() {
     go("hub");
   };
   const onKey = (e) => {
+    if ((e.key === "1" || e.key === "2") && pilot.weaponMode(Number(e.key))) return true;
     if (e.key === "Escape") {
       leaveCave();
       return true;
@@ -71823,7 +72219,9 @@ void main() {
       surge: 0, surgeT: -1
     };
     const hall = FM.hall(), cond = FM.conduits();
-    addChild(root, createNode({ geometry: hall.rock }), createNode({ geometry: hall.walls }), createNode({ geometry: hall.glow, sightHidden: true }), createNode({ geometry: FM.scaffold() }),
+    s.ceiling = createNode({ geometry: hall.ceiling });
+    s.walls = createNode({ geometry: hall.walls });
+    addChild(root, s.ceiling, createNode({ geometry: hall.rock }), s.walls, createNode({ geometry: hall.glow, sightHidden: true }), createNode({ geometry: FM.scaffold() }),
       createNode({ geometry: FM.coreBody() }), createNode({ geometry: cond.pipe }), createNode({ geometry: cond.glass, sightHidden: true }), createNode({ geometry: cond.glow }), createNode({ geometry: FM.forge() }));
     // The surge's rings round the chamber and the coils' arcs, hidden until a big forward comes through.
     s.coreRings = [0, 1, 2].map(() => createNode({ position: { x: L.core.x, y: 0, z: L.core.z }, geometry: FM.coreRing(), visible: false, sightHidden: true }));
@@ -71882,15 +72280,19 @@ void main() {
       const lbl = labelNode(node, 0, FM.TUNNEL_SIGN.y, FM.TUNNEL_SIGN.z);
       addChild(node, createNode({ position: { x: -(FM.TUNNEL_POST + 0.75), y: 5.9, z: 0.6 }, geometry: FM.banner(2.2) }));
       addChild(root, node);
-      // The peer's shield across the arch: the lab's phase plane in the concept's blue, humming like the gate.
-      const phase = BL.labPhase.create(node, { x: t.x, z: t.z, ry: t.turn, floorY: t.y, room: { w: 4.2, h: 4.7, from: 0, to: 3 } }, PEER_OPENING, PEER_PLANE, PEER_TINT);
-      // Its face is a mirror, a reflector of its own, and takes the shield's ripples, so the blue waves run over the
-      // reflection; the shield's own plane only keeps the ripples.
+      // The OBL mirror's exact mesh-section contact atlas highlights the limbs
+      // touching this glass, over the peer's own blue reflection.
       const face = createNode({ geometry: FM.peerMirrors()[i], position: { x: 0, y: 0, z: PEER_PLANE }, rippleTint: PEER_TINT, sightHidden: true });
-      face.mirrorRipples = phase.ripples;
-      phase.node.visible = false;
       addChild(node, face);
-      s.tunnels.push({ at: t, node, stone, label: lbl, phase, face, hum: Math.random() * 0.3 });
+      const ripples = BL.mirrorRipples.create(face), body = BL.mirrorBody.create(face, new Map());
+      const other = L.tunnels[i ^ 1], yaw = other.turn - t.turn + Math.PI, c = Math.cos(yaw), sn = Math.sin(yaw);
+      const sx = t.x + Math.sin(t.turn) * PEER_PLANE, sz = t.z + Math.cos(t.turn) * PEER_PLANE;
+      const transform = mat4.create();
+      transform[0] = transform[10] = c; transform[2] = -sn; transform[8] = sn;
+      transform[12] = other.x + Math.sin(other.turn) * PEER_PLANE - sx * c - sz * sn;
+      transform[13] = other.y - t.y;
+      transform[14] = other.z + Math.cos(other.turn) * PEER_PLANE + sx * sn - sz * c;
+      s.tunnels.push({ at: t, node, stone, label: lbl, face, ripples, body, transform, yaw, crossings: 0, hum: Math.random() * 0.3 });
     });
     // Gallery stands along the top decks.
     const gcaps = FM.galleryCaps();
@@ -71944,10 +72346,12 @@ void main() {
     s.statsBoard = labelNode(trNode, tbr[0], tbr[1], tbr[2]);
     // The watchtower on the top deck: tower, lamp and the beam that sweeps round it.
     const lkNode = createNode({ position: { x: lk.x, y: lk.y, z: lk.z } });
-    s.lamp = createNode({ geometry: FM.lookoutLamp().on });
-    s.beam = createNode({ position: { x: 0, y: lk.tower + 1, z: 0 }, geometry: FM.lookoutBeam(), sightHidden: true });
+    s.lamp = createNode({ position: { x: 0, y: lk.tower + 1, z: 0 }, rotation: { x: 0, y: 0, z: FM.LOOKOUT_BEAM.pitch }, geometry: FM.lookoutLamp().on });
+    s.beam = createNode({ geometry: FM.lookoutBeam(), sightHidden: true });
+    const optics = FM.lookoutOptics();
+    addChild(s.lamp, createNode({ geometry: optics.frame }), createNode({ geometry: optics.lens }), s.beam);
     const lkBody = createNode({ geometry: FM.lookoutTower() });
-    addChild(lkNode, lkBody, s.lamp, s.beam);
+    addChild(lkNode, lkBody, s.lamp);
     s.lookoutLabel = labelNode(lkNode, 2.2, 2.6, 2.3);
     // The study hall in the right wall, facing into the hall: locked for now.
     const stNode = createNode({ position: { x: st.x, y: st.y, z: st.z }, rotation: { x: 0, y: -Math.PI / 2, z: 0 } });
@@ -72030,7 +72434,7 @@ void main() {
       b.gorilla = worker(FM.stationX(d) + (d.x < 0 ? 1.8 : -1.8), d.y, FM.stationZ(d) + 2.1, 0.6, d.w, d.d);
     });
     worker(L.switchboard.x, L.switchboard.y, L.switchboard.z + 0.9, 0.8, L.switchboard.w, L.switchboard.d, Math.PI);
-    s.rebalanceCrew = worker(L.rebalancer.x + FM.REB.operator[0], L.rebalancer.y, L.rebalancer.z + FM.REB.operator[1], 0.4, L.rebalancer.w, L.rebalancer.d, Math.PI);
+    s.rebalanceCrew = worker(L.rebalancer.x + FM.REB.operator[0], L.rebalancer.y, L.rebalancer.z + FM.REB.operator[1], 0.25, L.rebalancer.w, L.rebalancer.d, Math.PI);
     worker(L.treasury.x + FM.TRE.operator[0], L.treasury.y, L.treasury.z + FM.TRE.operator[1], 0.6, L.treasury.w, L.treasury.d);
     worker(L.lookout.x + 1.8, L.lookout.y, L.lookout.z + 1.6, 0.8, L.lookout.w, L.lookout.d);
   };
@@ -72052,7 +72456,11 @@ void main() {
     lamp(LIGHT.switchboard, L.switchboard.x, L.switchboard.y + 2.2, L.switchboard.z + 0.8, 9, 0.35, 0.6, 1);
     lamp(LIGHT.rebalancer, L.rebalancer.x, L.rebalancer.y + 1.6, L.rebalancer.z + 0.6, 9, 0.35, 0.9, 1);
     lamp(LIGHT.treasury, L.treasury.x, L.treasury.y + 2, L.treasury.z + 1, 9, 1, 0.8, 0.35);
-    lamp(LIGHT.lookout, L.lookout.x, L.lookout.y + L.lookout.tower + 1, L.lookout.z, 14, 1, 0.82, 0.45);
+    lamp(LIGHT.lookout, L.lookout.x, L.lookout.y + L.lookout.tower + 1, L.lookout.z, 3, 1, 0.82, 0.45);
+    const spot = RENDER_OPTS.spotLight, beam = FM.LOOKOUT_BEAM;
+    spot[0] = L.lookout.x; spot[1] = L.lookout.y + L.lookout.tower + 1; spot[2] = L.lookout.z; spot[3] = 0;
+    spot[4] = Math.cos(beam.pitch); spot[5] = Math.sin(beam.pitch); spot[6] = 0; spot[7] = Math.cos(beam.outer);
+    spot[8] = 12; spot[9] = 9.84; spot[10] = 5.4; spot[11] = Math.cos(beam.inner);
     RENDER_OPTS.lightCount = Math.min(BL.glRenderer.POINT_LIGHT_CAPACITY, FIXED + lightPool().length / 8);
   };
   // The shared lights, [x, y, z, radius, r, g, b, flicker] each: flicker 0 is steady, otherwise the flame's phase.
@@ -72096,8 +72504,53 @@ void main() {
   // The crew's support and step test on the hall's floor: the highest surface within a step of the feet, clear of
   // what stands there, and never off an edge.
   const groundFor = (x, z, feet) => FM.supportAt(x, z, feet);
-  const walkableFor = (ax, az, bx, bz, y, height, actor) => FM.walkable(ax, az, bx, bz, y, actor.bodyRadius || 0.35);
+  // There is no banana pile in the hall. Space must jump even when the rifle needs ammunition.
+  const reloadPolicy = { near: () => false, available: () => false };
+  const walkableFor = (ax, az, bx, bz, y, height, actor) => FM.walkable(ax, az, bx, bz, y, actor.bodyRadius || 0.35, height);
+  const ceilingFor = (x, z, feet, actor) => FM.stairCeilingAt(x, z, feet, actor.bodyRadius || 0.35);
+  // In the air, keep the same obstacle clearance without requiring the floor to be within a step.
+  const flyableFor = (ax, az, bx, bz, y, height, actor) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.2)), radius = actor.bodyRadius || 0.35;
+    for (let i = 1; i <= steps; i++) {
+      if (!FM.clearAt(ax + (bx - ax) * i / steps, az + (bz - az) * i / steps, y, radius, height,
+        ax + (bx - ax) * (i - 1) / steps, az + (bz - az) * (i - 1) / steps)) return false;
+    }
+    return true;
+  };
+  const resolveLanding = (actor, x, y, z) => {
+    if (actor.ladder && actor.ladder.plane) return;
+    const p = actor.root.position, feet = p.y - actor.baseY;
+    if (!FM.resolveFall(p, x, z, y - actor.baseY, feet, actor.bodyRadius || 0.35)) return;
+    const floor = FM.supportAt(p.x, p.z, feet);
+    p.y = actor.baseY + Math.max(feet, floor);
+    actor.hop = Math.max(0, feet - floor);
+    if (actor.hop === 0 && actor.hopV < 0) actor.hopV = 0;
+  };
+  // Clip against the nearest shield before scenery behind it, then emit at the actual banana crossing.
+  // Both paths reuse the mirrors' cached transforms and fixed ripple pools.
+  const clipProjectileTarget = (from, to) => {
+    let clipped = scene.gate.phase.ripples.absorb(from.x, from.y, from.z, to);
+    for (const t of scene.tunnels) if (t.ripples.absorb(from.x, from.y, from.z, to)) clipped = true;
+    return clipped;
+  };
+  const absorbProjectile = (ax, ay, az, point, dt) => {
+    const gate = scene.gate.phase.ripples, bx = point.x, by = point.y, bz = point.z;
+    let hit = gate.absorb(ax, ay, az, point) ? gate : null;
+    for (const t of scene.tunnels) {
+      if (t.ripples.absorb(ax, ay, az, point)) hit = t.ripples;
+    }
+    return !!hit && hit.cross(ax, ay, az, bx, by, bz, dt);
+  };
   const feetOf = () => avatar ? avatar.root.position.y - avatar.baseY : 0;
+  const peerPassage = (p) => {
+    for (const t of LAYOUT.tunnels) {
+      const dx = p.x - t.x, dz = p.z - t.z, c = Math.cos(t.turn), sn = Math.sin(t.turn);
+      const across = dx * c - dz * sn, along = dx * sn + dz * c;
+      if (Math.abs(across) < PEER_OPENING.maxX && along >= -0.5 && along <= 2.5
+        && p.y >= t.y && p.y <= t.y + PEER_OPENING.ceilingY) return true;
+    }
+    return false;
+  };
 
   const enter = (ctx) => {
     ({ renderer, game, world, go, agentPlay } = ctx);
@@ -72108,12 +72561,14 @@ void main() {
     hooks = {};
     input = interactMod.create({ canvas: ctx.canvas, renderer, camera, hooks });
     const clampTarget = (p) => {
+      if (peerPassage(p)) return;
       p.x = clamp(p.x, -HALL.halfW + 3, HALL.halfW - 3);
       p.y = clamp(p.y, 0.5, HALL.h - 3);
       p.z = clamp(p.z, HALL.back + 2.5, HALL.front - 2);
     };
     // Out of the walls, which lean in as they rise; only the tunnel out lets the eye nearer the front.
     const clampCamera = (p) => {
+      if (peerPassage(p)) return;
       p.y = clamp(p.y, 0.6, HALL.h - 2);
       const lean = p.y / HALL.h * FM.WALL_LEAN;
       p.x = clamp(p.x, -HALL.halfW + 2 + lean, HALL.halfW - 2 - lean);
@@ -72152,6 +72607,7 @@ void main() {
     hud.onAction((action) => {
       if (action === "leave") leaveCave();
       else if (action === "reset-view") pilot.goPreset("entrance");
+      else if (action.startsWith("weapon-") || action === "magazine-swap") pilot.weaponAction(action);
     });
     fx = fxMod.create({ root, input, hooks, hud, game, world, renderer, camera, overlay: ctx.overlay, tickerAt: { x: 0, y: 14, z: -4 } });
     dust = BL.dressing.motes({ count: 240, span: 22, low: 0.5, high: 16 });
@@ -72169,7 +72625,12 @@ void main() {
     world.pilot = null;
     if (playerName) {
       playerWorld = { level: 0, weapons: new Map(), magazine: { owned: false, count: 0, ammo: 0, carrier: null } };
-      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor };
+      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor, flyable: flyableFor, ceilingAt: ceilingFor, ladders: LAYOUT.ladders, onBodyMove: resolveLanding, clipProjectileTarget, absorbProjectile, reloadPolicy };
+      shared.onModelChange = () => {
+        if (!avatar) return;
+        scene.gate.phase.body.refresh(avatar.root);
+        for (const t of scene.tunnels) t.body.refresh(avatar.root);
+      };
       people = shared.crew = BL.crew.create(shared);
       pilot.bind(shared);
       avatar = people.cavemen.get(playerName);
@@ -72178,6 +72639,7 @@ void main() {
       // settled over its shoulder, never sweeping in from wherever the new camera began.
       pilot.navigate(ARRIVAL);
       scene.gate.phase.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
+      for (const t of scene.tunnels) t.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
     }
     lightUp();
     LIGHT_BASE.set(RENDER_OPTS.lights);
@@ -72206,20 +72668,30 @@ void main() {
     };
   };
 
-  // A peer tunnel's shield lets nobody through yet: whoever walks into it sends a ripple across it and is set back
-  // down on the node's walkway, facing the core.
-  const peerShield = (s) => {
-    const p = avatar.root.position, feet = p.y - avatar.baseY;
+  // Cross only the actual glass plane, using the movement segment so a long
+  // step retains its overshoot. Emerging points face out and cannot bounce back
+  // until the player turns and physically crosses the destination again.
+  const peerPortal = (s, previousX, previousY, previousZ) => {
+    if (people.player !== avatar) return;
+    const p = avatar.root.position;
     for (let i = 0; i < s.tunnels.length; i++) {
       const t = s.tunnels[i], at = t.at, c = Math.cos(at.turn), sn = Math.sin(at.turn), dx = p.x - at.x, dz = p.z - at.z;
-      const across = dx * c - dz * sn, along = dx * sn + dz * c;
-      if (along > PEER_PLANE + 0.35 || along < -1 || Math.abs(across) > PEER_OPENING.maxX || Math.abs(feet - at.y) > 0.6) continue;
-      for (let k = 0; k < 3; k++) t.phase.ripples.pulse(across, 0.6 + k * 0.7, 0);
-      p.x = NODE_RETURN.x;
-      p.y = LEVEL.main + avatar.baseY;
-      p.z = NODE_RETURN.z;
-      avatar.root.rotation.y = Math.PI;
-      hud.toast("The peer's shield holds. Back to the node.");
+      const px = previousX - at.x, pz = previousZ - at.z;
+      const from = px * sn + pz * c - PEER_PLANE, to = dx * sn + dz * c - PEER_PLANE;
+      if (from < -1e-7 || to > 0 || from - to < 1e-8) continue;
+      const fraction = from / (from - to), across = (px + (dx - px) * fraction) * c - (pz + (dz - pz) * fraction) * sn;
+      const feet = previousY + (p.y - previousY) * fraction - avatar.baseY - at.y;
+      if (across < PEER_OPENING.minX || across > PEER_OPENING.maxX || feet < PEER_OPENING.floorY - 0.12 || feet + avatar.bodyHeight > PEER_OPENING.ceilingY) continue;
+      const m = t.transform, x = p.x, z = p.z, vx = avatar.leap.vx, vz = avatar.leap.vz;
+      p.x = m[0] * x + m[8] * z + m[12]; p.y += m[13]; p.z = m[2] * x + m[10] * z + m[14];
+      avatar.root.rotation.y += t.yaw;
+      if (avatar.root.quaternion) {
+        math.quat.fromEuler(PEER_ROTATION, 0, t.yaw, 0);
+        math.quat.multiply(avatar.root.quaternion, PEER_ROTATION, avatar.root.quaternion);
+      }
+      avatar.leap.vx = m[0] * vx + m[8] * vz; avatar.leap.vz = m[2] * vx + m[10] * vz;
+      pilot.transformView(m, t.yaw);
+      t.crossings++;
       return;
     }
   };
@@ -72367,9 +72839,13 @@ void main() {
 
   const update = (dt, elapsed) => {
     const s = scene;
+    const previousX = avatar ? avatar.root.position.x : 0, previousY = avatar ? avatar.root.position.y : 0, previousZ = avatar ? avatar.root.position.z : 0;
     pilot.readInput(dt);
     if (people) people.update(dt, elapsed);
     pilot.update(dt);
+    // Cut the vault and inward-leaning walls away so the outer decks stay visible.
+    // Restore them only after the birdseye blend fully returns, including reversals.
+    s.ceiling.visible = s.walls.visible = !pilot.birdsEye && pilot.birdsEyeMix === 0;
     // The gate's shield hums, and shows the outline of whoever walks through it.
     const g = s.gate;
     g.phase.update(dt, elapsed);
@@ -72383,11 +72859,13 @@ void main() {
     // The peer tunnels' shields hum in their blue.
     for (let i = 0; i < s.tunnels.length; i++) {
       const t = s.tunnels[i];
-      t.phase.update(dt, elapsed);
+      t.ripples.update(dt, elapsed);
+      t.body.update(dt);
+      t.body.time = t.ripples.time;
       t.hum -= dt;
       if (t.hum <= 0) {
         t.hum = 0.16 + Math.random() * 0.3;
-        t.phase.ripples.pulse(PEER_OPENING.minX + Math.random() * (PEER_OPENING.maxX - PEER_OPENING.minX), PEER_OPENING.floorY + Math.random() * (PEER_OPENING.ceilingY - PEER_OPENING.floorY), 0);
+        t.ripples.pulse(PEER_OPENING.minX + Math.random() * (PEER_OPENING.maxX - PEER_OPENING.minX), PEER_OPENING.floorY + Math.random() * (PEER_OPENING.ceilingY - PEER_OPENING.floorY), 0);
       }
     }
     shared.tick(dt);
@@ -72399,7 +72877,7 @@ void main() {
       const inOpening = p.x >= GATE_OPENING.minX && p.x <= GATE_OPENING.maxX && y >= GATE_OPENING.floorY - 0.12 && y < GATE_OPENING.ceilingY;
       if (avatar) {
         if (inOpening && p.z > HALL.front - 1.3) leaveCave();
-        else peerShield(s);
+        else peerPortal(s, previousX, previousY, previousZ);
       } else {
         const a = pilot.controls.read();
         if (inOpening && Math.hypot(a.x, a.y) > 0.05 && p.z > HALL.front - 2.2) leaveCave();
@@ -72491,7 +72969,12 @@ void main() {
     const ll = FM.lookoutLamp(), lampGeo = live ? ll.on : ll.off;
     if (s.lamp.geometry !== lampGeo) s.lamp.geometry = lampGeo;
     s.beam.visible = live;
-    s.beam.rotation.y += dt * 0.9;
+    s.lamp.rotation.y += dt * 0.9;
+    const spot = RENDER_OPTS.spotLight, beam = FM.LOOKOUT_BEAM, horizontal = Math.cos(beam.pitch);
+    spot[3] = live ? beam.range : 0;
+    spot[4] = Math.cos(s.lamp.rotation.y) * horizontal;
+    spot[5] = Math.sin(beam.pitch);
+    spot[6] = -Math.sin(s.lamp.rotation.y) * horizontal;
     for (let k = 4; k < 7; k++) L[LIGHT.lookout * 8 + k] = B[LIGHT.lookout * 8 + k] * (live ? 1 : 0.08);
     // Sats: in along a conduit to the core, then out along another to the line the forward left by, or back.
     const q = s.sats, data = s.satNode.instanceData, red = s.redNode.instanceData;
@@ -72554,7 +73037,7 @@ void main() {
     }
     for (const g of scene.crew) g.agent.dispose();
     scene.gate.phase.dispose();
-    for (const t of scene.tunnels) { t.phase.dispose(); t.face.mirrorRipples = null; }
+    for (const t of scene.tunnels) { t.ripples.dispose(); t.body.dispose(); }
     if (people) people.dispose();
     fx.dispose();
     pilot.dispose();
@@ -72578,7 +73061,6 @@ void main() {
     if (scene) {
       for (const g of scene.crew) g.agent.liveGeometry(set);
       scene.gate.phase.liveGeometry(set);
-      for (const t of scene.tunnels) t.phase.liveGeometry(set);
     }
     if (avatar) set.add(avatar.headOpen).add(avatar.headClosed);
   };
