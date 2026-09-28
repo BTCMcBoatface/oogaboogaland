@@ -5078,6 +5078,205 @@ scene("hub", { label: "lab flask approach", query: "solo=1&character=portlandhod
   record("lab flask: the scientist completes its short bench approach and picks up the real flask without circling or stall recovery", state.held && state.station === state.expected
     && state.seconds < 4 && state.distance >= 0.69 && state.distance < 1 && !state.replans && !state.recoveries, JSON.stringify(state));
 } }] });
+scene("hub", { label: "gorilla rooftop hop", query: "status=chillin", steps: [{ name: "gorilla rooftop hop", why: "rule: a neighbouring rooftop outing uses a supported jump across the saddle and stays on the upper level", run: async (b) => {
+  const rows = await b.evaluate(`(() => {
+    const B = __ooga, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl");
+    B.pilot.release(true); C.release(); C.cancelDebugMove(e);
+    for (const other of C.list) if (other !== e) { other.owner.override = other.owner.state = "away"; other.active = other.root.visible = false; }
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    const roofs = ["c1", "c2"].map(id => {
+      const m = B.mouths.find(m => m.id === id), x = m.x - Math.sin(m.ry) * 4.8, z = m.z - Math.cos(m.ry) * 4.8;
+      return { id, x, z, y: B.island.surfaceAt(x, z) };
+    });
+    const rows = [];
+    for (let direction = 0; direction < 2; direction++) {
+      const from = roofs[direction], to = roofs[1 - direction], heading = Math.atan2(to.x - from.x, to.z - from.z);
+      const sx = Math.sin(heading), sz = Math.cos(heading), outside = direction ? -2 : 2;
+      // The roof centres' direct line intersects a tree. Use its clear outer
+      // saddle, with both endpoints on measured upper-level support.
+      const x = from.x + sz * outside, z = from.z - sx * outside, y = B.island.surfaceAt(x, z);
+      const tx = to.x - sx * 3.5 + sz * outside, tz = to.z - sz * 3.5 - sx * outside, ty = B.island.surfaceAt(tx, tz);
+      Object.assign(e.root.position, { x, y, z });
+      Object.assign(e, { active: true, controlled: false, mode: "chilling", phase: "chill", route: "", lounge: "", loungeDepart: false,
+        loungeRoof: true, parked: false, recover: 0, rest: 120, pound: 0, beat: 0, stand: 0, heading, speed: 0, backoutLeft: 0,
+        goalX: tx, goalY: ty, goalZ: tz });
+      e.owner.override = e.owner.state = "chilling"; e.root.visible = true;
+      Object.assign(e.roam, { count: 0, index: 0, wall: false, nextChoice: Infinity, departPending: false, propDeparture: false, transition: 0,
+        runUp: 0, jumpRetry: 0, progressTime: 0, progressDistance: Infinity, pose: "sit", lastPose: "", riseAdmitted: false });
+      Object.assign(e.climb, { active: false, free: false, mountPending: false, openingStagePending: false, handoffDirection: 0, retry: 0,
+        searchPending: false, searchDeferred: false, claimPending: false, crestPending: false, debugStuck: false });
+      Object.assign(e.drive, { airborne: false, passiveFall: false, resume: false, grounded: true, vx: 0, vy: 0, vz: 0 });
+      Object.assign(e.motion, { climb: 0, climbBlend: NaN, mantle: 0, supportOffset: 0, landing: 0, takeoff: 0 });
+      e.jump.active = e.fire.burning = e.fire.rolling = false; e.stuck.recoveries = 0;
+      e.gorilla.poseManaged(2, x, y, z, heading, 0, false, false, "", e.motion);
+      BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+      const beforeJumps = e.jumps, trace = []; let minY = y, climbed = false, landed = false, previousJump = false;
+      for (let frame = 0; frame < 1200; frame++) {
+        B.advance(1 / 60, 1 / 60); const p = e.root.position;
+        minY = Math.min(minY, p.y); climbed ||= e.climb.active;
+        if (frame % 12 === 0 || previousJump !== e.jump.active) trace.push({ t: frame / 60, x: p.x, y: p.y, z: p.z,
+          jump: e.jump.active, climb: e.climb.active, runUp: e.roam.runUp, jumps: e.jumps - beforeJumps });
+        previousJump = e.jump.active;
+        if (e.jumps > beforeJumps && !e.jump.active && !e.climb.active && !e.drive.airborne
+          && Math.hypot(p.x - tx, p.z - tz) < 0.2 && Math.abs(p.y - ty) < 0.1) { landed = true; break; }
+      }
+      const p = e.root.position;
+      rows.push({ from, to, start: { x, y, z }, target: { x: tx, y: ty, z: tz }, jumps: e.jumps - beforeJumps,
+        climbed, minY, landed, y: p.y, floor: B.island.supportAt(p.x, p.z, p.y + 0.1, 0, -Infinity), recoveries: e.stuck.recoveries, trace });
+    }
+    return rows;
+  })()`);
+  writeFileSync(join(root, "untracked", "gorilla-rooftop-hop.json"), JSON.stringify(rows, null, 2));
+  record("gorilla rooftop hop: neighbouring roofs are reached in both directions by continuous jumps with real upper-level footing and no relocation",
+    rows.every(row => row.jumps > 0 && row.landed && !row.climbed && !row.recoveries
+      && row.minY >= Math.min(row.start.y, row.target.y) - 0.55 && Math.abs(row.y - row.floor) < 0.1), JSON.stringify(rows));
+} }] });
+scene("hub", { label: "gorilla stone core", query: "status=chillin", steps: [{ name: "gorilla stone core", why: "regression: the pelvis point admitted walking steps whose forward torso center was already inside a cave wall", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), m = B.mouths.find(m => m.id === "c9");
+    B.pilot.release(true); C.release(); C.cancelDebugMove(e);
+    e.controlled = e.climb.active = e.drive.airborne = e.motion.lab = e.planningLab = e.climb.openingExit = e.parked = e.biped = false;
+    e.motion.supportOffset = 0;
+    const sx = Math.sin(m.ry), sz = Math.cos(m.ry), heading = m.ry + Math.PI, y = m.floorY;
+    let face = NaN;
+    for (let d = 3; d >= -10; d -= 0.025) if (B.island.solidAt(m.x + sx * d, y + 0.85, m.z + sz * d)) { face = d; break; }
+    const x = m.x + sx * (face + 1.1), z = m.z + sz * (face + 1.1);
+    const tx = m.x + sx * (face + 0.6), tz = m.z + sz * (face + 0.6);
+    Object.assign(e.root.position, { x, y, z }); e.heading = heading;
+    e.gorilla.poseManaged(2, x, y, z, heading, 0, false, false, "", e.motion);
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+    const state = { face, rootClear: B.island.clearAt(tx, y + 0.65, tz, 0.025, 0.12),
+      torsoBuried: B.island.solidAt(tx - sx * 0.7, y + 0.85, tz - sz * 0.7),
+      admitted: C.clear(x, y, z, tx, y, tz, e.radius, e.height, e, null, heading, heading) };
+    for (const other of C.list) if (other !== e) {
+      other.owner.override = other.owner.state = "away"; other.controlled = other.drive.airborne = other.climb.active = other.fire.rolling = other.active = other.root.visible = false;
+    }
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    Object.assign(e, { active: true, recover: 0, lounge: "", loungeDepart: false, speed: 0, pound: 0, beat: 0, stand: 0 });
+    Object.assign(e.drive, { grounded: true, passiveFall: false, motionRecover: 0, motionEnvelope: false });
+    Object.assign(e.motion, { climb: 0, climbBlend: NaN, mantle: 0, roll: 0, landing: 0, takeoff: 0 });
+    e.jump.active = e.fire.burning = e.fire.rolling = false; e.root.visible = true;
+    C.possess(e);
+    const ix = -sx * 0.6 + sz * 0.8, iz = -sz * 0.6 - sx * 0.8, facing = Math.atan2(ix, iz);
+    let buriedFrames = 0, movingFrames = 0, previousX = x, previousZ = z;
+    state.trace = [];
+    // Stop before the room side wall: this command probes sliding along its back wall.
+    for (let frame = 0; frame < 90; frame++) {
+      C.control({ x: ix, z: iz, heading: facing, run: false }); B.advance(1 / 60, 1 / 60);
+      const p = e.root.position;
+      if (B.island.solidAt(p.x + Math.sin(e.heading) * 0.7, p.y + 0.85, p.z + Math.cos(e.heading) * 0.7)) buriedFrames++;
+      if (Math.hypot(p.x - previousX, p.z - previousZ) > 1e-5) movingFrames++;
+      previousX = p.x; previousZ = p.z;
+      if (!(frame % 12)) state.trace.push({ frame, x: p.x, y: p.y, z: p.z, heading: e.heading });
+    }
+    state.slide = { tangent: (e.root.position.x - x) * sz - (e.root.position.z - z) * sx, movingFrames, buriedFrames };
+    return state;
+  })()`);
+  writeFileSync(join(root, "untracked", "gorilla-stone-core.json"), JSON.stringify(state, null, 2));
+  record("gorilla stone core: a clear pelvis point cannot admit a walking step that buries the torso center in stone", Number.isFinite(state.face)
+    && state.rootClear && state.torsoBuried && !state.admitted && state.slide.tangent > 1
+    && state.slide.movingFrames > 85 && !state.slide.buriedFrames, JSON.stringify(state));
+} }] });
+scene("hub", { label: "gorilla wall handoff", query: "status=chillin", steps: [{ name: "gorilla wall handoff", why: "regression: jumping off during a roof-edge mount left a stale handoff that sent a reattached gorilla backwards through the air", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), m = B.mouths.find(m => m.id === "c1");
+    B.pilot.release(true); C.release(); C.cancelDebugMove(e);
+    for (const other of C.list) if (other !== e) {
+      other.owner.override = other.owner.state = "away"; other.controlled = other.drive.airborne = other.climb.active = other.fire.rolling = other.active = other.root.visible = false;
+    }
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    const sx = Math.sin(m.ry), sz = Math.cos(m.ry), x = m.x - sx * 0.15 + sz * 3.4, z = m.z - sz * 0.15 - sx * 3.4, y = B.island.surfaceAt(x, z);
+    Object.assign(e.root.position, { x, y, z });
+    Object.assign(e, { active: true, controlled: false, recover: 0, lounge: "", loungeDepart: false, parked: false, biped: false,
+      heading: m.ry, speed: 0, pound: 0, beat: 0, stand: 0 });
+    Object.assign(e.drive, { airborne: false, passiveFall: false, grounded: true, resume: false, vx: 0, vy: 0, vz: 0, motionRecover: 0, motionEnvelope: false });
+    Object.assign(e.climb, { active: false, free: false, mountPending: false, handoffDirection: 0, openingStagePending: false, retry: 0,
+      searchPending: false, searchDeferred: false, claimPending: false, crestPending: false });
+    e.jump.active = e.fire.burning = e.fire.rolling = false; e.root.visible = true;
+    Object.assign(e.motion, { climb: 0, climbBlend: NaN, mantle: 0, supportOffset: 0, landing: 0, takeoff: 0 });
+    e.gorilla.poseManaged(2, x, y, z, m.ry, 0, false, false, "", e.motion);
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync(); C.possess(e);
+    const trace = []; let mounted = false, jumped = false, reattached = false, staleMount = false, maxDistance = 0;
+    let jumpFrame = -1, released = false, attachFrame = -1, attachX = 0, attachY = 0, attachZ = 0, maxDrift = 0;
+    for (let frame = 0; frame < 720; frame++) {
+      const c = e.climb;
+      if (!jumped && c.active && c.mountPending && e.root.position.y < y - 0.4) {
+        mounted = jumped = true; jumpFrame = frame;
+        C.control({ x: 0, z: 0, jumpPressed: true, jumpHeld: true, climbAxis: 0 });
+      } else if (!jumped) C.control({ x: sx, z: sz, heading: m.ry, climbAxis: 1 });
+      else if (reattached) C.control({ x: 0, z: 0, climbAxis: 1, jumpHeld: false });
+      else if (frame - jumpFrame < 15) C.control({ x: sx, z: sz, heading: m.ry, jumpHeld: false });
+      else if (frame - jumpFrame < 45) C.control({ x: 0, z: 0, jumpHeld: false });
+      else C.control({ x: -sx + sz * 0.35, z: -sz - sx * 0.35, heading: m.ry + Math.PI, run: true, climbAxis: 1, jumpHeld: false });
+      B.advance(1 / 60, 1 / 60);
+      if (jumped && !c.active && e.drive.airborne) released = true;
+      if (released && c.active && !reattached) {
+        reattached = true; staleMount = c.mountPending; attachFrame = frame;
+        attachX = e.root.position.x; attachY = e.root.position.y; attachZ = e.root.position.z;
+      }
+      if (reattached) maxDrift = Math.max(maxDrift, Math.hypot(e.root.position.x - attachX, e.root.position.z - attachZ));
+      maxDistance = Math.max(maxDistance, Math.hypot(e.root.position.x - x, e.root.position.z - z));
+      if (frame % 12 === 0 || frame === jumpFrame || frame === jumpFrame + 1) trace.push({ t: frame / 60,
+        x: e.root.position.x, y: e.root.position.y, z: e.root.position.z, active: c.active, mount: c.mountPending,
+        handoff: c.handoffDirection, airborne: e.drive.airborne, target: [c.freeTargetX, c.freeTargetY, c.freeTargetZ] });
+      if (reattached && frame - attachFrame >= 180) break;
+    }
+    return { mounted, jumped, released, reattached, staleMount, maxDistance, maxDrift, attachY, y: e.root.position.y, floor: B.island.supportAt(e.root.position.x, e.root.position.z, e.root.position.y + 0.1, 0, -Infinity),
+      active: e.climb.active, airborne: e.drive.airborne, trace };
+  })()`);
+  writeFileSync(join(root, "untracked", "gorilla-wall-handoff.json"), JSON.stringify(state, null, 2));
+  record("gorilla wall handoff: jumping during an edge mount and grabbing the wall again cannot resume the previous mount or drift away from the wall",
+    state.mounted && state.jumped && state.released && state.reattached && !state.staleMount && state.maxDrift < 4 && state.y > state.attachY + 0.5
+      && !state.active && !state.airborne && Math.abs(state.y - state.floor) < 0.1, JSON.stringify(state));
+} }] });
+scene("hub", { label: "gorilla edge first descent", query: "status=chillin", steps: [{ name: "gorilla edge first descent", why: "regression: a partial roof approach handed off its yaw too early and a descending window search raised gorillas back onto nearby roof terrain", run: async (b) => {
+  const rows = await b.evaluate(`(() => {
+    const B = __ooga, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), rows = [];
+    B.pilot.release(true); C.release(); C.cancelDebugMove(e);
+    for (const other of C.list) if (other !== e) { other.owner.override = other.owner.state = "away"; other.active = other.root.visible = false; }
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    for (const id of ["c1", "c9"]) {
+      const along = id === "c1" ? 2.4 : 0.15;
+      const m = B.mouths.find(m => m.id === id), sx = Math.sin(m.ry), sz = Math.cos(m.ry);
+      const x = m.x - sx * along, z = m.z - sz * along, roof = B.island.surfaceAt(x, z);
+      Object.assign(e.root.position, { x, y: roof, z });
+      Object.assign(e, { active: true, controlled: false, mode: "chilling", phase: "chill", route: "", lounge: "", loungeDepart: false,
+        parked: false, recover: 0, rest: 0, pound: 0, beat: 0, stand: 0, heading: m.ry, speed: 0, backoutLeft: 0,
+        goalX: m.x + sx * 5, goalY: m.floorY, goalZ: m.z + sz * 5 });
+      e.owner.override = e.owner.state = "chilling"; e.root.visible = true;
+      Object.assign(e.roam, { count: 0, index: 0, wall: false, nextChoice: Infinity, departPending: false, propDeparture: false, transition: 0,
+        progressTime: 0, progressDistance: Infinity });
+      Object.assign(e.climb, { active: false, free: false, mountPending: false, openingStagePending: false, handoffDirection: 0, retry: 0,
+        searchPending: false, searchDeferred: false, claimPending: false, crestPending: false, debugStuck: false });
+      Object.assign(e.drive, { airborne: false, passiveFall: false, resume: false, grounded: true, vx: 0, vy: 0, vz: 0 });
+      Object.assign(e.motion, { climb: 0, climbBlend: NaN, mantle: 0, supportOffset: 0, landing: 0, takeoff: 0 });
+      e.stuck.recoveries = 0; e.climb.blocked = 0;
+      e.jump.active = e.fire.burning = e.fire.rolling = false;
+      e.gorilla.poseManaged(2, x, roof, z, m.ry, 0, false, false, "", e.motion);
+      BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+      const trace = []; let mounts = 0, aborts = 0, up = 0, previousActive = false, lastY = roof;
+      for (let frame = 0; frame < 600; frame++) {
+        B.advance(1 / 60, 1 / 60); const p = e.root.position, c = e.climb;
+        if (c.active && !previousActive) mounts++;
+        if (previousActive && !c.active && p.y > roof - 0.8 && !e.drive.airborne) aborts++;
+        if (mounts && p.y > lastY + 0.005) up++;
+        if (frame % 6 === 0 || previousActive !== c.active) trace.push({ t: frame / 60, x: p.x, y: p.y, z: p.z,
+          active: c.active, free: c.free, fromTop: c.fromTop, progress: c.progress, heading: e.heading, wallHeading: c.heading, mantleStart: c.mantleStart, basePrepEnd: c.basePrepEnd, lowerExit: c.lowerExit, descending: c.descending, mount: c.mountPending, handoff: c.handoffDirection, blocked: c.blocked, failure: c.failure,
+          target: [c.freeTargetX, c.freeTargetY, c.freeTargetZ], blend: e.motion.climbBlend });
+        previousActive = c.active; lastY = p.y;
+        if (mounts && !c.active && !e.drive.airborne && p.y <= m.floorY + 0.15) break;
+      }
+      const p = e.root.position;
+      rows.push({ id, along, x, z, roof, mounts, aborts, up, y: p.y,
+        floor: B.island.supportAt(p.x, p.z, p.y + 0.1, 0, -Infinity), active: e.climb.active, airborne: e.drive.airborne, recoveries: e.stuck.recoveries, trace });
+    }
+    return rows;
+  })()`);
+  writeFileSync(join(root, "untracked", "gorilla-roof-edge-first-descent.json"), JSON.stringify(rows, null, 2));
+  record("gorilla edge first descent: a deeper roof approach and a ledged cave face descend on the first mount without rising, remounting or relocation, then stand on the real main floor",
+    rows.every(row => row.mounts === 1 && !row.aborts && !row.up && !row.active && !row.airborne && !row.recoveries
+      && row.y < 0.15 && Math.abs(row.y - row.floor) < 0.1), JSON.stringify(rows));
+} }] });
 scene("hub", { label: "gorilla roof descent", query: "status=chillin", steps: [{ name: "gorilla roof descent", why: "regression: an autonomous gorilla leaving the OBL cave roof remounted the roof instead of descending its front wall", run: async (b) => {
   const state = await b.evaluate(`(() => {
     const B = __ooga, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), m = B.mouths.find(m => m.id === "c1");
@@ -5090,10 +5289,11 @@ scene("hub", { label: "gorilla roof descent", query: "status=chillin", steps: [{
       parked: false, recover: 0, rest: 0, pound: 0, beat: 0, stand: 0, heading: m.ry, speed: 0, goalX: m.x + sx * 5, goalY: m.floorY, goalZ: m.z + sz * 5 });
     e.owner.override = e.owner.state = "chilling"; e.root.visible = true;
     Object.assign(e.roam, { count: 0, index: 0, wall: false, nextChoice: Infinity, departPending: false, propDeparture: false });
-    Object.assign(e.climb, { active: false, free: false, retry: 0, searchPending: false, claimPending: false, crestPending: false, debugStuck: false });
+    Object.assign(e.climb, { active: false, free: false, mountPending: false, openingStagePending: false, handoffDirection: 0, retry: 0, searchPending: false, searchDeferred: false, claimPending: false, crestPending: false, debugStuck: false });
     e.drive.airborne = e.drive.resume = e.jump.active = e.fire.burning = e.fire.rolling = false;
     e.gorilla.poseManaged(2, x, roof, z, m.ry, 0, false, false, "", e.motion);
     BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+    e.stuck.recoveries = 0;
     const trace = []; let mounted = false, reversals = 0, lastY = roof, minY = roof;
     for (let frame = 0; frame < 1200; frame++) {
       B.advance(1 / 60, 1 / 60); const p = e.root.position, c = e.climb;
@@ -5111,7 +5311,7 @@ scene("hub", { label: "gorilla roof descent", query: "status=chillin", steps: [{
   record("gorilla roof descent: the autonomous OBL roof departure reaches the main floor without climbing back onto the roof or relocation",
     state.mounted && state.y < 0.15 && Math.abs(state.y - state.floor) < 0.1 && !state.active && !state.reversals && !state.recoveries, JSON.stringify(state));
 } }] });
-scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1", steps: [{ name: "gorilla traversal", why: "regression: low props interrupted the gallop, jump input delayed takeoff, and a stale motion envelope trapped gorillas beneath trees", run: async (b) => {
+scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1", steps: [{ name: "gorilla prop traversal", why: "regression: low props interrupted the gallop, jump input delayed takeoff, and a stale motion envelope trapped gorillas beneath trees", run: async (b) => {
   const state = await b.evaluate(`(() => {
     const B = __ooga, S = BL.scene, root = BL.scenes.hub.root, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), solids = B.headquarters.solids.props;
     B.pilot.release(true);
@@ -6590,6 +6790,35 @@ scene("dsb", { label: "lifecycle", url: hubPage(src), steps: [{ name: "dsb lifec
   const same = (key) => before.stats[key] === after.stats[key];
   record("soak: dsb cycles: six round trips retain node, target, tween and DOM counts", same("allNodes") && same("targets") && same("tweens") && same("dom") && after.stats.tweens === 0, JSON.stringify({ before: before.stats, after: after.stats }));
   record("soak: dsb cycles: GPU records, listeners and heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
+} }] });
+
+scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "factory lifecycle", why: "contract: repeated factory visits release the window and hall's listeners, nodes and GPU resources while retaining one bounded shared node", run: async (b) => {
+  const { rendered, settled, snapshot, travel, heapDetail, within } = await dsbSoak(b);
+  await b.evaluate(`(() => {
+    const node = __ooga.factory.node, feed = node.feed, subscribe = feed.subscribe;
+    window.__factoryLife = { node, subscriptions: 0 };
+    feed.subscribe = (fn) => {
+      const off = subscribe(fn); let live = true;
+      __factoryLife.subscriptions++;
+      return () => { if (live) { live = false; __factoryLife.subscriptions--; } return off(); };
+    };
+  })()`);
+  // Warm both scenes and replace the window's initial, uninstrumented subscription.
+  await travel("factory"); await travel("hub"); await settled(); await rendered(2);
+  const before = await snapshot(), visits = [];
+  for (let i = 0; i < 6; i++) {
+    await travel("factory"); await travel("hub"); await settled(); await rendered(2);
+    visits.push(await b.evaluate(`(() => {
+      const f = __ooga.factory, n = f.node;
+      return { same: n === __factoryLife.node, subscriptions: __factoryLife.subscriptions,
+        lines: n.placeOf.size, places: n.bays.length + n.stands.length, sats: f.sats,
+        finite: Object.values(f.batches).every((b) => b.instanceCount * 20 <= b.instanceData.length && b.instanceData.every(Number.isFinite)) };
+    })()`));
+  }
+  const after = await snapshot(), same = (key) => before.stats[key] === after.stats[key];
+  record("soak: factory cycles: one bounded node and one view subscription survive six round trips without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.subscriptions === 1 && v.lines <= v.places && v.sats <= 48 && v.finite)
+    && same("allNodes") && same("targets") && same("dom") && after.stats.tweens === 0, JSON.stringify({ visits, before: before.stats, after: after.stats }));
+  record("soak: factory cycles: GPU records, listeners and retained heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
 } }] });
 
 // Node tier: pure computation over window.BL under a minimal DOM shim, calling the same probe functions.
