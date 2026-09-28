@@ -29,6 +29,7 @@
   };
   const INSTANCE_FLOATS = 20;
   const NO_OBJECT_CLIP = new Float32Array([0, 0, 0, -1]);
+  const NO_OBJECT_SLAB = new Float32Array(4);
   // MAX_PIXELS caps the pixel ratio to bound buffer memory.
   const MAX_PIXELS = 2.6e6;
   const DEFAULT_LIGHT = { x: 0.45, y: 0.85, z: 0.3 };
@@ -97,7 +98,7 @@ out vec3 vNormal;
 out vec4 vColor;
 out vec4 vParams;
 out vec4 vShadow;
-out vec3 vWorld;
+out vec4 vWorldH;
 out vec3 vInstanceFacing;
 out vec2 vPortalUV;
 out vec4 vPortalView;
@@ -152,7 +153,7 @@ void main() {
   vSmokeOpacity = aParams.z < 0.0 ? -aParams.z - 1.0 : 1.0;
   vParams.z = max(0.0, aParams.z);
   vShadow = uLightViewProj * w;
-  vWorld = w.xyz;
+  vWorldH = w;
   vLocal = aPos;
   vLocalNormal = aNormal;
   vInstanceFacing = normalize(aM2.xyz);
@@ -201,7 +202,11 @@ in vec3 vNormal;
 in vec4 vColor;
 in vec4 vParams;
 in vec4 vShadow;
-in vec3 vWorld;
+// A projective geometry's matrices carry a last row, so its world position arrives homogeneous; main divides
+// it out under uProjective alone, and every affine draw keeps the position it always had.
+in vec4 vWorldH;
+uniform float uProjective;
+vec3 vWorld;
 in vec3 vInstanceFacing;
 in vec2 vPortalUV;
 in vec4 vPortalView;
@@ -247,6 +252,8 @@ uniform int uMatrixSamples;
 uniform float uClipMinY;
 uniform float uClipMaxY;
 uniform vec4 uObjectClip;
+// A geometry's clipSlab (n, d) keeps |dot(n, p) + d| <= 1; zeros keep everything.
+uniform vec4 uObjectSlab;
 ${CUTAWAY_GLSL}
 uniform float uMatrixGlyphOpacity;
 uniform vec4 uVoxel;
@@ -355,7 +362,8 @@ float matrixGlyphAt(vec3 n, float flow, out float glow, out float tip, out float
 #ifdef MATRIX_SAMPLE_INTERPOLATION
   for (int i = 0; i < 4; i++) {
     if (i >= uMatrixSamples) break;
-    vec3 offset = interpolateAtSample(vWorld, i) - vWorld;
+    vec4 sampleWorld = interpolateAtSample(vWorldH, i);
+    vec3 offset = (uProjective > 0.5 ? sampleWorld.xyz / sampleWorld.w : sampleWorld.xyz) - vWorld;
     matrixSampleOffsets[i] = vec2(dot(offset, crossAxis), dot(offset, flowAxis));
   }
 #endif
@@ -398,7 +406,7 @@ float shadowAt(vec3 p, float bias) {
 vec3 lightFactorAt(vec3 n) {
   float lam = dot(n, uLightDir);
   float ndl = max(max(lam, 0.0), uDiffuseFloor);
-  vec3 sp = vShadow.xyz * 0.5 + 0.5;
+  vec3 sp = (uProjective > 0.5 ? vShadow.xyz / vShadow.w : vShadow.xyz) * 0.5 + 0.5;
   float bias = max(uShadowBias * (1.0 - ndl), uShadowBias * 0.32);
   float sh = shadowAt(sp, bias);
   vec3 factor = max(mix(uGround, uSky, n.y * 0.5 + 0.5), vec3(uAmbientFloor));
@@ -558,7 +566,8 @@ float matrixPermanentAt(vec3 point, float caveIndex) {
   return depth >= -0.000001 && depth <= bounds.w + voxelReach && abs(across) <= halfWidth + 0.000001 && height >= -0.000001 && height <= ceiling + 0.000001 ? 1.0 : 0.0;
 }
 void main() {
-  if (vWorld.y < uClipMinY || dot(uObjectClip, vec4(vWorld, 1.0)) > 0.0 || cutaway(vWorld, vSmokeOpacity)) discard;
+  vWorld = uProjective > 0.5 ? vWorldH.xyz / vWorldH.w : vWorldH.xyz;
+  if (vWorld.y < uClipMinY || dot(uObjectClip, vec4(vWorld, 1.0)) > 0.0 || abs(dot(uObjectSlab.xyz, vWorld) + uObjectSlab.w) > 1.0 || cutaway(vWorld, vSmokeOpacity)) discard;
   if (vParams.z > 5.5) {
     vec2 p = vPortalUV;
     float time = vParams.x, surge = vParams.y, radius = length(p);
@@ -1352,7 +1361,7 @@ void main() {
       gl.attachShader(prog, v);
       gl.attachShader(prog, f);
       gl.linkProgram(prog);
-      return { prog, shaders: [v, f], uniforms: uniforms.concat(["uCutCount", "uCutRegions", "uCutBounds", "uCutawayOpacity"]), u: {}, cutFrame: -1, cutCount: -1, cutOpacity: NaN, clipMinY: NaN, clipMaxY: NaN, objectClip: null, voxel: null, sway: 0, swing: 0, matrixGlyph: NaN, matrixCave: NaN, lineWidth: NaN };
+      return { prog, shaders: [v, f], uniforms: uniforms.concat(["uCutCount", "uCutRegions", "uCutBounds", "uCutawayOpacity"]), u: {}, cutFrame: -1, cutCount: -1, cutOpacity: NaN, clipMinY: NaN, clipMaxY: NaN, objectClip: null, objectSlab: null, projective: NaN, voxel: null, sway: 0, swing: 0, matrixGlyph: NaN, matrixCave: NaN, lineWidth: NaN };
     };
     const finishProgram = (p) => {
       if (!gl.getProgramParameter(p.prog, gl.LINK_STATUS)) {
@@ -1395,7 +1404,7 @@ void main() {
       const meshFragment = matrixSampling ? MESH_FS.replace("#version 300 es", "#version 300 es\n#extension GL_OES_shader_multisample_interpolation : require\n#define MATRIX_SAMPLE_INTERPOLATION") : MESH_FS;
       res.programs = {
         image: compile(IMAGE_VS, IMAGE_FS, ["uViewProj", "uRect", "uImage", "uReady", "uClipMaxY"]),
-        mesh: compile(MESH_VS, meshFragment, ["uViewProj", "uLightViewProj", "uEye", "uViewDirection", "uLightDir", "uSky", "uGround", "uSun", "uDirectStrength", "uAmbientFloor", "uDiffuseFloor", "uShadowStrength", "uShadowFloor", "uShadowBias", "uShadow", "uShadowTexel", "uLights", "uLightCount", "uFog", "uFogRange", "uMatrixParams", "uMatrixOrigin", "uMatrixGlyph", "uMatrixCave", "uMatrixCaves", "uMatrixCaveBounds", "uMatrixCaveNear", "uMatrixPermanentCave", "uMatrixPermanentPlane", "uMatrixPermanentAperture", "uMatrixLivingGlobal", "uMatrixGlyphTex", "uMatrixSamples", "uClipMinY", "uClipMaxY", "uObjectClip", "uMatrixGlyphOpacity", "uVoxel", "uWindTime", "uSway", "uSwing", "uGlass"]),
+        mesh: compile(MESH_VS, meshFragment, ["uViewProj", "uLightViewProj", "uEye", "uViewDirection", "uLightDir", "uSky", "uGround", "uSun", "uDirectStrength", "uAmbientFloor", "uDiffuseFloor", "uShadowStrength", "uShadowFloor", "uShadowBias", "uShadow", "uShadowTexel", "uLights", "uLightCount", "uFog", "uFogRange", "uMatrixParams", "uMatrixOrigin", "uMatrixGlyph", "uMatrixCave", "uMatrixCaves", "uMatrixCaveBounds", "uMatrixCaveNear", "uMatrixPermanentCave", "uMatrixPermanentPlane", "uMatrixPermanentAperture", "uMatrixLivingGlobal", "uMatrixGlyphTex", "uMatrixSamples", "uClipMinY", "uClipMaxY", "uObjectClip", "uObjectSlab", "uProjective", "uMatrixGlyphOpacity", "uVoxel", "uWindTime", "uSway", "uSwing", "uGlass"]),
         shadow: compile(SHADOW_VS, SHADOW_FS, ["uLightViewProj", "uClipMinY", "uClipMaxY", "uObjectClip"]),
         line: compile(LINE_VS, LINE_FS, ["uViewProj", "uViewport", "uWidth", "uClipMaxY", "uObjectClip"]),
         sky: compile(QUAD_VS, SKY_FS, ["uInvViewProj", "uHorizon", "uZenith", "uSun", "uSunDir", "uMoonDir", "uStarMatrix", "uStars", "uTime", "uHazeDrop", "uClouds", "uSea", "uSeaEye"]),
@@ -2430,6 +2439,15 @@ void main() {
           if (useProgram === "mesh" && swing !== program.swing) {
             gl.uniform1f(program.u.uSwing, swing);
             program.swing = swing;
+          }
+          const projective = rec.geometry.projective ? 1 : 0, slab = rec.geometry.clipSlab || NO_OBJECT_SLAB;
+          if (useProgram === "mesh" && projective !== program.projective) {
+            gl.uniform1f(program.u.uProjective, projective);
+            program.projective = projective;
+          }
+          if (useProgram === "mesh" && slab !== program.objectSlab) {
+            gl.uniform4fv(program.u.uObjectSlab, slab);
+            program.objectSlab = slab;
           }
         }
         if (kind === "line") {

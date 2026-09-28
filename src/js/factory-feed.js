@@ -148,5 +148,75 @@
     };
   };
 
-  BL.factoryFeed = { create, refusal, PUBLIC, DEMO, TYPES, SCALES };
+  // The page's one factory node, on `world.factoryNode` and made on first need, as `world.mine` is: one feed, the demo
+  // node playing into it on the node's own clock, and where each line stands. Whichever scene is active ticks it, so
+  // the island's window and the hall watch one show, and a view that starts watching late finds it where it is.
+  // Placement listens first, so every view reads it after it has moved: `at` is the place the last event's line
+  // holds or held (null for none), `indexOf(line)` the place a line holds without claiming one, and `version` counts
+  // every line placed or released and every bay's change of state. A line claims a place as the factory always
+  // has: only a line being opened may take one, or any line on a public stream, whose slots are new each day; the
+  // first free featured bay, then the first free gallery stand.
+  const node = (world) => {
+    if (world.factoryNode) return world.factoryNode;
+    const L = BL.factoryModels.LAYOUT, n = world.factoryNode = {
+      clock: Date.now(), feed: null, mock: null, bays: [], stands: [], placeOf: new Map(), at: null, version: 0,
+      indexOf: (line) => n.placeOf.get(line) || null,
+      // Through the properties, so a stubbed `mock.update` holds the show still.
+      tick(dt) {
+        n.clock += dt * 1000;
+        n.mock.update(dt, n.feed.accept);
+      }
+    };
+    n.feed = create({ now: () => n.clock, silentAfter: 10000 });
+    n.mock = BL.factoryMock.create({ seed: 21 });
+    for (let i = 0; i < L.bays.length; i++) n.bays.push({ bay: true, index: i, line: null, state: "empty" });
+    for (const { stations } of L.galleries) for (let i = 0; i < stations; i++) n.stands.push({ bay: false, index: n.stands.length, line: null });
+    const put = (place, line) => {
+      place.line = line;
+      n.placeOf.set(line, place);
+      n.version++;
+    };
+    const free = (row) => {
+      for (let i = 0; i < row.length; i++) if (!row[i].line) return row[i];
+      return null;
+    };
+    const become = (place, state) => {
+      if (!place.bay || place.state === state) return;
+      place.state = state;
+      n.version++;
+    };
+    // The demo node's featured floor: its three largest public channels, and the newest line in the fourth bay; the
+    // rest by size in the galleries while they have room.
+    const chans = n.mock.snapshot.channels.filter((c) => c.active).sort((a, b) => b.capacity - a.capacity), newest = n.mock.newest;
+    chans.filter((c) => c.id !== newest).slice(0, 3).forEach((c, i) => put(n.bays[i], c.id));
+    put(n.bays[3], newest);
+    for (const b of n.bays) b.state = "active";
+    let g = 0;
+    for (const c of chans) if (!n.placeOf.has(c.id) && g < n.stands.length) put(n.stands[g++], c.id);
+    n.feed.subscribe((e, line) => {
+      let place = line ? n.placeOf.get(line) || null : null;
+      if (!place && line && (e.schema === PUBLIC || e.type === "channel.opening" || e.type === "channel.active")) {
+        place = free(n.bays) || free(n.stands);
+        if (place) put(place, line);
+      }
+      if (place) {
+        switch (e.type) {
+          case "channel.opening": become(place, "building"); break;
+          case "channel.active": become(place, "active"); break;
+          case "channel.closing": become(place, "dismantling"); break;
+          case "channel.closed":
+            become(place, "empty");
+            n.placeOf.delete(place.line);
+            place.line = null;
+            n.version++;
+            break;
+        }
+      }
+      n.at = place;
+    });
+    n.mock.replay(n.feed.accept);
+    return n;
+  };
+
+  BL.factoryFeed = { create, node, refusal, PUBLIC, DEMO, TYPES, SCALES };
 })();

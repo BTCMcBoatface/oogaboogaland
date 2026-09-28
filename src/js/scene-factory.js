@@ -112,7 +112,8 @@
   };
 
   let renderer, game, world, go, root, camera, hud, hooks, input, pilot, fx, agentPlay = null;
-  let feed = null, mock = null, unsubscribe = null, leaving = false, dust = null, clock = 0;
+  // The page's one factory node (`world.factoryNode`), and its feed and demo node.
+  let shared = null, feed = null, mock = null, unsubscribe = null, leaving = false, dust = null;
   // The Ooga the visitor walked in as: one playable actor from the shared crew, and the world it carries.
   let people = null, avatar = null, playerWorld = null;
   let scene = null;
@@ -183,42 +184,34 @@
     ]);
   });
 
-  // Where a line stands: one of the four featured bays, a gallery stand, or nowhere shown (the overflow count).
-  // Only a line being opened may claim a free place, or any line on a public stream, whose slots are new each
-  // day; a forward on a line with no place shows nowhere rather than taking a bay.
-  const placeLine = (s, id, claim) => {
-    if (s.placeOf.has(id)) return s.placeOf.get(id);
-    if (!claim) return null;
-    for (let i = 0; i < s.bays.length; i++) if (!s.bays[i].line) return claimBay(s, i, id);
-    for (let i = 0; i < s.gallery.length; i++) if (!s.gallery[i].line) { s.gallery[i].line = id; s.placeOf.set(id, s.gallery[i]); return s.gallery[i]; }
-    return null;
+  // Where a line stands: one of the four featured bays, a gallery stand, or nowhere shown (the overflow count). The
+  // shared node places every line (`BL.factoryFeed.node`); this is the hall's bay or stand for one of its places,
+  // taking up the line the node has just put there.
+  const placeIn = (s, place) => {
+    if (!place) return null;
+    const mine = place.bay ? s.bays[place.index] : s.gallery[place.index];
+    if (!place.line || mine.line === place.line) return mine;
+    if (place.bay) return claimBay(s, place.index, place.line);
+    if (mine.line) s.placeOf.delete(mine.line);
+    mine.line = place.line;
+    s.placeOf.set(place.line, mine);
+    return mine;
   };
+  // A bay takes a line and its labels name the line's peer; with no line they name the bay.
   const claimBay = (s, i, id) => {
     const b = s.bays[i];
     if (b.line) s.placeOf.delete(b.line);
     b.line = id;
-    s.placeOf.set(id, b);
+    if (id) s.placeOf.set(id, b);
     const channel = mock && mock.snapshot.channels.find((c) => c.id === id);
     setBoard(b.label, `CHANNEL ${b.letter}`, channel ? `Peer: ${channel.peer}` : `Line ${b.letter}`, true);
     setBoard(s.tunnels[i].label, "PEER TUNNEL", channel ? channel.peer : `Line ${b.letter}`, true);
     return b;
   };
-  // The demo node's featured floor: its three largest public channels, and the newest line in the fourth bay.
-  const featureFromSnapshot = (s) => {
-    const chans = mock.snapshot.channels.filter((c) => c.active).sort((a, b) => b.capacity - a.capacity);
-    const newest = mock.newest;
-    const featured = chans.filter((c) => c.id !== newest).slice(0, 3);
-    featured.forEach((c, i) => claimBay(s, i, c.id));
-    claimBay(s, 3, newest);
-    let g = 0;
-    for (const c of chans) if (!s.placeOf.has(c.id) && g < s.gallery.length) { s.gallery[g].line = c.id; s.placeOf.set(c.id, s.gallery[g++]); }
-    for (const b of s.bays) { b.state = "active"; b.build = 1; }
-  };
 
-  const onEvent = (e, line) => {
+  const onEvent = (e) => {
     const s = scene, replay = e.stream === "replay", p = e.payload || {};
-    const claim = e.schema === BL.factoryFeed.PUBLIC || e.type === "channel.opening" || e.type === "channel.active";
-    const place = line ? placeLine(s, line, claim) : null;
+    const place = placeIn(s, shared.at);
     switch (e.type) {
       case "channel.opening":
         s.forgeHeat = HEAT;
@@ -254,11 +247,11 @@
         if (replay) break;
         s.switchBusy = FLASH;
         if (p.fee) dropNugget(s);
-        forward(s, place, p.out ? placeLine(s, p.out, false) : null, p.scale, false);
+        forward(s, place, p.out ? placeIn(s, shared.indexOf(p.out)) : null, p.scale, false);
         break;
       case "forward.failed":
         if (replay) break;
-        forward(s, place, p.out ? placeLine(s, p.out, false) : null, p.scale, true);
+        forward(s, place, p.out ? placeIn(s, shared.indexOf(p.out)) : null, p.scale, true);
         break;
       case "rebalance.succeeded":
         s.rebScale = p.scale || null;
@@ -774,13 +767,18 @@
     lightUp();
     LIGHT_BASE.set(RENDER_OPTS.lights);
 
-    // The demo node runs on scene time, so the feed judges its silence by the same clock.
-    clock = Date.now();
-    feed = BL.factoryFeed.create({ now: () => clock, silentAfter: 10000 });
-    mock = BL.factoryMock.create({ seed: 21 });
-    featureFromSnapshot(scene);
+    // The page's one factory node: the show the island's window was showing goes on in here, with every line
+    // standing where the node has placed it.
+    shared = BL.factoryFeed.node(world);
+    feed = shared.feed;
+    mock = shared.mock;
+    shared.bays.forEach((p, i) => {
+      const b = claimBay(scene, i, p.line);
+      b.state = p.state;
+      b.build = p.state === "active" || p.state === "dismantling" ? 1 : 0;
+    });
+    shared.stands.forEach((p) => placeIn(scene, p));
     unsubscribe = feed.subscribe(onEvent);
-    mock.replay(feed.accept);
     refreshBoards(scene);
     leaving = false;
 
@@ -789,7 +787,7 @@
     factoryScene.input = input;
     factoryScene.debug = {
       hud, camera, controls: pilot.controls, pilot, crew: people, cavemen: people ? people.cavemen : null,
-      factory: { feed, mock, get scene() { return scene; }, simulate(seconds, dt = 1 / 30) { for (let t = 0; t < seconds; t += dt) mock.update(dt, feed.accept); } }
+      factory: { feed, mock, get scene() { return scene; }, simulate(seconds, dt = 1 / 30) { for (let t = 0; t < seconds; t += dt) shared.tick(dt); } }
     };
   };
 
@@ -977,8 +975,7 @@
         t.phase.ripples.pulse(PEER_OPENING.minX + Math.random() * (PEER_OPENING.maxX - PEER_OPENING.minX), PEER_OPENING.floorY + Math.random() * (PEER_OPENING.ceilingY - PEER_OPENING.floorY), 0);
       }
     }
-    clock += dt * 1000;
-    mock.update(dt, feed.accept);
+    shared.tick(dt);
     dust.update(elapsed, pilot.orbit.target.x, pilot.orbit.target.z);
     for (let i = 0; i < s.crew.length; i++) s.crew[i].agent.update(dt);
     // Out through the gate: walked into it, or flown into it with the free view.
@@ -1148,12 +1145,11 @@
     pilot.dispose();
     for (const node of targets) input.remove(node);
     targets.length = 0;
-    feed.dispose();
     while (root.children.length) removeChild(root, root.children[root.children.length - 1]);
     const count = input.targetCount;
     input.dispose();
     hud.dispose();
-    scene = feed = mock = hud = hooks = input = pilot = fx = agentPlay = dust = people = avatar = playerWorld = null;
+    scene = shared = feed = mock = hud = hooks = input = pilot = fx = agentPlay = dust = people = avatar = playerWorld = null;
     factoryScene.input = factoryScene.debug = null;
     return { targets: count };
   };
