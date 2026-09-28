@@ -6918,9 +6918,10 @@
     try {
       if (entry && !ignore && clankers && radius === entry.radius && height === entry.height && !entry.climb.active) {
         clankerPassingEntry = entry;
-        // Surface movement reserves only centers; lab and climbing retain
-        // their posed-body transition checks.
-        if (!entry.planningLabTraffic && !entry.planningRoam && entry.motion.lab
+        // Surface NPCs sweep their trunks against peers too. The old centre
+        // check admitted torso pileups that the climbing checks could not clear.
+        // Human controls retain the permissive surface movement.
+        if (!entry.planningLabTraffic && !entry.planningRoam && (entry.motion.lab || !entry.controlled)
           && !clankerPeersClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading)) return false;
       }
       return clankerRigClear(x, y, z, toX, toY, toZ, radius, height, entry, ignore, fromHeading, toHeading);

@@ -5346,6 +5346,55 @@ scene("hub", { label: "chilling", query: "status=chillin&pos=0", steps: [{ name:
   })()`);
   record("seated gorillas: within one short rest the head and both arms move subtly while the seated footprint and root stay planted", seated.ranges.every(range => range > 0.02 && range < 0.2)
     && seated.compact && seated.displacement === 0, JSON.stringify(seated));
+  const crowd = await b.evaluate(`(() => {
+    const B = __ooga, C = B.clankers, group = C.list.slice(0, 3), shape = BL.agent.torso;
+    B.pilot.release(true); C.release();
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    for (const prop of B.props) prop.node.visible = false;
+    for (const e of C.list) {
+      C.cancelDebugMove(e);
+      e.owner.override = e.owner.state = group.includes(e) ? "chilling" : "away";
+      e.active = e.root.visible = group.includes(e);
+    }
+    const setup = spacing => group.forEach((e, i) => {
+      const x = 7 + i * spacing, z = 0, y = B.island.surfaceAt(x, z);
+      Object.assign(e.root.position, { x, y, z });
+      Object.assign(e, { active: true, controlled: false, mode: "chilling", phase: "chill", route: "", fromSite: -1,
+        lounge: "", loungeDepart: false, parked: false, biped: false, recover: 0, rest: 120, heading: 0, speed: 0,
+        pound: 0, beat: 0, stand: 0, exitFootprint: false, goalX: 9, goalY: y, goalZ: 4,
+        footprintMode: "walk", radius: BL.clankers.WALK_RADIUS, height: BL.clankers.WALK_HEIGHT });
+      e.jump.active = e.climb.active = e.drive.airborne = e.drive.resume = e.fire.burning = e.fire.rolling = false;
+      Object.assign(e.climb, { searchPending: false, claimPending: false, crestPending: false, retry: 0 });
+      Object.assign(e.motion, { lab: false, labRunIn: false, climb: 0, climbBlend: NaN, mantle: 0, roll: 0,
+        rollAngle: 0, supportOffset: 0, smash: false, landing: 0, takeoff: 0 });
+      Object.assign(e.roam, { lastPose: "", transition: 0, nextChoice: 1000, progressTime: 0 });
+      e.stuck.x = NaN; e.stuck.time = e.stuck.taskTime = 0; e.stuck.taskActive = false;
+      e.gorilla.poseManaged(2, x, y, z, 0, 0, false, false, "", e.motion);
+      e.compact = e.gorilla.compact;
+    });
+    const overlaps = () => group.some((a, i) => group.slice(i + 1).some(b => {
+      const p = a.root.position, q = b.root.position;
+      return shape.overlaps(a, p.x, p.y, p.z, a.heading, b, q.x, q.y, q.z, b.heading, 0.03);
+    }));
+    const recoveries = C.stats().recoveries;
+    setup(0.55); const initiallyCrowded = overlaps();
+    let maxStep = 0, airborne = false;
+    for (let frame = 0; frame < 4 * 60; frame++) {
+      const before = group.map(e => ({ ...e.root.position })); C.update(1 / 60);
+      group.forEach((e, i) => { const p = e.root.position, q = before[i];
+        maxStep = Math.max(maxStep, Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z));
+        airborne ||= e.jump.active || e.drive.airborne || e.climb.active;
+      });
+    }
+    const separated = !overlaps();
+    setup(2.5); let approachClear = !overlaps();
+    for (let frame = 0; frame < 4 * 60; frame++) { C.update(1 / 60); approachClear &&= !overlaps(); }
+    return { count: group.length, initiallyCrowded, separated, approachClear, maxStep, airborne,
+      recoveries: C.stats().recoveries - recoveries };
+  })()`);
+  record("gorilla crowd: three overlapping NPC trunks step apart without jumping or relocation, and converging walkers keep their trunks apart",
+    crowd.count === 3 && crowd.initiallyCrowded && crowd.separated && crowd.approachClear
+    && crowd.maxStep < 0.08 && !crowd.airborne && !crowd.recoveries, JSON.stringify(crowd));
 } }] });
 scene("hub", { label: "lab flask approach", query: "solo=1&character=portlandhodl&status=clankin", steps: [{ name: "lab flask approach", why: "regression: the flask pickup was admitted using an inspection pose and stale bench settings, leaving the scientist retrying at its station", run: async (b) => {
   const state = await b.evaluate(`(() => {

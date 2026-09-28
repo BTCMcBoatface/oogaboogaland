@@ -257,8 +257,8 @@
       }
       return out;
     };
-    // On the surface only the centres reserve space. Overlapping limbs and
-    // shoulders cannot stop a gorilla from using a clear path.
+    // Surface NPCs reserve their trunks against peers, leaving arms and
+    // shoulders free to overlap. Player movement keeps centre clearance.
     const occupied = (e, x, y, z, destinations = true, heading = e.heading) => {
       const start = e.root.position;
       if (!e.motion.lab && !e.planningLabTraffic && !e.climb.active) {
@@ -266,6 +266,13 @@
           const other = list[i];
           if (other === e || !other.active) continue;
           const p = other.root.position, dx = x - p.x, dz = z - p.z;
+          if (!e.controlled) {
+            const shape = torso || footprint;
+            if (shape.overlaps(e, x, y, z, heading, other, p.x, p.y, p.z, other.heading, SPACE)
+              && !shape.separates(e, start.x, start.y, start.z, e.heading, x, y, z, heading,
+                other, p.x, p.y, p.z, other.heading, SPACE)) return true;
+            continue;
+          }
           const distance2 = dx * dx + dz * dz;
           if (Math.abs(y - p.y) < 1.2 && distance2 < 0.04
             && distance2 < (start.x - p.x) ** 2 + (start.z - p.z) ** 2 - 1e-6) return true;
@@ -3969,6 +3976,39 @@
         || !e.controlled && ctx.fireClear && !ctx.fireClear(e, p.x, p.y, p.z,
           p.x + sx * 2, p.y, p.z + sz * 2, e.heading, heading);
     };
+    const separateSurfacePeers = (e, dt) => {
+      if (e.controlled || e.motion.lab || e.climb.active || e.jump.active || e.drive.airborne
+        || e.lounge || e.loungeDepart || e.fire.burning || e.fire.rolling || e.pound || e.beat
+        || e.gorilla.motionActive) return false;
+      const p = e.root.position, shape = torso || footprint;
+      let crowded = false, dx = 0, dz = 0;
+      for (const other of list) {
+        if (other === e || !other.active) continue;
+        const q = other.root.position;
+        if (!shape.overlaps(e, p.x, p.y, p.z, e.heading, other, q.x, q.y, q.z, other.heading, SPACE)) continue;
+        crowded = true;
+        const distance2 = Math.max(0.01, (p.x - q.x) ** 2 + (p.z - q.z) ** 2);
+        dx += (p.x - q.x) / distance2; dz += (p.z - q.z) / distance2;
+      }
+      if (!crowded) return false;
+      // Keep the current facing while stepping sideways/backwards out of an
+      // existing pileup. Turning first can expand the trunk into another peer.
+      const heading = Math.hypot(dx, dz) > 1e-6 ? Math.atan2(dx, dz) : e.index * 2.399963229728653;
+      const step = CHILL_SPEED * dt;
+      for (let i = 0; i < 16; i++) {
+        const side = i ? Math.ceil(i / 2) * (i % 2 ? 1 : -1) : 0;
+        const angle = heading + side * Math.PI / 8;
+        const x = p.x + Math.sin(angle) * step, z = p.z + Math.cos(angle) * step;
+        const y = support(e, x, z, p.y, PROP_STEP);
+        if (!Number.isFinite(y) || Math.abs(y - p.y) > PROP_STEP || !actorLanding(e, x, y, z)
+          || occupied(e, x, y, z) || !propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, e.heading)) continue;
+        setSupportY(e, y, x, z); p.x = x; p.z = z;
+        e.speed = CHILL_SPEED * (Math.cos(angle - e.heading) < 0 ? -1 : 1);
+        e.roam.progressTime = e.blocked = 0;
+        return true;
+      }
+      return false;
+    };
     const move = (e, dt, speed) => {
       if (e.recover > 0) { e.speed = 0; return; }
       if (e.backoutLeft > 0 && backOut(e, dt)) return;
@@ -5322,6 +5362,7 @@
         && liveFloor >= p.y - STEP && liveFloor <= p.y + PROP_STEP) setSupportY(e, liveFloor);
       if (e.fire.rolling || escapeForRoll(e, dt)) { poseEntry(e, dt, beforeX, beforeY, beforeZ); return; }
       if (fleeFire(e, dt)) { poseEntry(e, dt, beforeX, beforeY, beforeZ); return; }
+      if (separateSurfacePeers(e, dt)) { poseEntry(e, dt, beforeX, beforeY, beforeZ); return; }
       if (e.motion.lab && e.lab.item >= 0 && (e.mode !== e.owner.state || e.pendingSite >= 0 && e.pendingSite !== e.site)) {
         if (e.lab.stage !== "return") { e.lab.stage = "return"; e.lab.reach = 0; }
         workLab(e, dt); poseEntry(e, dt, beforeX, beforeY, beforeZ); return;
