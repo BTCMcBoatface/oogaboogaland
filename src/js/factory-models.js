@@ -1290,7 +1290,7 @@
   const FORGE_CY = 1.55;
   const FORGE_TRACKS = [-0.95, 0.95], FORGE_CONSOLE = [-2.45, 1.4];
   // The stores by the forge, [x, z]: between its tracks and the stairs up to the core's walkway, clear of both.
-  const FORGE_STORES = [[-2.5, 3.4], [2.5, 2.8], [-2.5, 5], [2.5, 4.6], [2.3, 6.2]];
+  const FORGE_STORES = [[-2.5, 3.4], [2.5, 2.8], [-2.5, 5], [2.5, 4.6]];
   const forge = cached(() => {
     const f = LAYOUT.forge, geos = [], cy = FORGE_CY;
     for (const [r, n, depth, z] of [[2.25, 12, 1.3, 0], [2.95, 16, 1, -0.15]]) for (let k = 0; k <= n; k++) {

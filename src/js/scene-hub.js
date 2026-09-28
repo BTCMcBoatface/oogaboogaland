@@ -8267,10 +8267,10 @@
     entering = false;
     enteringTween = null;
     now = 0;
-    hud.onPreset(name => { if (!pitArrival) navigate(name); });
+    hud.onPreset(name => { if (!pitArrival && !factoryDeparting) navigate(name); });
     hud.setDetachedView("pile");
     hud.onAction((action, value) => {
-      if (pitArrival || pitGate.isOpen) return;
+      if (pitArrival || factoryDeparting || pitGate.isOpen) return;
       if (clankerPlay.active && clankerPlay.action(action)) return;
       if (action === "tip") demoTip(1200);
       else if (action === "tip-legendary") demoTip(120000);
