@@ -315,11 +315,11 @@
     return geo;
   });
 
-  // Where each chamber's crates, ore, barrels and sacks stand, as plain numbers the scene also walks round:
+  // Where each chamber's crates, ore and barrels stand, as plain numbers the scene also walks round:
   // against the walls, clear of every spot the sim places, the boulders and the tunnels.
   const DRESS_AT = [];
   CHAMBERS.forEach((c, i) => {
-    const KINDS = ["crate", "coalCrate", "barrel", "sack", "coalCrate", "crate"], spots = [];
+    const KINDS = ["crate", "coalCrate", "barrel", "crate", "coalCrate", "crate"], spots = [];
     for (const [x, turns] of [[c.x0 + 0.62, 1], [c.x1 - 0.62, 3]]) for (let z = c.z1 - 1; z > c.z0 + 1; z -= 1.15) spots.push(x, z, turns);
     for (const [z, turns] of [[c.z0 + 0.62, 0], [c.z1 - 0.62, 2]]) for (let x = c.x0 + 1; x < c.x1 - 1; x += 1.15) if (Math.abs(x) > TUNNEL.w / 2 + 0.8) spots.push(x, z, turns);
     let placed = 0;
@@ -334,7 +334,7 @@
   });
   LAYOUT.DRESS_AT = DRESS_AT;
   // Each chamber dressed from the shared kit: a lantern garland under every timber cap (lanterns over the side
-  // rows, the aisle left clear), bulb festoons along both walls, and crates, ore, barrels and sacks against the
+  // rows, the aisle left clear), bulb festoons along both walls, and crates, ore and barrels against the
   // walls wherever nothing the sim places and no boulder stands. Three draws a chamber.
   const chamberDressing = variants((i) => {
     const c = CHAMBERS[i], set = BL.dressing.set(), y = c.h - 0.45;

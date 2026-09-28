@@ -260,8 +260,11 @@
   const PATH_LIFT = 0.006;
   const MASTER_PATH_CENTER = 2;
   const GATE_Z = -(RADIUS - 2), PASS_HALF = 2.5, PASS_TOP = 5, TRAIL_HALF = 1;
-  const TIMECHAIN = { bearing: 8.25 / 12 * Math.PI * 2, from: 20, top: 4, halfWidth: 1.8, blend: 1.5 };
+  const STAIR_TERRACE = { from: MEADOW, top: 2.5, halfWidth: 1.8, blend: 1.5 };
+  const TIMECHAIN = { bearing: 8.25 / 12 * Math.PI * 2, ...STAIR_TERRACE };
   const TIMECHAIN_X = Math.sin(TIMECHAIN.bearing), TIMECHAIN_Z = -Math.cos(TIMECHAIN.bearing);
+  const POOL_APPROACH = { bearing: 3.625 / 12 * Math.PI * 2, from: MEADOW, to: RADIUS - 0.5, top: 6.25, tread: 0.285, halfWidth: 2.6, blend: 1.5 };
+  const POOL_X = Math.sin(POOL_APPROACH.bearing), POOL_Z = -Math.cos(POOL_APPROACH.bearing);
   const BLUFF_LEN = 8, SIDE_OUT = 2.5, APRON = 3, TRAIL_LEAN = 1.2;
   const P = { grass: 1, grassLight: 2, grassDark: 3, path: 4, stone: 5, stoneDark: 6, inner: 7, dirt: 8, floor: 9 };
   const PALETTE = [null, "#6f7d3e", "#7b8945", "#65733a", "#a3874f", "#877869", "#5e5449", "#2f2824", "#6a4e39", "#3a302a"].map((hex) => hex && hexToRgb(hex));
@@ -410,6 +413,16 @@
     const frames = CLOCKS.map(([id, clock, axis = clock]) => ({ id, clock, ...spoke(clock / 12 * Math.PI * 2, axis / 12 * Math.PI * 2) }));
     const pass = spoke(0);
     const spokes = [...frames.filter((frame) => frame.id !== "c730" && frame.id !== "c5"), pass, spoke(Math.PI)];
+    const south = spokes[spokes.length - 1], stairStraight = RADIUS - 2;
+    // Join the incoming trail at its existing angle, wind across the treads, then face the bridge head squarely.
+    const stairCenter = (along, entrySlope, wind) => {
+      const t = clamp((along - MEADOW) / (stairStraight - MEADOW), 0, 1), u = 1 - t;
+      const wave = Math.sin(Math.PI * t);
+      return entrySlope * (stairStraight - MEADOW) * t * u * u + wind * Math.sin(2 * Math.PI * t) * wave * wave;
+    };
+    const southEntrySlope = -south.wobble * 2 * Math.PI / (MEADOW - MASTER_PATH_CENTER);
+    const southStairCenter = (along) => stairCenter(along, southEntrySlope, 1);
+    const timechainStairCenter = (along) => stairCenter(along, 0, -1.1);
     const headquartersFrames = [frames.find((f) => f.id === "c730"), frames.find((f) => f.id === "c5")];
     const headquartersFronts = headquartersFrames.map((f) => ({
       id: f.id,
@@ -506,12 +519,30 @@
         const step = coarse && !(Math.abs(wx) < PASS_HALF && wz < 0) ? 0.5 : UNIT;
         top = clamp(Math.round(h / step) * step, 0, MAX_HEIGHT);
       }
-      // A grass terrace cut into the ridge, like the launch approach; the same voxels render and support it.
+      // A grass terrace cut into the ridge; the same voxels render and support it.
       const timechainAlong = wx * TIMECHAIN_X + wz * TIMECHAIN_Z;
       const timechainAcross = Math.abs(wx * TIMECHAIN_Z - wz * TIMECHAIN_X);
       if (timechainAlong >= TIMECHAIN.from - 1 && timechainAcross < TIMECHAIN.halfWidth + TIMECHAIN.blend) {
         const tread = Math.min(TIMECHAIN.top, Math.max(0, Math.floor((timechainAlong - TIMECHAIN.from) / 0.5) * UNIT));
         const mix = smooth((timechainAcross - TIMECHAIN.halfWidth) / TIMECHAIN.blend);
+        top = Math.round((tread + (top - tread) * mix) / UNIT) * UNIT;
+        surface = grassAt(wx, wz);
+        meadow[i] = top === 0 ? 1 : 0;
+      }
+      // Match those treads on the south route where the Ooga Orbit bridge meets the rim.
+      if (wz >= STAIR_TERRACE.from - 1 && Math.abs(wx) < STAIR_TERRACE.halfWidth + STAIR_TERRACE.blend) {
+        const tread = Math.min(STAIR_TERRACE.top, Math.max(0, Math.floor((wz - STAIR_TERRACE.from) / 0.5) * UNIT));
+        const mix = smooth((Math.abs(wx) - STAIR_TERRACE.halfWidth) / STAIR_TERRACE.blend);
+        top = Math.round((tread + (top - tread) * mix) / UNIT) * UNIT;
+        surface = grassAt(wx, wz);
+        meadow[i] = top === 0 ? 1 : 0;
+      }
+      // The rainforest crossing gets the same grass-topped, terrain-solid stair terrace, without a trail.
+      const poolAlong = wx * POOL_X + wz * POOL_Z;
+      const poolAcross = Math.abs(wx * POOL_Z - wz * POOL_X);
+      if (poolAlong >= POOL_APPROACH.from - 1 && poolAlong <= POOL_APPROACH.to + 0.5 && poolAcross < POOL_APPROACH.halfWidth + POOL_APPROACH.blend) {
+        const tread = Math.min(POOL_APPROACH.top, Math.max(0, Math.floor((poolAlong - POOL_APPROACH.from) / POOL_APPROACH.tread) * UNIT));
+        const mix = smooth((poolAcross - POOL_APPROACH.halfWidth) / POOL_APPROACH.blend);
         top = Math.round((tread + (top - tread) * mix) / UNIT) * UNIT;
         surface = grassAt(wx, wz);
         meadow[i] = top === 0 ? 1 : 0;
@@ -1544,6 +1575,50 @@
       }
       return true;
     };
+    const hullBox = new Float64Array(24), hullRamp = new Float64Array(18);
+    const hullClearAt = (vertices) => {
+      let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let i = 0; i < vertices.length; i += 3) {
+        minX = Math.min(minX, vertices[i]); maxX = Math.max(maxX, vertices[i]);
+        minY = Math.min(minY, vertices[i + 1]); maxY = Math.max(maxY, vertices[i + 1]);
+        minZ = Math.min(minZ, vertices[i + 2]); maxZ = Math.max(maxZ, vertices[i + 2]);
+      }
+      const gx0 = Math.max(0, Math.floor((minX - ORIGIN.x) / UNIT)), gx1 = Math.min(SX - 1, Math.floor((maxX - ORIGIN.x) / UNIT));
+      const gz0 = Math.max(0, Math.floor((minZ - ORIGIN.z) / UNIT)), gz1 = Math.min(SZ - 1, Math.floor((maxZ - ORIGIN.z) / UNIT));
+      const gy0 = Math.max(0, Math.floor((minY - ORIGIN.y) / UNIT)), gy1 = Math.min(SY - 1, Math.floor((maxY - ORIGIN.y) / UNIT));
+      for (let gx = gx0; gx <= gx1; gx++) for (let gz = gz0; gz <= gz1; gz++) {
+        const cell = gx * SZ + gz, base = gx * SY * SZ + gz;
+        for (let gy = gy0; gy <= gy1; gy++) if (data[base + gy * SZ]) {
+          for (let corner = 0; corner < 8; corner++) {
+            const at = corner * 3;
+            hullBox[at] = (gx + (corner & 1)) * UNIT + ORIGIN.x;
+            hullBox[at + 1] = (gy + ((corner >> 1) & 1)) * UNIT + ORIGIN.y;
+            hullBox[at + 2] = (gz + ((corner >> 2) & 1)) * UNIT + ORIGIN.z;
+          }
+          if (BL.convex.hullsOverlap(hullBox, vertices)) return false;
+        }
+        const pieces = windowColumns[cell];
+        if (pieces) for (const piece of pieces) if (minY < piece.maxY && maxY > piece.minY
+          && BL.convex.hullsOverlap(piece.vertices, vertices)) return false;
+        for (let layer = 0; layer < 2; layer++) {
+          const range = layer ? basementCollision[cell] : rampCollision[cell];
+          const floor = layer ? (((basementCavities[cell] >> 4) & 63) - 64) * UNIT : (((lowerCavities[cell] >> 4) & 63) - 32) * UNIT;
+          if (!range || maxY <= floor) continue;
+          for (let n = 0; n < (range & 3); n++) {
+            const face = geometry.faces[rampFaceOffset + (range >>> 2) + n], verts = geometry.verts;
+            if (Math.max(verts[face.i[0] * 3 + 1], verts[face.i[1] * 3 + 1], verts[face.i[2] * 3 + 1]) <= minY) continue;
+            for (let k = 0; k < 3; k++) {
+              const at = k * 3, v = face.i[k] * 3;
+              hullRamp[at] = hullRamp[at + 9] = verts[v];
+              hullRamp[at + 1] = verts[v + 1]; hullRamp[at + 10] = floor;
+              hullRamp[at + 2] = hullRamp[at + 11] = verts[v + 2];
+            }
+            if (BL.convex.hullsOverlap(hullRamp, vertices)) return false;
+          }
+        }
+      }
+      return true;
+    };
     const ceilingAt = (x, y, z, radius = 0) => {
       const gx0 = Math.max(0, Math.floor((x - radius - ORIGIN.x) / UNIT)), gx1 = Math.min(SX - 1, Math.floor((x + radius - ORIGIN.x) / UNIT));
       const gz0 = Math.max(0, Math.floor((z - radius - ORIGIN.z) / UNIT)), gz1 = Math.min(SZ - 1, Math.floor((z + radius - ORIGIN.z) / UNIT));
@@ -1689,6 +1764,7 @@
       if (!path && meadow[c] && r >= MASTER_PATH_CENTER) {
         const theta = Math.atan2(wx, -wz);
         for (const s of spokes) {
+          if (s === south && r >= MEADOW) continue;
           const d = theta - s.angle;
           const lateral = r * Math.atan2(Math.sin(d), Math.cos(d));
           const t = (r - MASTER_PATH_CENTER) / (MEADOW - MASTER_PATH_CENTER);
@@ -1703,15 +1779,17 @@
       if (!path && !meadow[c]) {
         if (Math.abs(wx) < PASS_HALF && wz < 0) {
           path = Math.abs(wx - pass.wobble * Math.sin((r - MEADOW) / (-GATE_Z - MEADOW) * Math.PI * 2)) < TRAIL_HALF;
-        } else if (Math.abs(wx) < PATH_HALF && wz > 0) path = true;
+        }
       }
+      if (wz >= MEADOW && Math.abs(wx - southStairCenter(wz)) < PATH_HALF) path = true;
       for (let n = 0; n < headquartersFronts.length && !headquartersPath; n++) {
         const front = headquartersFronts[n], dx = wx - front.center.x, dz = wz - front.center.z;
         const across = dx * front.tangent.x + dz * front.tangent.z;
         const depth = dx * -front.tangent.z + dz * front.tangent.x;
         headquartersPath = Math.abs(across) < front.halfLength && Math.abs(depth) < front.halfWidth && tops[c] === 0;
       }
-      if (wx * TIMECHAIN_X + wz * TIMECHAIN_Z >= MASTER_PATH_CENTER && Math.abs(wx * TIMECHAIN_Z - wz * TIMECHAIN_X) < PATH_HALF) path = true;
+      const timechainAlong = wx * TIMECHAIN_X + wz * TIMECHAIN_Z;
+      if (timechainAlong >= MASTER_PATH_CENTER && Math.abs(wx * TIMECHAIN_Z - wz * TIMECHAIN_X - timechainStairCenter(timechainAlong)) < PATH_HALF) path = true;
       if (headquartersPath) {
         path = true;
       }
@@ -1841,13 +1919,16 @@
     for (const north of [true, false]) {
       const points = [];
       for (let r = MEADOW; r <= RADIUS; r += PATH_UNIT) {
-        const x = north ? pass.wobble * Math.sin((r - MEADOW) / (-GATE_Z - MEADOW) * Math.PI * 2) : 0;
+        const x = north ? pass.wobble * Math.sin((r - MEADOW) / (-GATE_Z - MEADOW) * Math.PI * 2) : southStairCenter(r);
         points.push({ x, z: (north ? -1 : 1) * Math.sqrt(r * r - x * x) });
       }
       centerlines.push(points);
     }
     const timechainPath = [];
-    for (let r = MASTER_PATH_CENTER; r <= RADIUS; r += PATH_UNIT) timechainPath.push({ x: TIMECHAIN_X * r, z: TIMECHAIN_Z * r });
+    for (let r = MASTER_PATH_CENTER; r <= RADIUS; r += PATH_UNIT) {
+      const across = timechainStairCenter(r);
+      timechainPath.push({ x: TIMECHAIN_X * r + TIMECHAIN_Z * across, z: TIMECHAIN_Z * r - TIMECHAIN_X * across });
+    }
     centerlines.push(timechainPath);
     for (const front of headquartersFronts) {
       centerlines.push(front.connector);
@@ -2254,6 +2335,7 @@
       supportAt,
       clearAt,
       voxelSegmentClearAt,
+      hullClearAt,
       ceilingAt,
       smoothSupportAt,
       cavityAt,
@@ -2287,5 +2369,5 @@
     ISLANDS.set(seed, built);
     return built;
   };
-  BL.terrain = { makeGrid, gridGeometry, island, segmentBoxClear, cutawaySourceFromVox, PALETTE, MAX_HEIGHT, TIMECHAIN };
+  BL.terrain = { makeGrid, gridGeometry, island, segmentBoxClear, cutawaySourceFromVox, PALETTE, MAX_HEIGHT, TIMECHAIN, POOL_APPROACH };
 })();

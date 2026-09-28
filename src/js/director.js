@@ -309,7 +309,12 @@
     step(dt, now);
   };
 
+  let rightShift = false;
+  const clearRightShift = (e) => {
+    if (e.type === "blur" || e.key === "Shift" && (e.code === "ShiftRight" || e.location === 2)) rightShift = false;
+  };
   const onKeyDown = (e) => {
+    if (e.key === "Shift" && (e.code === "ShiftRight" || e.location === 2)) rightShift = true;
     if (e.repeat) return;
     const typing = e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA");
     if (typing || (e.target && e.target.closest && e.target.closest("dialog"))) return;
@@ -336,15 +341,17 @@
       return;
     }
     // Game scenes can expose a dedicated Agent. Hub companions are selected
-    // directly; Shift+A never creates another gorilla there.
-    if ((active.agent || active.summonAgent) && e.shiftKey && !e.metaKey && !e.ctrlKey && (e.key === "A" || e.key === "a")) {
+    // directly; Right Shift+A never creates another gorilla there. Left Shift+A runs left.
+    if ((active.agent || active.summonAgent) && e.shiftKey && rightShift
+      && !e.metaKey && !e.ctrlKey && (e.key === "A" || e.key === "a")) {
       e.preventDefault();
       if (transition) return;
       if (agentPlay.active) agentPlay.stop();
       else agentPlay.start(active);
       return;
     }
-    if (e.shiftKey && !e.metaKey && !e.ctrlKey && (e.key === "R" || e.key === "r")) {
+    if (e.shiftKey && rightShift
+      && !e.metaKey && !e.ctrlKey && (e.key === "R" || e.key === "r")) {
       e.preventDefault();
       game.resetAll();
       location.reload();
@@ -365,6 +372,8 @@
     }
   };
   window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", clearRightShift);
+  window.addEventListener("blur", clearRightShift);
   document.addEventListener("visibilitychange", onVisibility);
   if (params.has("nosim")) donations.config.simulate = false;
   // The live feeds stay off under nosim (the suite) and mempool=0 / oogatron=0 / chain=0;
@@ -524,6 +533,8 @@
     chain.dispose();
     window.BL.oogatronLive.dispose();
     window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", clearRightShift);
+    window.removeEventListener("blur", clearRightShift);
     document.removeEventListener("visibilitychange", onVisibility);
     active.leave();
     renderer.dispose();

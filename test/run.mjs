@@ -3089,6 +3089,11 @@ const holdKey = async (b, k, seconds) => {
   await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: k, code: "Key" + k.toUpperCase() });
   await b.evaluate(`window.__ooga.advance(0.2, 1 / 60)`);
 };
+const agentShortcut = async (b) => {
+  await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Shift", code: "ShiftRight", location: 2, modifiers: 8 });
+  await b.key("A", 8);
+  await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Shift", code: "ShiftRight", location: 2 });
+};
 const WALK = { w: [0, 1], s: [0, -1], a: [-1, 0], d: [1, 0] };
 const walkKeys = async (b, who, x, z, yaws, seconds) => {
   const rows = {};
@@ -3136,11 +3141,34 @@ const hubBlockHeight = { name: "header clock and block height", why: "rule: the 
 } };
 const hubWalking = { name: "hub walking", why: "regression: steering keys came out mirrored, and the removed hub Agent could still be summoned", run: async (b) => {
   const ooga = await walkKeys(b, "portlandhodl", -8, 8, [0, 2.2], 0.6);
+  const running = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl"), P = B.pilot, rows = [];
+    const key = (type, key, code, location = 0, shiftKey = false) => window.dispatchEvent(new KeyboardEvent(type, { key, code, location, shiftKey }));
+    const move = (combat, direction, sprint) => {
+      P.controls.reset(); if (P.aiming !== combat) P.modeAction("mode-toggle");
+      P.navigate({ position: { x: -8, y: B.island.surfaceAt(-8, 8), z: 8 }, yaw: 0, pitch: 0.4, dist: 10 }); B.advance(0.4, 1 / 60);
+      const p = a.root.position, x = p.x, z = p.z;
+      if (sprint) key("keydown", "Shift", "ShiftLeft", 1, true);
+      key("keydown", direction, "Key" + direction.toUpperCase(), 0, sprint);
+      B.advance(0.2, 1 / 60);
+      const distance = Math.hypot(p.x - x, p.z - z), keptControl = P.player === a;
+      key("keyup", direction, "Key" + direction.toUpperCase(), 0, sprint);
+      if (sprint) key("keyup", "Shift", "ShiftLeft", 1);
+      return { distance, keptControl, sprintReleased: P.controls.read().sprint === 0 };
+    };
+    for (const combat of [false, true]) for (const direction of ["w", "a"]) rows.push({ combat, direction, walk: move(combat, direction, false), run: move(combat, direction, true) });
+    key("keydown", "Shift", "ShiftLeft", 1, true); key("keydown", "Shift", "ShiftRight", 2, true); key("keyup", "Shift", "ShiftRight", 2, true);
+    const independent = P.controls.read().sprint === 1; key("keyup", "Shift", "ShiftLeft", 1);
+    return { rows, independent };
+  })()`);
+  record("hub running: Left Shift speeds up forward and sideways movement in carry and shoulder views, keeps possession, releases cleanly and survives a Right Shift keyup",
+    running.independent && running.rows.every(row => row.walk.distance > 0.5 && row.run.distance > row.walk.distance * 1.4 && row.run.distance < row.walk.distance * 1.6
+      && row.run.keptControl && row.run.sprintReleased), JSON.stringify(running));
   await b.evaluate(`window.__ooga.pilot.release(true)`);
-  await b.key("A", 8);
+  await agentShortcut(b);
   const agent = await b.evaluate(`window.__ooga.agent`);
   await b.key("Escape");
-  record("hub walking: W A S D walk an Ooga away, left, back and right on screen from two camera angles, and Shift+A does not restore the removed hub Agent", allWalk(ooga) && !agent, JSON.stringify({ ooga, agent }));
+  record("hub walking: W A S D walk an Ooga away, left, back and right on screen from two camera angles, and Right Shift+A does not restore the removed hub Agent", allWalk(ooga) && !agent, JSON.stringify({ ooga, agent }));
 } };
 // The hub is the games' menu: walk up to each and press Space, or tap the Mempool stair.
 const HUB_SPOTS = {
@@ -3173,13 +3201,88 @@ const hubFall = { name: "hub fall", why: "rule: walking off the island drops the
 
 const labWalking = { name: "lab walking", why: "regression: Shift+A left A held in the Ooga's controls, walking the Agent and the next Ooga left on their own", run: async (b) => {
   const ooga = await walkKeys(b, "portlandhodl", 5, 5, [0, 2.2], 0.3);
+  const oogaJump = await b.evaluate(`(() => {
+    const B = __ooga, a = B.crew.player;
+    B.pilot.navigate({ position: { x: 5, y: 0, z: 5 }, yaw: 0, pitch: 0.4, dist: 10 }); B.advance(0.2, 1 / 60);
+    const y = a.root.position.y, accepted = B.crew.jumpPlayer(); let peak = 0;
+    for (let i = 0; i < 150; i++) { B.advance(1 / 60, 1 / 60); peak = Math.max(peak, a.root.position.y - y); }
+    return { accepted, peak };
+  })()`);
   await b.evaluate(`window.__ooga.pilot.release(true)`);
-  await b.key("A", 8);
+  await agentShortcut(b);
   const still = await b.evaluate(`(() => { const B = window.__ooga, p = B.agent.root.position, x = p.x, z = p.z; B.advance(1, 1 / 60); return { driven: B.agent.driven, drift: +Math.hypot(p.x - x, p.z - z).toFixed(2) }; })()`);
+  const running = await b.evaluate(`(() => {
+    const B = __ooga, a = B.agent, rows = [];
+    const key = (type, key, code, location = 0, shiftKey = false) => window.dispatchEvent(new KeyboardEvent(type, { key, code, location, shiftKey }));
+    for (const sprint of [false, true]) {
+      a.place(5, 5, 0); B.advance(0.4, 1 / 60);
+      const p = a.root.position, x = p.x, z = p.z;
+      if (sprint) key("keydown", "Shift", "ShiftLeft", 1, true);
+      key("keydown", "a", "KeyA", 0, sprint); B.advance(0.3, 1 / 60);
+      rows.push({ sprint, distance: Math.hypot(p.x - x, p.z - z), driven: a.driven });
+      key("keyup", "a", "KeyA", 0, sprint); if (sprint) key("keyup", "Shift", "ShiftLeft", 1);
+    }
+    return rows;
+  })()`);
+  record("lab running: Left Shift+A makes the gorilla strafe faster without releasing control", running.every(row => row.driven) && running[0].distance > 0.2 && running[1].distance > running[0].distance * 1.2, JSON.stringify(running));
+  const jumps = await b.evaluate(`(() => {
+    const B = __ooga, a = BL.scenes.lab.agent, view = BL.scenes.lab.agentView, rows = [];
+    const key = (type, key, code, location = 0, shiftKey = false, repeat = false) => window.dispatchEvent(new KeyboardEvent(type, { key, code, location, shiftKey, repeat }));
+    const peakAfterPress = () => {
+      const floor = a.groundAt(a.root.position.x, a.root.position.z); let peak = 0;
+      for (let i = 0; i < 150; i++) { B.advance(1 / 60, 1 / 60); peak = Math.max(peak, a.root.position.y - floor); }
+      return peak;
+    };
+    a.place(5, 5, -Math.PI / 2); view.yaw = view.tYaw = 0; B.advance(0.4, 1 / 60);
+    key("keydown", " ", "Space"); key("keyup", " ", "Space");
+    const tapPeak = peakAfterPress();
+    for (const sprint of [false, true]) {
+      a.place(5, 5, -Math.PI / 2); view.yaw = view.tYaw = 0;
+      if (sprint) key("keydown", "Shift", "ShiftLeft", 1, true);
+      key("keydown", "a", "KeyA", 0, sprint); B.advance(0.35, 1 / 60);
+      key("keydown", " ", "Space", 0, sprint);
+      const p = a.root.position, x = p.x, z = p.z, y = p.y;
+      let earlyAir = a.airborne, stopped = 0, minHip = Infinity;
+      for (let i = 0; i < 39; i++) {
+        const px = p.x, pz = p.z;
+        B.advance(1 / 60, 1 / 60);
+        earlyAir ||= a.airborne || Math.abs(p.y - y) > 1e-6;
+        if (Math.hypot(p.x - px, p.z - pz) < 0.01) stopped++;
+        minHip = Math.min(minHip, a.hips.position.y);
+        if (i === 20) key("keydown", " ", "Space", 0, sprint, true);
+      }
+      const heldTravel = Math.hypot(p.x - x, p.z - z);
+      key("keyup", "a", "KeyA", 0, sprint); if (sprint) key("keyup", "Shift", "ShiftLeft", 1);
+      let landed = false, repeated = false;
+      for (let i = 0; i < 150; i++) {
+        B.advance(1 / 60, 1 / 60);
+        if (!a.airborne) landed = true;
+        else if (landed) repeated = true;
+      }
+      key("keyup", " ", "Space", 0, sprint); B.advance(0.1, 1 / 60);
+      rows.push({ sprint, earlyAir, stopped, minHip, heldTravel, landed, repeated, releaseAir: a.airborne });
+    }
+    a.place(5, 5, 0);
+    key("keydown", " ", "Space"); B.advance(0.55, 1 / 60); key("keyup", " ", "Space");
+    const secondY = a.root.position.y;
+    key("keydown", " ", "Space"); B.advance(1 / 60, 1 / 60);
+    const secondRise = a.root.position.y - secondY, thirdY = a.root.position.y;
+    key("keyup", " ", "Space"); key("keydown", " ", "Space"); B.advance(1 / 60, 1 / 60);
+    const thirdRise = a.root.position.y - thirdY;
+    let secondLift = a.root.position.y - secondY;
+    for (let i = 0; i < 150; i++) { B.advance(1 / 60, 1 / 60); secondLift = Math.max(secondLift, a.root.position.y - secondY); }
+    const doubleLanded = !a.airborne;
+    window.dispatchEvent(new Event("blur")); key("keyup", " ", "Space"); B.advance(0.2, 1 / 60);
+    return { tapPeak, rows, secondRise, thirdRise, secondLift, doubleLanded, blurAir: a.airborne, driven: a.driven };
+  })()`);
+  record("lab jump: Space immediately jumps while walking or galloping, a second press double jumps 50% higher than an Ooga, holding never repeats, and a third airborne press or release adds no impulse",
+    oogaJump.accepted && jumps.driven && !jumps.blurAir && jumps.doubleLanded && jumps.tapPeak > oogaJump.peak * 1.45 && jumps.tapPeak < oogaJump.peak * 1.56
+      && jumps.secondLift > jumps.tapPeak * 0.98 && jumps.secondLift < jumps.tapPeak * 1.02 && jumps.secondRise > 0 && jumps.thirdRise < jumps.secondRise
+      && jumps.rows.every(row => row.earlyAir && !row.stopped && row.minHip > 0.68 && row.heldTravel > 2 && row.landed && !row.repeated && !row.releaseAir), JSON.stringify({ ...jumps, oogaJump }));
   await b.key("Escape");
   const after = await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); B.pilot.possess(a); B.pilot.navigate({ position: { x: 5, y: 0, z: 5 }, yaw: 0, pitch: 0.4, dist: 10 }); B.advance(0.3, 1 / 60); const p = a.root.position, x = p.x, z = p.z; B.advance(1, 1 / 60); return +Math.hypot(p.x - x, p.z - z).toFixed(2); })()`);
   await b.key("Escape");
-  record("lab walking: W A S D walk an Ooga their way on screen, Shift+A summons a still Agent without leaving A held, and an Ooga taken after the Agent stands still", allWalk(ooga) && still.driven && still.drift < 0.2 && after < 0.2, JSON.stringify({ ooga, still, after }));
+  record("lab walking: W A S D walk an Ooga their way on screen, Right Shift+A summons a still Agent without leaving A held, and an Ooga taken after the Agent stands still", allWalk(ooga) && still.driven && still.drift < 0.2 && after < 0.2, JSON.stringify({ ooga, still, after }));
 } };
 const labKeys = { name: "lab keys", why: "rule: B streams the test bananas onto the pile, and Escape lets go of an Ooga before it leaves the lab", run: async (b) => {
   const before = await b.evaluate(`window.__ooga.stats().dropsLanded`);
@@ -4975,19 +5078,63 @@ scene("hub", { label: "lab flask approach", query: "solo=1&character=portlandhod
   record("lab flask: the scientist completes its short bench approach and picks up the real flask without circling or stall recovery", state.held && state.station === state.expected
     && state.seconds < 4 && state.distance >= 0.69 && state.distance < 1 && !state.replans && !state.recoveries, JSON.stringify(state));
 } }] });
-scene("hub", { label: "gorilla traversal", query: "status=chillin", steps: [{ name: "gorilla traversal", why: "regression: low props interrupted the gallop, jump charging took too long, and a stale motion envelope trapped gorillas beneath trees", run: async (b) => {
+scene("hub", { label: "gorilla roof descent", query: "status=chillin", steps: [{ name: "gorilla roof descent", why: "regression: an autonomous gorilla leaving the OBL cave roof remounted the roof instead of descending its front wall", run: async (b) => {
   const state = await b.evaluate(`(() => {
-    const B = __ooga, S = BL.scene, root = BL.scenes.hub.root, C = B.clankers, e = C.list[0], solids = B.headquarters.solids.props;
+    const B = __ooga, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), m = B.mouths.find(m => m.id === "c1");
+    B.pilot.release(true); C.release(); C.cancelDebugMove(e);
+    for (const other of C.list) if (other !== e) { other.owner.override = other.owner.state = "away"; other.active = other.root.visible = false; }
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    const sx = Math.sin(m.ry), sz = Math.cos(m.ry), x = m.x - sx * 0.15, z = m.z - sz * 0.15, roof = B.island.surfaceAt(x, z);
+    Object.assign(e.root.position, { x, y: roof, z });
+    Object.assign(e, { active: true, controlled: false, mode: "chilling", phase: "chill", route: "", lounge: "", loungeDepart: false,
+      parked: false, recover: 0, rest: 0, pound: 0, beat: 0, stand: 0, heading: m.ry, speed: 0, goalX: m.x + sx * 5, goalY: m.floorY, goalZ: m.z + sz * 5 });
+    e.owner.override = e.owner.state = "chilling"; e.root.visible = true;
+    Object.assign(e.roam, { count: 0, index: 0, wall: false, nextChoice: Infinity, departPending: false, propDeparture: false });
+    Object.assign(e.climb, { active: false, free: false, retry: 0, searchPending: false, claimPending: false, crestPending: false, debugStuck: false });
+    e.drive.airborne = e.drive.resume = e.jump.active = e.fire.burning = e.fire.rolling = false;
+    e.gorilla.poseManaged(2, x, roof, z, m.ry, 0, false, false, "", e.motion);
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+    const trace = []; let mounted = false, reversals = 0, lastY = roof, minY = roof;
+    for (let frame = 0; frame < 1200; frame++) {
+      B.advance(1 / 60, 1 / 60); const p = e.root.position, c = e.climb;
+      if (c.active) mounted = true;
+      if (mounted && p.y > lastY + 0.005) reversals++;
+      minY = Math.min(minY, p.y); lastY = p.y;
+      if (frame % 30 === 0) trace.push({ t: frame / 60, x: p.x, y: p.y, z: p.z, active: c.active, free: c.free, descending: c.descending, mount: c.mountPending, handoff: c.handoffDirection, blocked: c.blocked,
+        goal: [e.goalX, e.goalY, e.goalZ], phase: e.phase, owner: e.owner.state, failure: c.failure, search: c.searchPending, lounge: e.lounge, resume: e.drive.resume });
+      if (mounted && !c.active && p.y <= m.floorY + 0.15) break;
+    }
+    const p = e.root.position;
+    return { roof, mounted, reversals, minY, y: p.y, floor: B.island.supportAt(p.x, p.z, p.y + 0.1, 0, -Infinity),
+      active: e.climb.active, recoveries: e.stuck.recoveries, trace };
+  })()`);
+  record("gorilla roof descent: the autonomous OBL roof departure reaches the main floor without climbing back onto the roof or relocation",
+    state.mounted && state.y < 0.15 && Math.abs(state.y - state.floor) < 0.1 && !state.active && !state.reversals && !state.recoveries, JSON.stringify(state));
+} }] });
+scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1", steps: [{ name: "gorilla traversal", why: "regression: low props interrupted the gallop, jump input delayed takeoff, and a stale motion envelope trapped gorillas beneath trees", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, S = BL.scene, root = BL.scenes.hub.root, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), solids = B.headquarters.solids.props;
     B.pilot.release(true);
-    for (const other of C.list) if (other !== e) { other.active = false; other.root.visible = false; }
+    // Inactive companions reactivate while their owners are awake. An isolated fixture uses the real
+    // away state; sleeping would require a claimed bedroll and the crew's complete sleep transition.
+    for (const other of C.list) if (other !== e) {
+      other.owner.override = other.owner.state = "away"; other.owner.bedTravel.mode = "";
+      other.controlled = other.drive.airborne = other.climb.active = other.fire.rolling = other.active = other.root.visible = false;
+    }
     for (const cave of B.cavemen.values()) cave.root.visible = false;
     for (const prop of B.props) prop.node.visible = false;
     const setup = (x, z, heading = Math.PI / 2) => {
       C.release();
       Object.assign(e.root.position, { x, y: B.island.supportAt(x, z, 50, 10), z });
-      Object.assign(e, { active: true, controlled: false, recover: 0, lounge: "", parked: false, biped: false, heading, speed: 0, lowCover: false });
-      Object.assign(e.drive, { airborne: false, passiveFall: false, grounded: true, jumpHeld: false, jumpDown: false, jumpArmed: false, charge: 0, vx: 0, vy: 0, vz: 0, motionRecover: 0, motionEnvelope: false });
+      Object.assign(e, { active: true, controlled: false, recover: 0, lounge: "", parked: false, biped: false, heading, speed: 0, lowCover: false, pound: 0, beat: 0, stand: 0 });
+      Object.assign(e.drive, { airborne: false, passiveFall: false, grounded: true, jumpHeld: false, jumpDown: false, jumpPressed: false, jumps: 0, vx: 0, vy: 0, vz: 0, motionRecover: 0, motionEnvelope: false });
+      Object.assign(e.climb, { requested: 0, searchPending: false, searchDeferred: false, claimPending: false, crestPending: false, retry: 0, searchCursor: 0 });
       e.fire.burning = e.fire.rolling = false; e.fire.rollRecover = 0; e.actionControlled = e.motion.smash = e.climb.active = e.jump.active = false;
+      Object.assign(e.motion, { climb: 0, climbBlend: NaN, climbSide: 0, climbDirection: 0, climbStride: 0,
+        mantle: 0, roll: 0, rollAngle: 0, charge: 0, poundCharge: 0, landing: 0, takeoff: 0,
+        supportOffset: 0, lab: false, labRunIn: false, labWork: "", smash: false });
+      // Reset the rig as well as its controller: the preceding prop fall can leave a landing blend behind.
+      e.gorilla.poseManaged(2, x, e.root.position.y, z, heading, 0, false, false, "", e.motion);
       e.root.visible = true; C.possess(e); B.advance(0.2, 1 / 60);
     };
     const advance = (input, seconds, sample = null) => {
@@ -5000,7 +5147,7 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin", steps: [{ na
       S.addChild(root, node); solids.add(node); S.updateWorld(root); solids.sync(); setup(7, 0);
       let maxY = e.root.position.y, airborne = 0, stopped = 0, previousX = e.root.position.x, maxVisibleStep = 0;
       const hips = e.gorilla.root.children[0]; let previousVisibleY = e.root.position.y + hips.position.y;
-      advance({ x: 1, z: 0, heading: Math.PI / 2, run: true, jumpHeld: false }, 2.2, () => {
+      advance({ x: 1, z: 0, heading: Math.PI / 2, run: true, jumpHeld: false }, 4, () => {
         const visibleY = e.root.position.y + hips.position.y;
         maxY = Math.max(maxY, e.root.position.y); maxVisibleStep = Math.max(maxVisibleStep, Math.abs(visibleY - previousVisibleY)); previousVisibleY = visibleY;
         if (e.drive.airborne || e.jump.active) airborne++;
@@ -5033,28 +5180,351 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin", steps: [{ na
     const raisedProp = { rockY, assignedExit, x: e.root.position.x, y: e.root.position.y, z: e.root.position.z,
       airborne: e.drive.airborne, stuck: e.stuck.time, reason: e.stuck.reason };
     solids.remove(escapeRock); S.removeChild(root, escapeRock); solids.sync();
-    setup(7, 2);
-    C.control({ x: 1, z: 0, heading: Math.PI / 2, run: true, jumpHeld: true, jumpPressed: true }); B.advance(1 / 60, 1 / 60);
-    advance({ x: 1, z: 0, heading: Math.PI / 2, run: true, jumpHeld: true }, 0.64);
-    const charged = e.drive.charge, releaseX = e.root.position.x;
-    advance({ x: 1, z: 0, heading: Math.PI / 2, run: true, jumpHeld: false }, 0.18);
-    const jump = { charged, airborne: e.drive.airborne, vx: e.drive.vx, moved: e.root.position.x - releaseX };
+    const jumps = [];
+    for (const run of [false, true]) {
+      // Reuse the clear corridor exercised above after removing its temporary prop.
+      setup(7, 0);
+      const startX = e.root.position.x;
+      advance({ x: 1, z: 0, heading: Math.PI / 2, run, jumpHeld: false }, 1 / 60);
+      const startSpeed = (e.root.position.x - startX) * 60, switchX = e.root.position.x;
+      advance({ x: 1, z: 0, heading: Math.PI / 2, run: !run, jumpHeld: false }, 1 / 60);
+      const switchSpeed = (e.root.position.x - switchX) * 60;
+      advance({ x: 1, z: 0, heading: Math.PI / 2, run, jumpHeld: false }, 0.35);
+      const floor = e.root.position.y, takeoffX = e.root.position.x, beforeJumps = e.jumps, gait = e.gorilla.debug.gait;
+      let stopped = 0, lastX = e.root.position.x, firstAir = false, peak = 0;
+      for (let frame = 0; frame < 39; frame++) {
+        C.control({ x: 1, z: 0, heading: Math.PI / 2, run, jumpHeld: true, jumpPressed: frame === 0 }); B.advance(1 / 60, 1 / 60);
+        if (frame === 0) firstAir = e.drive.airborne;
+        peak = Math.max(peak, e.root.position.y - floor);
+        if (e.root.position.x - lastX <= 1e-5) stopped++;
+        lastX = e.root.position.x;
+      }
+      const heldTravel = e.root.position.x - takeoffX, vx = e.drive.vx;
+      advance({ x: 0, z: 0, jumpHeld: true }, 2.5);
+      const heldJumps = e.jumps - beforeJumps, heldLanded = !e.drive.airborne;
+      advance({ x: 0, z: 0, jumpHeld: false }, 0.2);
+      const releaseJumps = e.jumps - beforeJumps;
+      setup(7, 0);
+      advance({ x: 0, z: 0, jumpHeld: true }, 0.55);
+      advance({ x: 0, z: 0, jumpHeld: false }, 1 / 60);
+      const secondY = e.root.position.y;
+      C.control({ x: 0, z: 0, jumpHeld: true, jumpPressed: true }); B.advance(1 / 60, 1 / 60);
+      const secondCount = e.drive.jumps, secondVelocity = e.drive.vy;
+      // Cancelling input must not replenish the mid-air jump allowance.
+      C.cancelInput(); C.control({ x: 0, z: 0, jumpHeld: true, jumpPressed: true }); B.advance(1 / 60, 1 / 60);
+      const thirdCount = e.drive.jumps, thirdVelocity = e.drive.vy;
+      let secondLift = e.root.position.y - secondY;
+      advance({ x: 0, z: 0, jumpHeld: true }, 2.5, () => { secondLift = Math.max(secondLift, e.root.position.y - secondY); });
+      const landed = !e.drive.airborne && e.drive.jumps === 0;
+      advance({ x: 0, z: 0, jumpHeld: false }, 1 / 60);
+      C.control({ x: 0, z: 0, jumpHeld: true, jumpPressed: true }); B.advance(1 / 60, 1 / 60);
+      const nextJump = e.drive.airborne && e.drive.jumps === 1;
+      advance({ x: 0, z: 0, jumpHeld: false }, 2);
+      jumps.push({ run, gait, startSpeed, switchSpeed, firstAir, heldTravel, stopped, vx, peak, heldJumps, heldLanded, releaseJumps,
+        secondCount, secondVelocity, thirdCount, thirdVelocity, secondLift, landed, nextJump });
+    }
     const tree = B.props.find(prop => prop.prop === "tree"); tree.node.visible = true; S.updateWorld(root); solids.sync();
     const q = tree.node.position; setup(q.x - 2.8, q.z, Math.PI / 2);
     let lowFrames = 0, bipedFrames = 0, movingFrames = 0, previous = e.root.position.x;
-    advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.2, () => {
+    advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.5, () => {
       if (e.lowCover) lowFrames++; if (e.biped) bipedFrames++;
       if (Math.abs(e.root.position.x - previous) > 1e-5) movingFrames++;
       previous = e.root.position.x;
     });
-    return { traversals, raisedProp, jump, canopy: { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames } };
+    return { traversals, raisedProp, jumps, canopy: { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames } };
   })()`);
   const props = state.traversals.every(row => row.x > 16 && row.maxY >= 0.75 && row.maxY <= 1.05 && !row.airborne && !row.stopped && row.maxVisibleStep < 0.25);
   const raisedProp = state.raisedProp.rockY > 0.8 && state.raisedProp.assignedExit && state.raisedProp.y < 0.05
     && Math.abs(state.raisedProp.x - 12) > 1.5 && !state.raisedProp.airborne && state.raisedProp.stuck < 0.65;
-  const jump = state.jump.charged > 0.99 && state.jump.airborne && state.jump.vx > 5 && state.jump.moved > 0.5;
+  const jump = state.jumps.every(row => {
+    const speed = row.run ? 2.7 : 0.9, travel = speed * 39 / 60;
+    return row.gait === (row.run ? "gallop" : "knuckle") && row.firstAir && !row.stopped
+      && Math.abs(row.startSpeed - speed) < 1e-5 && Math.abs(row.switchSpeed - (row.run ? 0.9 : 2.7)) < 1e-5
+      && Math.abs(row.heldTravel - travel) < travel * 0.01 && Math.abs(row.vx - speed) < speed * 0.01
+      && row.heldJumps === 1 && row.heldLanded && row.releaseJumps === 1 && row.secondCount === 2 && row.thirdCount === 2
+      && row.thirdVelocity < row.secondVelocity && row.secondLift > row.peak * 0.98 && row.secondLift < row.peak * 1.02 && row.landed && row.nextJump;
+  });
   const canopy = state.canopy.lowFrames > 0 && !state.canopy.bipedFrames && state.canopy.movingFrames > 10 && state.canopy.endX < state.canopy.startX - 1;
-  record("gorilla traversal: crates, barrels and rocks keep a continuous grounded gallop, an autonomous gorilla leaves a destroyed raised prop, a running jump reaches full charge in 0.65 seconds without losing momentum, and low cover permits an all-fours retreat", props && raisedProp && jump && canopy, JSON.stringify(state));
+  record("gorilla traversal: crates, barrels and rocks keep a continuous grounded gallop, an autonomous gorilla leaves a destroyed raised prop, fresh presses jump immediately and once more in air without held repeats or cancellation exploits, and low cover permits an all-fours retreat", props && raisedProp && jump && canopy, JSON.stringify(state));
+} }, { name: "gorilla camera modes", why: "regression: controlled gorillas lacked first-person and birds-eye cameras, carry/combat camera controls, and a combat crosshair", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, P = B.clankerPlay, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl");
+    const canvas = document.getElementById("scene"), reticle = document.getElementById("weapon-reticle"), button = document.getElementById("mode-hud");
+    P.release(); C.release(); C.cancelDebugMove(e);
+    for (const prop of B.props) prop.node.visible = false;
+    Object.assign(e.root.position, { x: 7, y: B.island.surfaceAt(7, 0), z: 0 });
+    Object.assign(e, { active: true, controlled: false, recover: 0, lounge: "", parked: false, biped: false,
+      heading: Math.PI / 2, speed: 0, lowCover: false, pound: 0, beat: 0, stand: 0 });
+    Object.assign(e.drive, { airborne: false, passiveFall: false, grounded: true, resume: false, vx: 0, vy: 0, vz: 0, motionRecover: 0, motionEnvelope: false });
+    e.climb.active = e.jump.active = e.fire.burning = e.fire.rolling = false; e.root.visible = true;
+    e.gorilla.poseManaged(2, 7, e.root.position.y, 0, e.heading, 0, false, false, "", e.motion);
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+    const originalHeadHidden = !!e.gorilla.parts.head.cameraHidden, near = B.camera.near;
+    reticle.dataset.sight = reticle.dataset.close = reticle.dataset.occluded = "true";
+    reticle.dataset.hit = "object"; reticle.style.left = "31px"; reticle.style.top = "47px"; reticle.style.setProperty("--reticle-hit", "1");
+    const possessed = P.possess(e, true), rows = [];
+    canvas.focus();
+    const key = (type, value, code = "Key" + value.toUpperCase(), location = 0) => window.dispatchEvent(new KeyboardEvent(type,
+      { key: value, code, location, bubbles: true, cancelable: true }));
+    const tap = (value, code, location) => { key("keydown", value, code, location); key("keyup", value, code, location); };
+    const wheel = deltaY => canvas.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
+    const sample = name => {
+      B.advance(1, 1 / 60);
+      const camera = B.camera, p = e.root.position, orbit = B.pilot.orbit;
+      const row = { name, view: P.view, combat: P.combat, hidden: reticle.hidden,
+        visible: getComputedStyle(reticle).visibility, stroke: getComputedStyle(reticle.querySelector("svg")).stroke,
+        headHidden: !!e.gorilla.parts.head.cameraHidden, mix: camera.orthoMix, cutaway: B.renderOpts.birdsEyeCutaway,
+        hudView: button.dataset.view, hudCombat: button.dataset.combat,
+        side: (camera.target.x - p.x) * Math.cos(orbit.yaw) - (camera.target.z - p.z) * Math.sin(orbit.yaw),
+        yaw: orbit.yaw, finite: [camera.position.x, camera.position.y, camera.position.z,
+          camera.target.x, camera.target.y, camera.target.z].every(Number.isFinite) };
+      rows.push(row); return row;
+    };
+    try {
+      const shoulder = sample("combat shoulder");
+      const reset = reticle.dataset.sight === "false" && reticle.dataset.close === "false" && reticle.dataset.occluded === "false"
+        && reticle.dataset.hit === "none" && !reticle.style.left && !reticle.style.top && !reticle.style.getPropertyValue("--reticle-hit");
+      tap("Shift", "ShiftRight", 2); const swapped = sample("other shoulder");
+      tap("x"); sample("carry shoulder");
+      wheel(-120); sample("carry first-person");
+      tap("x"); sample("combat first-person");
+      wheel(120); sample("combat shoulder again");
+      // A fresh wheel gesture may cross the next stop; one gesture cannot skip both close views.
+      P.zoom(2, "overhead"); const overhead = sample("combat birds-eye");
+      key("keydown", "q"); B.advance(0.3, 1 / 60); key("keyup", "q");
+      const turned = sample("rotated birds-eye");
+      tap("n"); const north = sample("north birds-eye");
+      tap("x"); sample("carry orbit");
+      tap("x"); sample("combat birds-eye again");
+      P.zoom(0.01, "inward"); sample("combat shoulder from overhead");
+      P.zoom(0.5, "first-person"); sample("first-person before release");
+      const eye = { ...B.camera.position }, target = { ...B.camera.target };
+      P.release();
+      const released = { active: P.active, controlled: e.controlled, headHidden: !!e.gorilla.parts.head.cameraHidden,
+        hidden: reticle.hidden, target: reticle.dataset.target, hit: reticle.dataset.hit,
+        positionCleared: !reticle.style.left && !reticle.style.top, near: B.camera.near,
+        eyeDelta: Math.hypot(B.camera.position.x - eye.x, B.camera.position.y - eye.y, B.camera.position.z - eye.z),
+        targetDelta: Math.hypot(B.camera.target.x - target.x, B.camera.target.y - target.y, B.camera.target.z - target.z) };
+      return { possessed, reset, rows, swap: shoulder.side * swapped.side < 0,
+        turn: Math.abs(turned.yaw - overhead.yaw), north: Math.atan2(Math.sin(north.yaw), Math.cos(north.yaw)), originalHeadHidden, near, released };
+    } finally { key("keyup", "q"); key("keyup", "Shift", "ShiftRight", 2); P.release(); }
+  })()`);
+  const views = ["shoulder", "shoulder", "shoulder", "first-person", "first-person", "shoulder", "birds-eye", "birds-eye", "birds-eye", "orbit", "birds-eye", "shoulder", "first-person"];
+  const modes = [true, true, false, false, true, true, true, true, true, false, true, true, true];
+  const cameras = state.rows.length === views.length && state.rows.every((row, i) => row.finite && row.view === views[i] && row.combat === modes[i]
+    && row.hudView === row.view && row.hudCombat === String(row.combat) && row.hidden === !row.combat
+    && (!row.combat || row.visible === "visible" && row.stroke === "rgb(255, 255, 255)")
+    && row.headHidden === (row.view === "first-person") && row.mix === (row.view === "birds-eye" ? 1 : 0)
+    && row.cutaway === (row.view === "birds-eye"));
+  const released = state.released;
+  record("gorilla camera: carry and combat share first-person, shoulder and distant views; Right Shift swaps shoulder, Q rotates birds-eye and N faces north; combat has a white-ring crosshair and release restores the head without moving the camera",
+    state.possessed && state.reset && cameras && state.swap && state.turn > 0.2 && Math.abs(state.north) < 0.001
+    && !released.active && !released.controlled && released.headHidden === state.originalHeadHidden && released.hidden
+    && released.target === "none" && released.hit === "none" && released.positionCleared && released.near === state.near
+    && released.eyeDelta < 1e-6 && released.targetDelta < 1e-6, JSON.stringify(state));
+} }, { name: "gorilla wall destination", why: "regression: commanding a roof gorilla to a lower point farther along the cave face stalled at the crest instead of reaching the clicked wall", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, S = BL.scene, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), root = BL.scenes.hub.root;
+    B.pilot.release(true); C.release(); C.cancelDebugMove(e);
+    for (const other of C.list) if (other !== e) {
+      other.owner.override = other.owner.state = "away"; other.owner.bedTravel.mode = "";
+      other.controlled = other.drive.airborne = other.climb.active = other.fire.rolling = other.active = other.root.visible = false;
+    }
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    for (const prop of B.props) prop.node.visible = false;
+    const mouth = B.island.mouths.find(m => m.id === "c3"), cr = Math.cos(mouth.ry), sr = Math.sin(mouth.ry);
+    const start = { x: mouth.x - cr * 2 - sr * 4.8, y: 0, z: mouth.z + sr * 2 - cr * 4.8 };
+    start.y = B.island.surfaceAt(start.x, start.z);
+    // The target comes from the real cave face, independently of its navigation
+    // graph: a horizontal ray at a lower height and farther across the wall.
+    const terrain = S.createNode({ geometry: B.island.geometry });
+    const ray = BL.weaponTargets.create([{ node: terrain, owner: {}, radius: 0 }]);
+    const target = { node: null, owner: null, x: 0, y: 0, z: 0, normal: { x: 0, y: 0, z: 0 } };
+    if (!ray.ray(target, mouth.x + cr * 3.8 + sr * 8, start.y - 2.5,
+      mouth.z - sr * 3.8 + cr * 8, -sr, 0, -cr, 20)) return { fixture: false };
+    Object.assign(e.root.position, start);
+    Object.assign(e, { active: true, controlled: false, mode: "chilling", phase: "chill", route: "", fromSite: -1,
+      pendingSite: -1, hasSlot: false, lounge: "", loungeDepart: false, parked: false, biped: false,
+      recover: 0, rest: 1000, heading: mouth.ry, speed: 0, pound: 0, beat: 0, stand: 0, blocked: 0,
+      exitFootprint: false, lowCover: false, footprintMode: "walk", radius: BL.clankers.WALK_RADIUS, height: BL.clankers.WALK_HEIGHT });
+    e.owner.state = "chilling"; e.root.visible = true;
+    Object.assign(e.drive, { airborne: false, passiveFall: false, grounded: true, resume: false, jumpHeld: false,
+      jumpDown: false, jumpPressed: false, jumps: 0, vx: 0, vy: 0, vz: 0, motionRecover: 0, motionEnvelope: false });
+    e.jump.active = e.fire.burning = e.fire.rolling = false; e.fire.rollRecover = 0;
+    Object.assign(e.climb, { active: false, searchPending: false, searchDeferred: false, claimPending: false,
+      crestPending: false, retry: 0, searchCursor: 0, debugStuck: false, debugStop: -1 });
+    Object.assign(e.motion, { climb: 0, climbBlend: NaN, climbSide: 0, climbDirection: 0, climbStride: 0,
+      mantle: 0, roll: 0, rollAngle: 0, charge: 0,
+      landing: 0, takeoff: 0, supportOffset: 0, lab: false, labRunIn: false, labWork: "", smash: false });
+    e.gorilla.poseManaged(2, start.x, start.y, start.z, e.heading, 0, false, false, "", e.motion);
+    S.updateWorld(root); B.headquarters.solids.props.sync();
+    // surfaceAt only describes the root's column. Settle the complete footprint on a nearby roof tread
+    // and certify the actual rig before issuing the same lower lateral wall destination.
+    const requestedStart = { ...start }, solid = (x, y, z) => B.island.solidAt(x, y, z)
+      && B.island.solidAt(x - 0.004, y, z) && B.island.solidAt(x + 0.004, y, z)
+      && B.island.solidAt(x, y - 0.004, z) && B.island.solidAt(x, y + 0.004, z)
+      && B.island.solidAt(x, y, z - 0.004) && B.island.solidAt(x, y, z + 0.004);
+    const clearProps = (_entry, x, y, z, nx, ny, nz, radius, height, _actors, _riders, nr = radius, nh = height) =>
+      B.headquarters.solids.props.segmentClear(x, y, z, nx, ny, nz, radius, height, null, nr, nh);
+    let validStart = false;
+    for (let i = 0; i < 25; i++) {
+      const distance = i ? Math.ceil(i / 8) * 0.7 : 0, angle = i * Math.PI / 4;
+      const x = requestedStart.x + Math.sin(angle) * distance, z = requestedStart.z + Math.cos(angle) * distance;
+      let y = B.island.surfaceAt(x, z);
+      e.compact = e.gorilla.compact;
+      for (let settle = 0; settle < 8; settle++) {
+        const floor = C.supportAt(e, x, z, y, 0.52, e.heading);
+        if (!Number.isFinite(floor) || Math.abs(floor - y) < 1e-5) { y = floor; break; }
+        y = floor;
+      }
+      if (!Number.isFinite(y) || Math.abs(y - requestedStart.y) > 1.2) continue;
+      e.gorilla.poseManaged(2, x, y, z, e.heading, 0, false, false, "", e.motion);
+      if (!e.gorilla.climbPoseClear(0, x, y, z, e.heading, e.motion, solid, clearProps, e, 0, true)) continue;
+      Object.assign(start, { x, y, z }); validStart = true; break;
+    }
+    if (!validStart) return { fixture: false, reason: "No supported clear roof start", requestedStart };
+    S.updateWorld(root);
+    const moveTo = (hit) => {
+      const from = { ...e.root.position }, recoveries = e.stuck.recoveries;
+      const accepted = C.debugMove(e, hit.x, hit.y, hit.z, hit.normal);
+      let seconds = 0, maxStep = 0, climbing = 0, verticalExcursion = 0, overlap = null, stayedHanging = e.climb.active;
+      let px = from.x, py = from.y, pz = from.z;
+      while (accepted && seconds < 45 && e.debugMove.status !== "arrived" && e.debugMove.status !== "blocked") {
+        B.advance(1 / 30, 1 / 30); seconds += 1 / 30;
+        const p = e.root.position;
+        maxStep = Math.max(maxStep, Math.hypot(p.x - px, p.y - py, p.z - pz));
+        verticalExcursion = Math.max(verticalExcursion, Math.abs(p.y - from.y));
+        px = p.x; py = p.y; pz = p.z;
+        if (e.climb.active) climbing++; else stayedHanging = false;
+        S.updateWorld(e.root, root.world);
+        if (!overlap) S.traverseVisible(e.root, node => {
+          if (overlap || !node.geometry) return;
+          const verts = node.geometry.verts, m = node.world;
+          for (let i = 0; i < verts.length; i += 3) {
+            const x = m[0] * verts[i] + m[4] * verts[i + 1] + m[8] * verts[i + 2] + m[12];
+            const y = m[1] * verts[i] + m[5] * verts[i + 1] + m[9] * verts[i + 2] + m[13];
+            const z = m[2] * verts[i] + m[6] * verts[i + 1] + m[10] * verts[i + 2] + m[14];
+            // Millimetre contact is allowed; a rendered vertex enclosed in stone
+            // on every side is penetration, including during the mount transition.
+            if (B.island.solidAt(x, y, z) && B.island.solidAt(x - 0.004, y, z) && B.island.solidAt(x + 0.004, y, z)
+              && B.island.solidAt(x, y - 0.004, z) && B.island.solidAt(x, y + 0.004, z)
+              && B.island.solidAt(x, y, z - 0.004) && B.island.solidAt(x, y, z + 0.004)) { overlap = { x, y, z, seconds }; break; }
+          }
+        });
+      }
+      const p = e.root.position, dx = p.x - hit.x, dz = p.z - hit.z;
+      return { accepted, seconds, from, target: { x: hit.x, y: hit.y, z: hit.z }, end: { ...p },
+        status: e.debugMove.status, reason: e.debugMove.reason, climbing, hanging: e.climb.active, stayedHanging,
+        lateral: Math.abs((p.x - from.x) * cr - (p.z - from.z) * sr), drop: from.y - p.y, verticalExcursion,
+        tangentError: Math.abs(dx * hit.normal.z - dz * hit.normal.x), outwardGap: dx * hit.normal.x + dz * hit.normal.z,
+        verticalError: Math.abs(p.y - hit.y), maxStep, overlap, recoveries: e.stuck.recoveries - recoveries };
+    };
+    const first = moveTo(target);
+    // Retarget the hanging gorilla along the same real wall without moving it
+    // or replacing the climb state. A route over the roof is not a wall traverse.
+    const sideways = { node: null, owner: null, x: 0, y: 0, z: 0, normal: { x: 0, y: 0, z: 0 } };
+    const p = e.root.position, sideX = (p.x - mouth.x) * cr - (p.z - mouth.z) * sr - 2.8;
+    const secondHit = first.status === "arrived" && first.hanging && ray.ray(sideways,
+      mouth.x + cr * sideX + sr * 8, target.y, mouth.z - sr * sideX + cr * 8, -sr, 0, -cr, 20);
+    const second = secondHit ? moveTo(sideways) : null;
+    C.cancelDebugMove(e);
+    // Campaign curated-0002 reached this c11 rim with both fists above its
+    // stone. Check the actual rendered palms throughout a grip cycle, separate
+    // from the planner's arrival status and its collision-envelope samples.
+    Object.assign(e.motion, { climb: 1, climbBlend: 1, climbDirection: -0.6255252611070319,
+      climbSide: -0.6255252611070318, mantle: 0, supportOffset: 0 });
+    const grips = [], gripHit = { node: null, owner: null, x: 0, y: 0, z: 0, normal: { x: 0, y: 0, z: 0 } }; let poseMs = 0, previewMs = 0;
+    for (let sample = 0; sample < 13; sample++) {
+      e.motion.climbStride = -4.118063882033883 + sample * 0.1;
+      const now = performance.now();
+      e.gorilla.poseManaged(2, -9.302193461208958, 4.39795073400838, -18.257134086425605, Math.PI, 0, false, false, "", e.motion);
+      poseMs += performance.now() - now;
+      const previewStart = performance.now(), p = e.root.position;
+      const previewClear = e.gorilla.climbPoseClear(1 / 30, p.x, p.y, p.z, Math.PI, e.motion, solid, clearProps, e);
+      previewMs += performance.now() - previewStart;
+      S.updateWorld(e.root, root.world);
+      let gap = Infinity, overlap = null;
+      S.traverseVisible(e.root, node => {
+        if (!node.geometry) return;
+        const v = node.geometry.verts, m = node.world, clip = node.geometry.clipPlane, hand = node === e.parts.armL || node === e.parts.armR;
+        let low = Infinity, high = -Infinity;
+        if (hand) for (let i = 1; i < v.length; i += 3) { low = Math.min(low, v[i]); high = Math.max(high, v[i]); }
+        for (let i = 0; i < v.length; i += 3) {
+          const x = m[0] * v[i] + m[4] * v[i + 1] + m[8] * v[i + 2] + m[12];
+          const y = m[1] * v[i] + m[5] * v[i + 1] + m[9] * v[i + 2] + m[13];
+          const z = m[2] * v[i] + m[6] * v[i + 1] + m[10] * v[i + 2] + m[14];
+          if (clip && clip[0] * x + clip[1] * y + clip[2] * z + clip[3] > 0) continue;
+          if (!overlap && solid(x, y, z)) overlap = { x, y, z, hand };
+          if (!hand || v[i + 1] > low + (high - low) * 0.15 + 1e-6) continue;
+          if (B.island.solidAt(x, y, z)) gap = 0;
+          else if (ray.ray(gripHit, x, y, z, 0, 0, -1, 3)) gap = Math.min(gap, gripHit.distance);
+        }
+      });
+      grips.push({ gap: Number.isFinite(gap) ? gap : null, overlap, previewClear });
+    }
+    return { fixture: start.y > 3 && Math.abs(target.normal.y) < 0.2,
+      first, secondFixture: !!secondHit && Math.abs(sideways.normal.y) < 0.2, second, grips, poseMs, previewMs };
+  })()`);
+  const safeArrival = row => row && row.accepted && row.status === "arrived" && row.hanging && row.climbing > 15
+    && row.tangentError <= 0.8 && row.outwardGap > 0.3 && row.outwardGap < 2 && row.verticalError < 0.5
+    && row.maxStep < 0.22 && !row.overlap && !row.recoveries;
+  record("gorilla wall destination: a roof gorilla reaches the clicked lower lateral wall grip through continuous climbing without relocation or terrain penetration",
+    state.fixture && safeArrival(state.first) && state.first.lateral > 3.5 && state.first.drop > 1.5, JSON.stringify(state.first || state));
+  record("gorilla wall destination: a second click moves the hanging gorilla sideways along the wall without dismounting, teleporting or entering stone",
+    state.secondFixture && safeArrival(state.second) && state.second.stayedHanging
+    && state.second.lateral > 1.2 && state.second.verticalExcursion < 0.7, JSON.stringify(state.second || state));
+  record("gorilla wall grip: lowered hands contact the uneven cave rim throughout their cycle without any rendered mesh penetrating stone",
+    state.grips?.length === 13 && state.grips.every(row => row.gap !== null && row.gap < 0.5 && !row.overlap && row.previewClear),
+    JSON.stringify({ grips: state.grips, poseMs: state.poseMs, previewMs: state.previewMs }));
+  const labTransition = await b.evaluate(`(() => {
+    const B = __ooga, S = BL.scene, e = B.clankers.list.find(e => e.owner.traits.name === "portlandhodl"), root = BL.scenes.hub.root;
+    B.clankers.cancelDebugMove(e);
+    Object.assign(e.motion, { climb: 0, climbBlend: NaN, climbDirection: 0, climbSide: 0, climbStride: 0, mantle: 0,
+      climbGripX: NaN, climbGripY: NaN, climbGripZ: NaN, labRunIn: false, labWork: "", labSqueeze: false,
+      roll: 0, rollAngle: 0, charge: 0, landing: 0, takeoff: 0, supportOffset: 0, smash: false });
+    const center = node => {
+      const b = S.boundsOf(node.geometry), x = (b.min[0] + b.max[0]) / 2, y = (b.min[1] + b.max[1]) / 2, z = (b.min[2] + b.max[2]) / 2, m = node.world;
+      return [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]];
+    };
+    const rows = [];
+    for (const entering of [true, false]) {
+      // These adjacent roots straddle the lab boundary from curated-0000's
+      // captured snap; the rest of the walk keeps its real 0.9 m/s stride.
+      const x = entering ? -10.735000000000095 : -10.750000000000096;
+      const z = entering ? -18.593565419251977 : -18.61954618136551, sign = entering ? -1 : 1;
+      e.motion.lab = !entering;
+      e.gorilla.poseManaged(2, x, 0, z, 3.665191429188082, 0.9, false, !entering, "", e.motion);
+      S.updateWorld(e.root, root.world);
+      let head = center(e.parts.head), torso = center(e.parts.torso), maxStep = 0;
+      const before = e.gorilla.debug.pitch;
+      e.motion.lab = entering;
+      for (let frame = 1; frame <= 24; frame++) {
+        e.gorilla.poseManaged(1 / 30, x + sign * frame * 0.015, 0, z + sign * frame * 0.02598076211353316,
+          3.665191429188082, 0.9, false, entering, "", e.motion);
+        S.updateWorld(e.root, root.world);
+        const nextHead = center(e.parts.head), nextTorso = center(e.parts.torso);
+        maxStep = Math.max(maxStep, Math.hypot(...nextHead.map((n, i) => n - head[i])), Math.hypot(...nextTorso.map((n, i) => n - torso[i])));
+        head = nextHead; torso = nextTorso;
+      }
+      const after = e.gorilla.debug.pitch;
+      e.gorilla.poseManaged(2, e.root.position.x, e.root.position.y, e.root.position.z, 3.665191429188082, 0.9, false, entering, "", e.motion);
+      const settled = e.gorilla.debug.pitch, gait = e.gorilla.debug.gait;
+      let workRaise = null;
+      if (entering) {
+        S.updateWorld(e.root, root.world); const handY = center(e.parts.armR)[1];
+        e.motion.labWork = "touch"; e.motion.labSide = 1;
+        e.gorilla.poseManaged(0.5, e.root.position.x, e.root.position.y, e.root.position.z, 3.665191429188082, 0, false, true, "", e.motion);
+        S.updateWorld(e.root, root.world); workRaise = center(e.parts.armR)[1] - handY;
+        e.motion.labWork = "";
+      }
+      rows.push({ entering, before, after, settled, gait, maxStep, workRaise });
+    }
+    return rows;
+  })()`);
+  record("gorilla lab stance: entering and leaving the lab smoothly animate the rendered head and torso instead of snapping upright or onto all fours",
+    labTransition.every(row => row.maxStep < 0.3 && Math.abs(row.after - row.settled) < 0.025
+      && (row.entering ? row.gait === "upright" && row.before - row.after > 0.65 && row.workRaise > 0.4
+        : row.gait === "knuckle" && row.after - row.before > 0.65)), JSON.stringify(labTransition));
 } }] });
 scene("hub", { label: "mirror clanker", query: "solo=1&character=portlandhodl&status=clankin", steps: [{ name: "mirror clanker stays inside", why: "regression: a clanker turned around after crossing the mirror, poked its head back out, and worked beside a glowing generic box", run: async (b) => {
   const state = await b.evaluate(`(() => { const B = __ooga, C = B.clankers, siteIndex = C.sites.findIndex(s => s.mirrorRoom), site = C.sites[siteIndex], m = site.mouth, e = C.list[0], localX = p => (p.x - m.x) * site.cr - (p.z - m.z) * site.sr, localZ = p => (p.x - m.x) * site.sr + (p.z - m.z) * site.cr, place = (x, z) => ({ x: m.x + site.cr * x + site.sr * z, y: m.floorY, z: m.z - site.sr * x + site.cr * z }); e.owner.state = "working"; e.owner.work.site = e.owner.work.plannedSite = e.site = siteIndex; e.pendingSite = -1; e.hasSlot = true; e.slotIndex = 0; Object.assign(e, { slotX: place(0, -4.92).x, slotY: m.floorY, slotZ: place(0, -4.92).z, phase: "travel", route: "enter", fromSite: -1, entryTurn: false, blocked: 0, retry: 0 }); Object.assign(e.root.position, place(0, 0)); e.heading = m.ry + Math.PI; B.advance(0.25, 1 / 60); const entry = { turn: e.entryTurn, goal: localZ({ x: e.goalX, z: e.goalZ }) }; Object.assign(e.root.position, place(0, -4.92)); e.phase = "work"; e.route = ""; e.goalX = e.slotX; e.goalY = e.slotY; e.goalZ = e.slotZ; let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, distance = 0, lastX = e.root.position.x, lastZ = e.root.position.z; for (let t = 0; t < 18; t += 1 / 30) { B.advance(1 / 30, 1 / 30); const x = localX(e.root.position), z = localZ(e.root.position); minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); distance += Math.hypot(e.root.position.x - lastX, e.root.position.z - lastZ); lastX = e.root.position.x; lastZ = e.root.position.z; } const control = B.matrixGate.button, lever = B.matrixGate.lever; return { room: m.room, entry, minX, maxX, minZ, maxZ, distance, recoveries: e.stuck.recoveries, equipment: C.equipment.filter(item => item.site === siteIndex).length, leverY: control.position.y, leverScale: control.scale.y, leverZ: control.position.z, leverTagged: control.geometry.matrixCave !== undefined && control.children.every(node => node.geometry.matrixCave !== undefined) && lever.children.every(node => node.geometry.matrixCave !== undefined), leverNative: !!control.matrixNative, leverParts: control.children.length, gripParts: lever.children.length }; })()`);
@@ -6639,6 +7109,46 @@ const unitChecks = async () => {
     record("convex collision: cylinder contact and swept thin-wall collisions agree with independent box oracles", r.stationary === 20000 && r.swept === 5008 && r.contacts === 15 && r.failures.length === 0, JSON.stringify(r));
     record("convex collision: oblique fragments and tetrahedron interiors preserve exact contact boundaries", r.rotated === 10000 && r.tetrahedra === 5000 && r.failures.length === 0, JSON.stringify(r));
     record("convex collision: tilted ceilings clear grazing bodies and block penetrations and crossing sweeps", r.tilted === 10000 && r.ceiling === 4 && r.failures.length === 0, JSON.stringify(r));
+  }
+
+  {
+    // Regression: a tilted gorilla fits a ramp where an upright cylinder does
+    // not. Its replacement hull query must still catch thin crossed stone.
+    const overlap = BL.convex.hullsOverlap, random = BL.math.mulberry32(0x41c0f00d), failures = [];
+    const dot = (a, b) => a.reduce((sum, n, i) => sum + n * b[i], 0);
+    const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+    const box = (yaw, pitch, center, half) => {
+      const c = Math.cos(yaw), s = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const axes = [[c, 0, -s], [s*sp, cp, c*sp], [s*cp, -sp, c*cp]], vertices = [];
+      for (let i = 0; i < 8; i++) for (let k = 0; k < 3; k++) {
+        vertices.push(center[k] + axes.reduce((sum, axis, j) => sum + axis[k] * half[j] * (i & 1 << j ? 1 : -1), 0));
+      }
+      return { axes, vertices, center, half };
+    };
+    // Independent separating-axis oracle, rather than another GJK query.
+    const separated = (a, b) => {
+      const delta = a.center.map((n, i) => n - b.center[i]);
+      return [...a.axes, ...b.axes, ...a.axes.flatMap(x => b.axes.map(y => cross(x, y)))].some(axis => {
+        if (Math.hypot(...axis) < 1e-10) return false;
+        const extent = a.axes.reduce((sum, v, i) => sum + Math.abs(dot(axis, v)) * a.half[i], 0)
+          + b.axes.reduce((sum, v, i) => sum + Math.abs(dot(axis, v)) * b.half[i], 0);
+        return Math.abs(dot(delta, axis)) >= extent - 1e-7;
+      });
+    };
+    let samples = 0;
+    for (; samples < 2000; samples++) {
+      const a = box(random()*6.28, random()*2-1, [0, 0, 0], [random()+.01, random()+.01, random()+.01]);
+      const b = box(random()*6.28, random()*2-1, [random()*4-2, random()*4-2, random()*4-2], [random()+.01, random()+.01, random()+.01]);
+      if (overlap(a.vertices, b.vertices) === separated(a, b) && failures.length < 8) failures.push({ samples, a, b });
+    }
+    const stone = box(0, 0, [0, 0, 0], [.002, 1, 1]);
+    const from = box(.2, .3, [-3, 0, 0], [.4, .3, .4]), to = box(.2, .3, [3, 0, 0], [.4, .3, .4]);
+    const swept = !overlap(from.vertices, stone.vertices) && !overlap(to.vertices, stone.vertices)
+      && overlap([...from.vertices, ...to.vertices], stone.vertices);
+    const base = box(0, 0, [0, 0, 0], [.5, .5, .5]);
+    const contact = [1-1e-5, 1, 1+1e-5].every(y => overlap(base.vertices, box(0, 0, [0, y, 0], [.5, .5, .5]).vertices) === (y < 1));
+    record("convex collision: posed body hulls agree with independent oriented-box separation, preserve contact, and catch crossed thin walls",
+      samples === 2000 && failures.length === 0 && swept && contact, JSON.stringify({ samples, failures, swept, contact }));
   }
 
   {

@@ -11,7 +11,7 @@
   "use strict";
   const BL = window.BL = window.BL || {};
   const { hexToRgb, mulberry32 } = BL.math;
-  const { geometry, pushVert, face, box, bevelBox, lathe, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords, moved, turnedY, turnedZ } = BL.models;
+  const { geometry, pushVert, face, box, bevelBox, lathe, glassVessel, ring, merge, cached, variants, makeVox: vox, voxelGeometry: voxGeo, voxCoords, moved, turnedY, turnedZ } = BL.models;
   const blob = (v, { cx, cy, cz, rx, ry, rz, chip = 0, floor = -Infinity, rand, color }) => {
     for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       for (let y = Math.max(floor, Math.floor(cy - ry)); y <= Math.ceil(cy + ry); y++) {
@@ -124,7 +124,7 @@
     "-": ["000", "000", "111", "000", "000"],
     ".": ["000", "000", "000", "000", "010"]
   };
-  const SIGN_CELL = 0.075, SIGN_PIXEL = 0.061, SIGN_PAD = 0.855, SIGN_FRONT = 0.23;
+  const SIGN_CELL = 0.075, SIGN_PAD = 0.855, SIGN_FRONT = 0.23;
   const SIGN_CACHE = new Map();
   // The emblem each cave flies, 5 by 7: on its sign either side of the name and on its banners.
   const SIGN_ICONS = {
@@ -135,8 +135,7 @@
     glyph: ["#.##.", "##..#", ".#.#.", "#..##", ".##.#", "#.#..", "##.##"],
     banana: ["....#", "...##", "..##.", ".##..", "##...", "#....", "....."]
   };
-  // The sign emblems: 7x7 art in named inks, drawn a size up from the banners' SIGN_ICONS and ringed in a dark
-  // outline worked out from the art itself, so each reads as an enamel badge proud of the planks.
+  // The sign emblems: 7x7 art in named inks, ringed in a dark outline worked out from the art itself.
   const SIGN_BADGES = {
     bolt: { ink: { "#": "#ffcf2e", "+": "#fff1a0" }, rows: ["....+##", "...+##.", "..+##..", ".+#####", "....##.", "...##..", "..##..."] },
     die: { ink: { "#": "#f2efe8", "+": "#ffffff", "*": "#1f6f6a" }, rows: [".+++++.", "+*###*#", "+######", "+##*###", "+######", "+*###*#", ".#####."] },
@@ -146,6 +145,15 @@
     banana: { ink: { "#": "#f5d142", "+": "#fff3a0", "S": "#6b4a26" }, rows: [".....S.", ".....##", "....+#.", "...+##.", "..+##..", "#+##...", ".##...."] }
   };
   const BADGE_OUTLINE = "#2a1a0c", BADGE_CELLS = 9;
+  const BADGE_CELL = SIGN_CELL * 5 / 7, BADGE_GAP = SIGN_CELL * 2;
+  // The 32px favicon reduced to its 16px colour blocks; dots are transparent.
+  const FAVICON_INK = { d: "#47563b", g: "#657a56", G: "#7aa872", L: "#a6c889", y: "#736429", Y: "#f6d758" };
+  const FAVICON_ROWS = [
+    "................", ".......GG.......", ".....ggGGgg.....", "...gGLGggLLGg...",
+    "..dGLG....GLGd..", "....GG....gG....", ".......yy.......", ".GGg..yYYy..dGG.",
+    ".GGg..dYYd..gGG.", ".dGG...yy...GGd.", "..gLGg....gGLg..", "..gLLG....GLLg..",
+    "..dgGLGddGLGgd..", ".....GgGGgG.....", ".......GG.......", "................"
+  ];
   // Every art cell plus the ring of cells round it, as [col, row, colour, proud] on a 9x9 grid, top row first.
   const badgeCells = (name) => {
     const { ink, rows } = SIGN_BADGES[name], out = [];
@@ -173,10 +181,10 @@
     let cells = -1;
     for (const ch of text) cells += ch === " " ? 2 : 4;
     const textW = cells * SIGN_CELL;
-    const iconW = iconName ? SIGN_CELL * BADGE_CELLS : 0;
-    const width = Math.max(CAVE_SIGN_WIDTH, textW + SIGN_PAD + (iconName ? iconW + SIGN_CELL : 0));
+    const iconW = iconName ? BADGE_CELL * BADGE_CELLS : 0;
+    const width = Math.max(CAVE_SIGN_WIDTH, textW + SIGN_PAD + (iconName ? iconW + BADGE_GAP : 0));
     // The badge leads the name; the pair is centred together, so the name moves right by half the badge and its gap.
-    const shift = iconName ? (iconW + SIGN_CELL) * 0.5 : 0;
+    const shift = iconName ? (iconW + BADGE_GAP) * 0.5 : 0;
     const half = CAVE_SIGN_HEIGHT * 0.5, plankH = (CAVE_SIGN_HEIGHT - 0.04) / 3, depth = 0.3, mid = SIGN_FRONT - depth / 2;
     const geos = [];
     // Posts first, so the planks cover them and only their ends show.
@@ -184,8 +192,9 @@
     [[0.07, 0.03], [-0.05, -0.04], [0.11, 0.02]].forEach(([grow, shift], k) => {
       geos.push(bevelBox({ w: width + grow, h: plankH, d: depth, color: SIGN_PLANKS[k], bevel: 0.05, offset: { x: shift, y: half - plankH * (k + 0.5) - 0.02 * k, z: mid } }));
     });
-    // The dark panel the name sits on: one piece, a little proud of the planks, covering descenders too.
-    geos.push(bevelBox({ w: textW + 0.14, h: 0.52, d: 0.035, color: "#3f2513", bevel: 0.012, offset: { x: shift, y: -0.035, z: SIGN_FRONT + 0.0125 } }));
+    // One continuous dark panel backs the badge and name, with a glyph cell added above and below for descenders.
+    geos.push(bevelBox({ w: textW + (iconName ? iconW + BADGE_GAP : 0) + 0.14, h: 0.52 + 2 * SIGN_CELL, d: 0.035,
+      color: "#3f2513", bevel: 0.012, offset: { x: 0, y: 0, z: SIGN_FRONT + 0.0125 } }));
     // Letters as solid horizontal runs of whole cells, touching row to row, so a glyph is one clean shape.
     const run = (x0, y, n) => geos.push(box({ w: SIGN_CELL * n, h: SIGN_CELL, d: 0.07, color: SIGN_INK, emissive: 0.25, offset: { x: x0 + SIGN_CELL * (n - 1) * 0.5, y, z: SIGN_FRONT + 0.03 } }));
     let cursor = shift - textW * 0.5;
@@ -209,10 +218,23 @@
       cursor += SIGN_CELL * 4;
     }
     if (iconName) {
-      const badge = badgeCells(iconName);
-      const x0 = shift - textW * 0.5 - SIGN_CELL - iconW + SIGN_CELL * 0.5;
-      for (const [col, row, color, proud] of badge) {
-        geos.push(box({ w: SIGN_PIXEL + 0.014, h: SIGN_PIXEL + 0.014, d: proud ? 0.07 : 0.045, color, emissive: proud ? 0.35 : 0, offset: { x: x0 + col * SIGN_CELL, y: (4 - row) * SIGN_CELL, z: SIGN_FRONT + (proud ? 0.03 : 0.0175) } }));
+      const left = shift - textW * 0.5 - BADGE_GAP - iconW;
+      if (iconName === "favicon") {
+        const cell = iconW / FAVICON_ROWS.length;
+        for (let row = 0; row < FAVICON_ROWS.length; row++) for (let col = 0; col < FAVICON_ROWS[row].length; col++) {
+          const color = FAVICON_INK[FAVICON_ROWS[row][col]];
+          if (color) geos.push(box({ w: cell, h: cell, d: 0.07, color, emissive: 0.35,
+            offset: { x: left + (col + 0.5) * cell, y: (7.5 - row) * cell, z: SIGN_FRONT + 0.03 } }));
+        }
+      } else {
+        const badge = badgeCells(iconName);
+        let top = BADGE_CELLS, bottom = 0;
+        for (const cell of badge) { top = Math.min(top, cell[1]); bottom = Math.max(bottom, cell[1]); }
+        const center = (top + bottom) * 0.5;
+        for (const [col, row, color, proud] of badge) {
+          geos.push(box({ w: BADGE_CELL, h: BADGE_CELL, d: proud ? 0.07 : 0.045, color, emissive: proud ? 0.35 : 0,
+            offset: { x: left + (col + 0.5) * BADGE_CELL, y: (center - row) * BADGE_CELL, z: SIGN_FRONT + (proud ? 0.03 : 0.0175) } }));
+        }
       }
     }
     // Iron plates on the four corners, each held by two rivets.
@@ -251,15 +273,23 @@
   // Variant 0 is the full frame, 1 the jambs and 2 the lintel alone.
   const caveMouthRim = variants((part) => {
     const rand = mulberry32(31);
-    const v = vox();
+    const v = vox(), climbBoxes = [];
+    const fill = (x0, x1, y0, y1, z0, z1, color) => {
+      v.fill(x0, x1, y0, y1, z0, z1, color);
+      climbBoxes.push(x0 * VOX, y0 * VOX, (z0 - 1) * VOX,
+        (x1 + 1) * VOX, (y1 + 1) * VOX, z1 * VOX);
+    };
     const stone = pick(rand, 0, 1, 0.3);
     const light = pick(rand, 2, 0, 0.5);
     if (part !== 2) {
-      v.fill(-6, -6, 0, 5, 0, 1, stone);
-      v.fill(5, 5, 0, 5, 0, 1, stone);
+      fill(-6, -6, 0, 5, 0, 1, stone);
+      fill(5, 5, 0, 5, 0, 1, stone);
     }
-    if (part !== 1) v.fill(-5, 4, 6, 6, 0, 1, light);
+    if (part !== 1) fill(-5, 4, 6, 6, 0, 1, light);
     const geo = voxGeo(v, { unit: VOX, palette: CLIFF, origin: { x: 0, y: 0, z: -VOX } });
+    // The grippable stone uses the same occupied slabs as the rendered voxels.
+    // Keeping this small table avoids triangle queries in every wall probe.
+    geo.climbBoxes = new Float32Array(climbBoxes);
     geo.jambCenterX = 2.75;
     geo.frontZ = 0.5;
     geo.openingBounds = { minX: -2.5, maxX: 2.5, floorY: 0, ceilingY: 3, minZ: -0.5, maxZ: 0.5 };
@@ -317,6 +347,7 @@
     const geo = merge(...parts);
     geo.frontZ = frontZ;
     geo.sealBounds = { minX: -2.5, maxX: 2.5, minY: 0, maxY: 3, minZ: backZ, maxZ: stoneFront };
+    geo.climbBoxes = new Float32Array([-2.5, 0, backZ, 2.5, 3, stoneFront]);
     return geo;
   });
   const matrixLeverPlate = cached(() => merge(
@@ -409,12 +440,14 @@
       box({ w: 1.8, h: 0.12, d: 0.4, color: "#626f70", offset: { y: 1.08 } }),
       box({ w: 1.7, h: 0.1, d: 0.1, color: "#273437", offset: { y: 0.28, z: -0.14 } }),
       box({ w: 0.12, h: 0.35, d: 0.12, color: "#273437", offset: { y: 1.3, z: -0.18 } }),
-      box({ w: 1.26, h: 0.78, d: 0.13, color: "#16272b", offset: { y: 1.78, z: -0.2 } }),
-      box({ w: 1.12, h: 0.64, d: 0.025, color: "#164751", emissive: 0.5, offset: { y: 1.78, z: -0.12 } }),
+      box({ w: 1.26, h: 0.78, d: 0.13, color: "#1d2425", offset: { y: 1.78, z: -0.2 } }),
+      box({ w: 1.14, h: 0.66, d: 0.006, color: "#050607", offset: { y: 1.78, z: -0.131 } }),
       box({ w: 0.85, h: 0.055, d: 0.23, color: "#202c2f", offset: { y: 1.17, z: 0.1 } }),
       box({ w: 0.32, h: 0.68, d: 0.34, color: "#273437", offset: { x: 0.64, y: 0.39 } }),
       box({ w: 0.16, h: 0.035, d: 0.025, color: "#5de7c7", emissive: 1, offset: { x: 0.64, y: 0.62, z: 0.185 } })
     ];
+    for (const x of [-0.6, 0.6]) parts.push(box({ w: 0.05, h: 0.78, d: 0.018, color: "#303637", offset: { x, y: 1.78, z: -0.12 } }));
+    for (const y of [1.415, 2.145]) parts.push(box({ w: 1.16, h: 0.05, d: 0.018, color: "#303637", offset: { y, z: -0.12 } }));
     for (const x of [-0.79, 0.79]) for (const z of [-0.14, 0.14]) parts.push(box({ w: 0.1, h: 1.02, d: 0.1, color: "#344446", offset: { x, y: 0.51, z } }));
     // Display content belongs to createLabScreen. Baked code bars here sat
     // only 0.001 behind that surface and fought its depth at distant views.
@@ -430,12 +463,12 @@
     }
     return merge(...parts);
   });
-  const labBeaker = cached(() => merge(
-    lathe({ profile: [[0, 0], [0.14, 0], [0.15, 0.015], [0.15, 0.345], [0.162, 0.355], [0.17, 0.37],
-      [0.165, 0.385], [0.15, 0.39], [0.13, 0.385], [0.12, 0.37], [0.12, 0.1]],
-      segments: 32, color: "#efb348", emissive: 0.2 }),
-    box({ w: 0.16, h: 0.1, d: 0.015, color: "#e0e6d5", offset: { y: 0.16, z: 0.145 } })
-  ));
+  const labBeaker = variants((i) => glassVessel({
+    liquidProfile: [[0, 0], [0.115, 0], [0.12, 0.015], [0.12, i ? 0.17 : 0.08], [0, i ? 0.17 : 0.08]],
+    glassProfile: [[0.14, 0], [0.15, 0.015], [0.15, 0.345], [0.162, 0.355], [0.17, 0.37],
+      [0.165, 0.385], [0.15, 0.39], [0.13, 0.385], [0.12, 0.37], [0.12, 0.015], [0.11, 0]],
+    liquid: "#efb348", segments: 32
+  }));
   const labDie = cached(() => {
     const geometry = BL.models.die({ size: 0.26 });
     // Bench items share a base-at-zero origin and an explicit hand grip.
@@ -444,16 +477,14 @@
     return geometry;
   });
   const labTouchscreen = cached(() => {
-    const parts = [box({ w: 1.55, h: 0.98, d: 0.12, color: "#283b40", offset: { y: 2.27 } }),
-      box({ w: 1.39, h: 0.81, d: 0.025, color: "#255263", emissive: 0.65, offset: { y: 2.27, z: 0.075 } })];
+    const parts = [box({ w: 1.55, h: 0.98, d: 0.07, color: "#1d2425", offset: { y: 2.27, z: -0.015 } }),
+      box({ w: 1.43, h: 0.87, d: 0.006, color: "#050607", offset: { y: 2.27, z: 0.023 } })];
+    for (const x of [-0.755, 0.755]) parts.push(box({ w: 0.04, h: 0.98, d: 0.018, color: "#303637", offset: { x, y: 2.27, z: 0.03 } }));
+    for (const y of [1.8, 2.74]) parts.push(box({ w: 1.47, h: 0.04, d: 0.018, color: "#303637", offset: { y, z: 0.03 } }));
     for (const x of [-0.55, 0.55]) parts.push(box({ w: 0.09, h: 0.1, d: 0.49, color: "#344446", offset: { x, y: 2.26, z: -0.28 } }));
-    for (let i = 0; i < 4; i++) {
-      parts.push(box({ w: 0.42, h: 0.055, d: 0.012, color: "#93dfdf", emissive: 1, offset: { x: -0.34, y: 2.53 - i * 0.16, z: 0.096 } }));
-      parts.push(box({ w: 0.1, h: 0.12 + i * 0.1, d: 0.012, color: i % 2 ? "#efbc64" : "#70e2ac", emissive: 1, offset: { x: 0.07 + i * 0.15, y: 2.02 + i * 0.05, z: 0.096 } }));
-    }
     return merge(...parts);
   });
-  const LAB_CODE_COLORS = ["#102b33", "#47616a", "#b996eb", "#7ad8ec", "#b3d7cb", "#eac679", "#81d4a1"].map(hexToRgb);
+  const LAB_CODE_COLORS = ["#050607", "#47616a", "#b996eb", "#7ad8ec", "#b3d7cb", "#eac679", "#81d4a1"].map(hexToRgb);
   const LAB_CODE_SIGNS = {
     "=": ["000", "111", "000", "111", "000"], "(": ["010", "100", "100", "100", "010"],
     ")": ["010", "001", "001", "001", "010"], "{": ["011", "010", "100", "010", "011"],
@@ -482,9 +513,9 @@
   // the furniture's collision shell or its object-outline registrations.
   const labScreenContent = variants((kind) => {
     const geometry = { verts: [], faces: [], lines: [], castShadow: false };
-    const touch = kind === 1, z = touch ? 0.104 : -0.091;
+    const touch = kind === 1, z = touch ? 0.03 : -0.122;
     labScreenRect(geometry, touch ? -0.69 : -0.55, touch ? 1.87 : 1.47, touch ? 1.38 : 1.1,
-      touch ? 0.8 : 0.62, z - 0.001, 0, 0.35);
+      touch ? 0.8 : 0.62, z - 0.001, 0, 0);
     if (touch) {
       labScreenText(geometry, "SYS", 0.18, 2.58, z, 0.01, 4);
       labScreenText(geometry, "CPU", 0.17, 1.965, z, 0.007, 1);
@@ -517,7 +548,7 @@
   });
   const labIdentityScreen = cached(() => {
     const geometry = { verts: [], faces: [], lines: [], castShadow: false };
-    labScreenRect(geometry, -0.55, 1.47, 1.1, 0.62, -0.092, 0, 0.35);
+    labScreenRect(geometry, -0.55, 1.47, 1.1, 0.62, -0.123, 0, 0);
     geometry.faces[0].color = [0, 0, 0];
     // Preserve the supplied JPEG and its aspect ratio; the narrow side bars
     // remain black. Both renderers share one lazily decoded source image.
@@ -529,7 +560,7 @@
     const { createNode, addChild } = BL.scene;
     const node = createNode({ geometry: codeGeometry ? labScreenContent(kind) : labIdentityScreen(), position: { ...parent.position },
       rotation: { ...parent.rotation }, sightHidden: true, matrixNative: !codeGeometry });
-    const markers = [], strips = [], touch = kind === 1, z = touch ? 0.105 : -0.09;
+    const markers = [], strips = [], touch = kind === 1, z = touch ? 0.031 : -0.121;
     const span = LAB_CODE.length * 0.088, clock = station * 3.37 * 0.088 / LAB_SCROLL_SPEED;
     if (codeGeometry) for (let i = 0; i < 2; i++) {
       const strip = createNode({ geometry: codeGeometry, position: { x: 0,
@@ -576,9 +607,10 @@
         const home = { x: bench.position.x + Math.cos(facing) * offset + Math.sin(facing) * front,
           y: 1.14, z: i === 2 ? -1.08 : side < 0 ? -2.3 - i * 0.8 : -2.5 - i * 0.68 };
         const kind = side > 0 && i === 2 ? "die" : i === 1 ? "beaker" : "flask";
-        const geometry = kind === "die" ? labDie() : kind === "beaker" ? labBeaker() : BL.agent.labFlaskGeometry();
+        const geometry = kind === "die" ? labDie() : kind === "beaker" ? labBeaker(side > 0 ? 1 : 0) : BL.agent.labFlaskGeometry(side > 0 ? 1 : 0);
         if (i === 1) geometry.labGripY = 0.3;
         const item = createNode({ geometry, position: { ...home }, rotation: { x: 0, y: facing, z: 0 } });
+        BL.models.attachGlassShell(item);
         addChild(node, item);
         equipment.push({ node: item, parent: node, bench, home, homeRotation: { x: 0, y: facing, z: 0 }, homeScale: { x: 1, y: 1, z: 1 },
           station: i === 2 ? side < 0 ? 5 : 6 : stations.length, kind, rolling: false,
@@ -590,7 +622,7 @@
             minZ: kind === "die" ? -1.5 : sideZ - 1.3, maxZ: sideZ + 1.3, y: 1.13 },
           pickup: { x: home.x, y: home.y + geometry.labGripY, z: home.z } });
       }
-      stations.push({ x: side * (half - 2.06), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side });
+      stations.push({ x: side * (half - 1.78), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side });
     }
     for (const side of [-1, 1]) stations.push({ x: side * (half - 0.44 - 1.213094), y: 0, z: -1.08 + side * 0.272893, heading: side * Math.PI / 2, kind: "carry", side });
     const updateScreens = (dt, activeMask) => {
@@ -939,6 +971,44 @@
     puff(geo, x - rx * 0.1, y + ry * (i === 2 ? 0.72 : 0.82), z, rx * (i === 2 ? 0.8 : 0.62), ry * (i === 2 ? 0.3 : 0.2), rz * (i === 2 ? 0.78 : 0.6), MOSS, rand, 3, 8);
     return geo;
   });
+  // The shootable meadow stone has irregular shoulders and a moss cover that follows the upper facets.
+  const breakableRock = cached(() => {
+    const geo = geometry(), rand = mulberry32(449), rings = [], sides = 24;
+    const levels = [[0.04, 0.48, 0.4], [0.13, 0.66, 0.54], [0.28, 0.74, 0.61], [0.44, 0.76, 0.62],
+      [0.6, 0.73, 0.6], [0.76, 0.67, 0.55], [0.9, 0.58, 0.48], [1.02, 0.48, 0.4]];
+    const angles = [], wrinkles = [], mossEdge = [];
+    for (let s = 0; s < sides; s++) {
+      const a = s / sides * Math.PI * 2;
+      angles.push(a);
+      wrinkles.push(0.95 + 0.05 * Math.sin(a * 3 + 0.7) + 0.04 * Math.sin(a * 7 - 0.4) + rand() * 0.06);
+      mossEdge.push(0.63 + 0.09 * Math.sin(a * 2 + 0.5) + 0.08 * Math.sin(a * 5 - 0.7) + (rand() - 0.5) * 0.07);
+    }
+    for (let level = 0; level < levels.length; level++) {
+      const [y, rx, rz] = levels[level], row = [];
+      for (let s = 0; s < sides; s++) {
+        const a = angles[s], c = Math.cos(a), d = Math.sin(a), contour = wrinkles[s] * (0.97 + rand() * 0.06);
+        row.push(pushVert(geo, Math.sign(c) * Math.abs(c) ** 0.76 * rx * contour,
+          y + (level === 0 ? 0 : 0.02 * Math.sin(a * 4 + level) + (rand() - 0.5) * 0.025),
+          Math.sign(d) * Math.abs(d) ** 0.76 * rz * contour));
+      }
+      rings.push(row);
+    }
+    const stone = ["#363b38", "#414642", "#4c514c", "#595e57", "#656960"].map(hexToRgb);
+    const lichen = ["#3d4d38", "#465b38", "#526640", "#596d41"].map(hexToRgb);
+    const moss = ["#365824", "#456b2b", "#557d30", "#668b34", "#789b3d"].map(hexToRgb);
+    const ink = (y, edge) => y > edge + 0.07 ? moss[Math.floor(rand() * moss.length)]
+      : y > edge - 0.07 ? lichen[Math.floor(rand() * lichen.length)]
+        : stone[Math.floor(rand() * stone.length)];
+    for (let level = 0; level < rings.length - 1; level++) for (let s = 0; s < sides; s++) {
+      const next = (s + 1) % sides, lo = rings[level], hi = rings[level + 1];
+      const edge = (mossEdge[s] + mossEdge[next]) * 0.5;
+      face(geo, [lo[s], hi[s], hi[next]], ink((levels[level][0] + 2 * levels[level + 1][0]) / 3, edge));
+      face(geo, [lo[s], hi[next], lo[next]], ink((2 * levels[level][0] + levels[level + 1][0]) / 3, edge));
+    }
+    const top = pushVert(geo, -0.03, 1.11, 0.02), rim = rings[rings.length - 1];
+    for (let s = 0; s < sides; s++) face(geo, [top, rim[(s + 1) % sides], rim[s]], moss[Math.floor(rand() * moss.length)]);
+    return geo;
+  });
   const altarSlab = cached(() => lathe({
     profile: [[0, 0], [1, 0], [1, 0.82], [0.96, 1], [0, 1]],
     segments: 32,
@@ -977,17 +1047,27 @@
     return geo;
   };
   // Separate bevelled planks with thin dark gaps between them, chunky bevelled corner posts and rails, a diagonal
-  // brace across the two broad faces, and riveted iron brackets on the top corners. Variant 1 is open for
-  // the dressing kit's coal and dynamite; variant 2 marks the shootable ammo crate.
+  // brace across the two broad faces, and riveted iron brackets on the top corners. The decorative variant has
+  // its lid slid aside; variant 1 is open for coal and dynamite; variant 2 marks the shootable ammo crate.
   const woodCrate = variants((variant) => {
-    const open = variant === 1;
-    const parts = [box({ w: 0.76, h: 0.76, d: 0.76, color: "#3a2616", offset: { y: 0.45 } })];
+    const open = variant !== 2;
+    const parts = variant === 0 ? [
+      box({ w: 0.74, h: 0.08, d: 0.74, color: "#302012", offset: { y: 0.1 } }),
+      ...[-0.35, 0.35].map((x) => box({ w: 0.06, h: 0.7, d: 0.7, color: "#49301b", offset: { x, y: 0.48 } })),
+      ...[-0.35, 0.35].map((z) => box({ w: 0.7, h: 0.7, d: 0.06, color: "#49301b", offset: { y: 0.48, z } }))
+    ] : [box({ w: 0.76, h: 0.76, d: 0.76, color: "#3a2616", offset: { y: 0.45 } })];
     // Three planks a side, turned to face out of each of the four sides, and three across the lid.
     for (let side = 0; side < 4; side++) for (let k = 0; k < 3; k++) {
       const plank = bevelBox({ w: 0.78, h: 0.24, d: 0.05, color: CRATE_PLANKS[(k + side) % 3], bevel: 0.02, offset: { y: 0.18 + k * 0.27, z: 0.425 } });
       parts.push(turn(plank, side * Math.PI / 2));
     }
     if (!open) for (let k = 0; k < 3; k++) parts.push(bevelBox({ w: 0.78, h: 0.05, d: 0.24, color: CRATE_PLANKS[(k + 1) % 3], bevel: 0.02, offset: { y: 0.875, z: (k - 1) * 0.27 } }));
+    if (variant === 0) {
+      const lid = [];
+      for (let k = 0; k < 3; k++) lid.push(bevelBox({ w: 0.78, h: 0.05, d: 0.24, color: CRATE_PLANKS[(k + 1) % 3], bevel: 0.02, offset: { y: 0.97, z: (k - 1) * 0.27 } }));
+      for (const z of [-0.27, 0.27]) lid.push(bevelBox({ w: 0.72, h: 0.035, d: 0.08, color: WOOD_DK, bevel: 0.01, offset: { y: 1.005, z } }));
+      parts.push(moved(turn(merge(...lid), 0.25), 0.3, 0, 0.03));
+    }
     for (const [x, z] of [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]]) parts.push(bevelBox({ w: 0.12, h: 0.94, d: 0.12, color: WOOD_DK, bevel: 0.03, offset: { x, y: 0.47, z } }));
     for (const y of [0.05, 0.89]) {
       for (const z of [-0.42, 0.42]) parts.push(bevelBox({ w: 0.94, h: 0.1, d: 0.11, color: WOOD_DK, bevel: 0.025, offset: { y, z } }));
@@ -1011,8 +1091,8 @@
     ring({ r: 0.45, thickness: 0.03, y: 0.24, segments: 8, color: "#3a2a1a" }),
     ring({ r: 0.45, thickness: 0.03, y: 0.66, segments: 8, color: "#3a2a1a" })
   );
-  // The same bulge in fourteen staves of alternating wood, a chamfered lip, iron hoops set with rivets, an inset
-  // planked head with a bung and a spigot near the foot. Variant 1 marks the shootable ammo barrel.
+  // The same bulge in fourteen staves of alternating wood, a chamfered lip, iron hoops set with rivets, and a
+  // spigot near the foot. The decorative head is slid aside; variant 1 marks the shootable ammo barrel.
   const BARREL_PROFILE = [[0.3, 0], [0.33, 0.03], [0.4, 0.16], [0.43, 0.45], [0.4, 0.74], [0.33, 0.87], [0.31, 0.9]];
   const STAVES = ["#7a5230", "#8a5e36", "#6e4a2a"].map(hexToRgb);
   const barrel = variants((ammo) => {
@@ -1033,13 +1113,19 @@
       }
       return BARREL_PROFILE[BARREL_PROFILE.length - 1][0];
     };
-    const parts = [geo,
-      // The head, sunk a little inside the lip, three planks and a bung.
-      lathe({ profile: [[0.3, 0.875], [0, 0.875]], segments: segs, color: "#5e3f22" }),
-      ...[-1, 0, 1].map((k) => box({ w: 0.012, h: 0.006, d: 0.5, color: "#3e2814", offset: { x: k * 0.1, y: 0.879 } })),
-      lathe({ profile: [[0.045, 0.875], [0.045, 0.9], [0, 0.9]], segments: 8, color: "#3e2814" })
-    ];
-    moved(parts[parts.length - 1], 0.16, 0, 0.08);
+    const parts = [geo];
+    if (ammo) {
+      parts.push(lathe({ profile: [[0.335, 0.875], [0, 0.875]], segments: segs, color: "#5e3f22" }));
+      for (const k of [-1, 0, 1]) parts.push(box({ w: 0.012, h: 0.006, d: 0.5, color: "#3e2814", offset: { x: k * 0.1, y: 0.879 } }));
+      parts.push(moved(lathe({ profile: [[0.045, 0.875], [0.045, 0.9], [0, 0.9]], segments: 8, color: "#3e2814" }), 0.16, 0, 0.08));
+    } else {
+      // Overlap the staves at the lip so an oblique view cannot see through their shared edge.
+      const lidX = 0.13, lidZ = -0.02;
+      parts.push(lathe({ profile: [[0.325, 0.895], [0.29, 0.87], [0.27, 0.7], [0, 0.7]], segments: segs,
+        color: (t) => t < 0.3 ? "#76502f" : t < 0.6 ? "#5c3c24" : "#4d321e" }));
+      parts.push(moved(lathe({ profile: [[0.3, 0.92], [0.3, 0.97], [0, 0.97]], segments: segs, color: "#77502e" }), lidX, 0, lidZ));
+      for (const k of [-1, 0, 1]) parts.push(box({ w: 0.012, h: 0.007, d: 0.48, color: "#4b301a", offset: { x: lidX + k * 0.1, y: 0.975, z: lidZ } }));
+    }
     // Hoops: bevelled iron bands at the foot, either side of the belly and the lip, with rivets on the two middle ones.
     for (const [y, h] of [[0.05, 0.05], [0.26, 0.06], [0.64, 0.06], [0.85, 0.05]]) {
       const r = radiusAt(y) + 0.012;
@@ -1050,12 +1136,12 @@
       }
     }
     if (ammo) {
-      // The AK ammo meter's pixel banana follows the barrel's curve.
+      // Three AK ammo meter bananas follow the barrel's curve at even thirds.
       const art = AMMO_BANANA, cell = 0.04;
-      for (let row = 0; row < art.rows.length; row++) for (let col = 0; col < art.rows[row].length; col++) {
+      for (let mark = 0; mark < 3; mark++) for (let row = 0; row < art.rows.length; row++) for (let col = 0; col < art.rows[row].length; col++) {
         const ch = art.rows[row][col];
         if (ch === ".") continue;
-        const y = 0.45 - (row - 4) * cell, a = (col - 4) * cell / radiusAt(y), r = radiusAt(y) + 0.004;
+        const y = 0.45 - (row - 4) * cell, a = mark * Math.PI * 2 / 3 + (col - 4) * cell / radiusAt(y), r = radiusAt(y) + 0.004;
         parts.push(turn(box({ w: 0.006, h: cell, d: cell, color: art.ink[ch], offset: { x: r, y } }), a));
       }
     }
@@ -1148,7 +1234,18 @@
     );
   });
   const FLAME = [[0.34, 0.3, 0.22, 0, 0, "#ff9a2e"], [0.26, 0.22, 0.44, 0.02, -0.02, "#ffc148"], [0.2, 0.18, 0.6, 0.06, 0.03, "#ffc148"], [0.16, 0.14, 0.72, 0.03, 0.05, "#fff0b0"], [0.12, 0.12, 0.84, -0.01, 0.02, "#fff0b0"], [0.14, 0.16, 0.36, -0.16, 0.04, "#ffc148"], [0.12, 0.14, 0.5, 0.17, 0.1, "#ff9a2e"]];
-  const fireFlame = cached(() => noShadow(merge(...FLAME.map(([w, h, y, x, z, color]) => box({ w, h, d: w, color, emissive: 1, offset: { x, y, z } })))));
+  const fireFlame = cached(() => {
+    const geometry = noShadow(merge(...FLAME.map(([w, h, y, x, z, color]) => box({ w, h, d: w, color, emissive: 1, offset: { x, y, z } }))));
+    // Keep ignition aligned with the rendered flames, not the firepit's wide
+    // NPC avoidance circle. Each row is a box centre and half extents.
+    geometry.fireBoxes = new Float32Array(FLAME.length * 6);
+    for (let i = 0; i < FLAME.length; i++) {
+      const [w, h, y, x, z] = FLAME[i], at = i * 6;
+      geometry.fireBoxes[at] = x; geometry.fireBoxes[at + 1] = y; geometry.fireBoxes[at + 2] = z;
+      geometry.fireBoxes[at + 3] = w * 0.5; geometry.fireBoxes[at + 4] = h * 0.5; geometry.fireBoxes[at + 5] = w * 0.5;
+    }
+    return geometry;
+  });
   const WINGS = [["#f2c94c", "#e04a3a"], ["#f3efe4", "#6f9fca"]];
   const butterfly = variants((i) => {
     const [wing, spot] = WINGS[i];
@@ -1235,5 +1332,5 @@
       ...[-0.8, 0.8].map(brace)
     );
   });
-  BL.hubModels = { SIGN_GLYPHS, SIGN_ICONS, jetpack, jetFlame, caveMouthRim, mirrorPanel, matrixPrisonBars, sealedCaveFace, matrixLeverPlate, matrixLeverLights, matrixLeverHub, matrixLeverArm, matrixLeverGrip, matrixLeverLabels, matrixGlyph, caveSign, postSign, CAVE_SIGN_WIDTH, CAVE_SIGN_HEIGHT, gate, caveShelves, entropyLab, bedroll, tree, bush, rock, voxelRock, puff, leafy, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, altarSlab, altarBlock, woodCrate, barrel, flowerTuft, torch, grass, lawnTuft, lantern, firepit, fireFlame, butterfly, firefly, ember, vine, cloud, ladder, dock, TREE_HEIGHT };
+  BL.hubModels = { SIGN_GLYPHS, SIGN_ICONS, AMMO_BANANA, jetpack, jetFlame, caveMouthRim, mirrorPanel, matrixPrisonBars, sealedCaveFace, matrixLeverPlate, matrixLeverLights, matrixLeverHub, matrixLeverArm, matrixLeverGrip, matrixLeverLabels, matrixGlyph, caveSign, postSign, CAVE_SIGN_WIDTH, CAVE_SIGN_HEIGHT, gate, caveShelves, entropyLab, bedroll, tree, bush, rock, breakableRock, voxelRock, puff, leafy, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, altarSlab, altarBlock, woodCrate, barrel, flowerTuft, torch, grass, lawnTuft, lantern, firepit, fireFlame, butterfly, firefly, ember, vine, cloud, ladder, dock, TREE_HEIGHT };
 })();
