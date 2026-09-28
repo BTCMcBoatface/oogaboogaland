@@ -146,6 +146,16 @@
     const peerShape = (x, y, z, bx, by, bz) => {
       return torso || footprint;
     };
+    const roofAt = (x, y, z) => {
+      const roofs = ctx.climbRoofs || ctx.loungeRoofs;
+      if (!roofs || !ctx.surfaceAt || Math.abs(ctx.surfaceAt(x, z) - y) > 0.1) return -1;
+      let index = -1, nearest = 9 * 9;
+      for (let i = 0; i < roofs.length; i++) {
+        const roof = roofs[i], distance = (roof.x - x) ** 2 + (roof.z - z) ** 2;
+        if (y >= roof.y - 0.55 && distance < nearest) { nearest = distance; index = i; }
+      }
+      return index;
+    };
     const unusedRoof = (x, y, z, foot) => {
       const roofs = ctx.climbRoofs || ctx.loungeRoofs;
       if (!roofs || !ctx.surfaceAt || Math.abs(ctx.surfaceAt(x, z) - y) > 0.05) return false;
@@ -1377,9 +1387,11 @@
       prepareLounges(e);
       const p = e.root.position, compact = e.compact, radius = e.radius, height = e.height;
       const onRoof = unusedRoof(p.x, p.y, p.z, 0);
-      // Prefer climbing from the meadow, then favour a return trip instead
-      // of spending several long rests on neighbouring roof spots.
-      const wantsRoof = stayLevel ? onRoof : e.mode !== "working" && roofCount > 0 && e.loungeCycle < 2 && e.random() < (onRoof ? 0.25 : 0.9);
+      // Long rests keep outings occasional. Some rooftop departures visit a
+      // neighbouring roof before a later trip returns to the meadow.
+      const wantsRoof = stayLevel ? onRoof : e.mode !== "working" && roofCount > 0 && e.loungeCycle < 2 && e.random() < (onRoof ? 0.55 : 0.9);
+      const roofTour = !spawn && onRoof && wantsRoof && !stayLevel && e.random() < 0.5;
+      const currentRoof = roofTour ? roofAt(p.x, p.y, p.z) : -1;
       const pose = loungePose(e);
       e.compact = false; e.height = Math.max(height, 2.7);
       // Prefer a small group on some visits; a crowded group always falls back
@@ -1417,7 +1429,8 @@
           // built. Recheck the live firing lanes for cached candidates too.
           if (trafficAt(x, y, z)) continue;
           const distance = Math.hypot(x - p.x, z - p.z);
-          const tripLimit = !stayLevel && roof !== onRoof ? 18 : 12;
+          if (roofTour && !pass && roof && roofAt(x, y, z) === currentRoof) continue;
+          const tripLimit = roofTour && roof ? 24 : !stayLevel && roof !== onRoof ? 18 : 12;
           if (!spawn && (distance < 2 || distance > tripLimit || loungeFailed(e, x, z))) continue;
           // Filter a future walking arrival, not the current reclining body's
           // large fallback circle. The exact new rest and rise are proved by
@@ -1833,6 +1846,24 @@
       }
       jump.active = true; jump.wall = wall; jump.progress = 0; jump.reverse = false; jump.blocked = 0; e.jumps++;
       return true;
+    };
+    const tryRoofHop = (e, heading, destination) => {
+      const p = e.root.position, previousHeading = e.heading;
+      if (Math.cos(heading - previousHeading) < 0.85) return false;
+      const sx = Math.sin(heading), sz = Math.cos(heading);
+      e.heading = heading;
+      // Land on the destination hill's supported top. The shared jump proof
+      // bounds the gravity arc and sweeps every segment against live scenery.
+      for (let distance = 2; distance <= MAX_JUMP; distance += 0.4) {
+        const x = p.x + sx * distance, z = p.z + sz * distance, y = ctx.surfaceAt(x, z);
+        if (roofAt(x, y, z) !== destination
+          || Math.abs(pointSupportAt(x, z, y + 0.02) - y) > 0.05) continue;
+        if (prepareJump(e, x, y, z, 0, false, true)) {
+          e.roam.runUp = 0; e.motion.takeoff = 1; return true;
+        }
+      }
+      e.heading = previousHeading;
+      return false;
     };
     const tryRoofJump = (e, heading) => {
       const p = e.root.position, previousHeading = e.heading;
@@ -4200,7 +4231,15 @@
         && e.goalY > p.y + 0.8 && caveAt(p.x, p.y, p.z) < 0;
       const heading = Math.atan2(e.goalX - p.x, e.goalZ - p.z);
       const roofWall = roofTrip && cliffRiserAhead(p.x, p.z, heading, 1);
+      const currentRoof = !e.debugMove.active && e.mode === "chilling" && e.loungeRoof ? roofAt(p.x, p.y, p.z) : -1;
+      const destinationRoof = currentRoof >= 0 ? roofAt(e.goalX, e.goalY, e.goalZ) : -1;
+      const roofHop = destinationRoof >= 0 && destinationRoof !== currentRoof;
+      const roofGap = roofHop && ctx.surfaceAt(p.x + Math.sin(heading) * 4.5, p.z + Math.cos(heading) * 4.5) < p.y - 0.8;
       r.jumpRetry = Math.max(0, r.jumpRetry - dt);
+      if (roofGap && r.runUp >= ROOF_RUN_UP && !r.jumpRetry && !e.fire.burning) {
+        r.jumpRetry = 0.4;
+        if (tryRoofHop(e, heading, destinationRoof)) return;
+      }
       // Approach the base before choosing a jump. A supported wall mount
       // takes priority; jumping remains available above an inaccessible mouth.
       if ((!roofTrip || roofWall) && Math.abs(e.goalY - p.y) >= 1 && caveAt(p.x, p.y, p.z) < 0) {
@@ -4211,9 +4250,9 @@
         if (tryRoofJump(e, heading)) return;
       }
       const beforeX = p.x, beforeZ = p.z, beforeY = p.y;
-      move(e, dt, roofTrip ? SPEED : CHILL_SPEED);
+      move(e, dt, roofTrip || roofHop ? SPEED : CHILL_SPEED);
       const travelled = Math.hypot(p.x - beforeX, p.z - beforeZ);
-      r.runUp = roofTrip && !e.climb.active && travelled >= SPEED * dt * 0.5
+      r.runUp = (roofTrip || roofHop) && !e.climb.active && travelled >= SPEED * dt * 0.5
         && Math.abs(p.y - beforeY) <= STEP
         && (p.x - beforeX) * Math.sin(e.heading) + (p.z - beforeZ) * Math.cos(e.heading) > travelled * 0.85
         ? Math.min(ROOF_RUN_UP, r.runUp + travelled) : 0;
