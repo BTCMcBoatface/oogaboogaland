@@ -686,12 +686,12 @@
       const grooming = lounge === "sit" ? state.groomBlend : 0, sitLook = lounge === "sit" ? state.sitLook : 0;
       const sitShift = lounge === "sit" ? state.sitShift : 0, climbPhase = managed ? state.climbStride / 1.2 : 0;
       // Seated rests have frequent, gentle glances and alternating hand lifts.
-      // Spatial phase keeps neighbours from moving together; other reclining
-      // poses keep their longer pauses and their supporting arms planted.
+      // Spatial phase keeps neighbours from moving together; reclining poses
+      // pause between fidgets and keep their supporting arms planted.
       const restTime = state.groomTime + root.position.x * 0.61 + root.position.z * 0.37;
-      const restPeriod = lounge === "sit" ? 9 : 27, restPause = lounge === "sit" ? 2 : 20;
+      const restPeriod = lounge === "sit" ? 9 : 18, restPause = lounge === "sit" ? 2 : 10;
       const restCycle = ((restTime % restPeriod) + restPeriod) % restPeriod;
-      const restMotion = lounge && restCycle > restPause ? Math.sin((restCycle - restPause) * Math.PI / 7) ** 2 * (1 - grooming) : 0;
+      const restMotion = lounge && restCycle > restPause ? Math.sin((restCycle - restPause) * Math.PI / (restPeriod - restPause)) ** 2 * (1 - grooming) : 0;
       const jumping = managed && state.air, takeoff = managed ? state.takeoff : 0;
       const groundPitch = state.groundPlane ? -Math.atan(state.groundZ) : 0;
       const laboratory = managed && state.lab && !state.labRunIn && !lounge && !jumping && rolling <= 0.001 && climbing <= 0.001 && state.pound <= 0 && !state.poundCharge;
@@ -770,6 +770,8 @@
           leg.rotation.z = damp(leg.rotation.z, -state.climbSide * climbStroke * 0.07 * climbing, 18, dt);
         }
         let legAngle = lounge ? onSide ? -0.42 : reclining ? 0.1 : leaning ? leanSide ? -1.1 : -1.14 : -1.28 + l.side * sitShift * 0.1 : jumping ? 0.7 - takeoff * 0.85 : o ? -(squeeze ? 0.1 : labSqueeze ? 0.16 : g.legs) * moving * wave(state.phase, o[l.leg]) : 0;
+        if (lounge && (!onSide || (lounge === "left" ? l.side > 0 : l.side < 0)))
+          legAngle += Math.sin(restTime * 0.7 + i * Math.PI) * 0.06 * restMotion;
         legAngle += (-1.2 - legAngle) * crouch;
         legAngle -= 0.42 * slamDrive;
         legAngle += (-1.25 - legAngle) * rolling;
@@ -794,8 +796,8 @@
           // The free hand rests near the bent knee. Matching its old angle to
           // the reclined chest left it pointing almost horizontally in midair.
           const rest = (leaning ? supporting ? -state.pitch + 1 : -0.55 : onSide ? lower ? -2.3 : -1.08 : reclining ? -0.08 : -state.pitch - 0.801 + l.side * sitShift * 0.1)
-            + (lounge === "sit" ? -0.075 * Math.max(0, Math.sin(restTime * 0.9 + i * Math.PI)) * restMotion
-              : supporting ? 0 : Math.sin(restTime * 0.8 + i) * 0.045 * restMotion);
+            + (lounge === "sit" ? -0.1 * Math.max(0, Math.sin(restTime * 0.9 + i * Math.PI)) * restMotion
+              : supporting ? 0 : Math.sin(restTime * 0.8 + i) * 0.08 * restMotion);
           limb(arm, rest + (reach - rest) * groomArm, dt);
           const restSide = leaning ? supporting ? l.side * 0.18 : -l.side * 0.12 : onSide ? lower ? -l.side * 0.2 : -l.side * 0.55 : reclining ? l.side * 0.18 : -l.side * 0.12;
           arm.rotation.z = damp(arm.rotation.z, restSide + (l.side * 0.6 - restSide) * groomArm, 12, dt);

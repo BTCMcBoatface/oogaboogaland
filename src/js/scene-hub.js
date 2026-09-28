@@ -6578,6 +6578,27 @@
       || !matrixGateSegmentClear(x, from, z, toX, to, toZ, radius, height, true)) return false;
     return clankerFireClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading);
   };
+  const clankerWalkCoreClear = (entry, x, y, z, toX, toY, toZ, fromHeading, toHeading) => {
+    // Protect the trunk near the middle of the support rectangle, not just
+    // the pelvis point behind it. This extra core applies to island stone;
+    // props keep their existing center clearance and blended support.
+    // A planted turn remains available to face away from a contacted wall.
+    if (x === toX && z === toZ || entry.drive.airborne || entry.fire.rolling) return true;
+    const scale = entry.root.scale.x, radius = 0.34 * scale, height = 0.12 * scale;
+    const forward = (entry.parked || entry.biped ? 0.19 : 0.7) * scale, lift = 0.85 * scale;
+    const turn = Math.atan2(Math.sin(toHeading - fromHeading), Math.cos(toHeading - fromHeading));
+    const steps = Math.max(1, Math.ceil(Math.abs(turn) / 0.15));
+    let px = x + Math.sin(fromHeading) * forward, py = y + lift, pz = z + Math.cos(fromHeading) * forward;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps, heading = fromHeading + turn * t;
+      const nx = x + (toX - x) * t + Math.sin(heading) * forward;
+      const ny = y + (toY - y) * t + lift, nz = z + (toZ - z) * t + Math.cos(heading) * forward;
+      if (!island.clearAt(nx, ny, nz, radius, height)
+        || !island.voxelSegmentClearAt(px, py, pz, nx, ny, nz, radius, height)) return false;
+      px = nx; py = ny; pz = nz;
+    }
+    return true;
+  };
   const clankerOpeningClear = (entry, x, y, z, toX, toY, toZ) => {
     // An upright climber can swing its feet through a window before the
     // broader walking rectangle follows. Check the actual foot path as well
@@ -6631,7 +6652,8 @@
     if (!entry.motion.lab && !entry.planningLab && !entropyLab.phase.inside(toX, toY, toZ)
       && !entry.climb.active)
       return clankerCenterClear(entry, x, y, z, toX, toY, toZ,
-        entry.drive.airborne && !entry.drive.passiveFall, fromHeading, toHeading);
+        entry.drive.airborne && !entry.drive.passiveFall, fromHeading, toHeading)
+        && clankerWalkCoreClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading);
     if (!clankerRidersClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading)) return false;
     const labPose = entry.planningLab || entropyLab.phase.inside(toX, toY, toZ)
       && !entry.gorilla.motionActive && !entry.pound && !entry.beat && !entry.climb.active;

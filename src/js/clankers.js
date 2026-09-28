@@ -7,6 +7,7 @@
   const { addChild } = BL.scene;
   // The tallest shootable meadow rocks reach 1.11; a prop step must clear their real mesh.
   const SCALE = 1, SPEED = 2.7, CHILL_SPEED = 0.9, STEP = 0.52, PROP_STEP = 1.16, JUMP_BUFFER = 0.18;
+  const CHILL_REST_SECONDS = 120, CHILL_REST_VARIATION = 120;
   // Measured full-size gallop envelope. Airborne and floor-pound poses reserve
   // their larger envelopes before beginning the animation.
   const WALK_RADIUS = 1.9, AIR_RADIUS = 2.05, FOOT = 1.4, SPACE = 0.07, TAU = Math.PI * 2;
@@ -144,6 +145,16 @@
     };
     const peerShape = (x, y, z, bx, by, bz) => {
       return torso || footprint;
+    };
+    const roofAt = (x, y, z) => {
+      const roofs = ctx.climbRoofs || ctx.loungeRoofs;
+      if (!roofs || !ctx.surfaceAt || Math.abs(ctx.surfaceAt(x, z) - y) > 0.1) return -1;
+      let index = -1, nearest = 9 * 9;
+      for (let i = 0; i < roofs.length; i++) {
+        const roof = roofs[i], distance = (roof.x - x) ** 2 + (roof.z - z) ** 2;
+        if (y >= roof.y - 0.55 && distance < nearest) { nearest = distance; index = i; }
+      }
+      return index;
     };
     const unusedRoof = (x, y, z, foot) => {
       const roofs = ctx.climbRoofs || ctx.loungeRoofs;
@@ -1251,14 +1262,22 @@
       if (roofs && ctx.surfaceAt) for (let i = 0; i < roofs.length && loungeCount < 80; i++) {
         const roof = roofs[i], start = loungeCount;
         for (let n = 0; n < 298 && loungeCount < 80; n++) {
-          if (loungeCount - start >= 5) break;
-          const angle = roof.angle + (n - 1) * TAU / 8, spread = n ? 1.35 : 0;
+          if (loungeCount - start >= 8) break;
+          const angle = roof.angle + (n - 1) * TAU / 8, spread = n ? 3 : 0;
           const dx = n < 9 ? Math.sin(angle) * spread : ((n - 9) % 17 - 8) * 0.5;
           const dz = n < 9 ? Math.cos(angle) * spread : (Math.floor((n - 9) / 17) - 8) * 0.5;
           if (dx * dx + dz * dz >= 4.5 ** 2) continue;
           const x = roof.x + dx, z = roof.z + dz, y = ctx.surfaceAt(x, z);
           if (y < roof.y - 0.55 || !grass(x, y, z) || trafficAt(x, y, z) || caveAt(x, y, z) >= 0
             || !staticClear(e, x, y, z)) continue;
+          // Distribute seats across the roof instead of filling the cache
+          // with several points inside one gorilla's resting footprint.
+          let crowded = false;
+          for (let seat = start; seat < loungeCount; seat++) {
+            const at = seat * 3;
+            if ((loungeSpots[at] - x) ** 2 + (loungeSpots[at + 2] - z) ** 2 < 2.5 ** 2) { crowded = true; break; }
+          }
+          if (crowded) continue;
           const at = loungeCount++ * 3;
           loungeSpots[at] = x; loungeSpots[at + 1] = y; loungeSpots[at + 2] = z;
           roofCount++;
@@ -1294,10 +1313,11 @@
       e.roam.targetX = x; e.roam.targetY = y; e.roam.targetZ = z;
       e.roam.progressDistance = Infinity; e.roam.progressTime = 0;
       e.roam.runUp = e.roam.jumpRetry = 0;
-      e.rest = (roof ? 20 : 30) + e.random() * (roof ? 20 : 30);
+      e.rest = CHILL_REST_SECONDS + e.random() * CHILL_REST_VARIATION;
       e.loungeRoof = roof; e.loungePartner = partner; e.loungeHeading = heading;
       e.loungeCycle = roof ? e.loungeCycle + 1 : 0;
       e.groomTime = 0; e.groomWait = 2 + e.random() * 6;
+      e.roam.poseWait = 20 + e.random() * 25;
       e.motion.sitTime = 0; e.motion.sitWait = 2 + e.random() * 5;
       e.motion.sitLookTarget = e.motion.sitShiftTarget = 0;
       if (!e.loungeDepart) e.lounge = "";
@@ -1367,9 +1387,11 @@
       prepareLounges(e);
       const p = e.root.position, compact = e.compact, radius = e.radius, height = e.height;
       const onRoof = unusedRoof(p.x, p.y, p.z, 0);
-      // Prefer climbing from the meadow, then favour a return trip instead
-      // of spending several long rests on neighbouring roof spots.
-      const wantsRoof = stayLevel ? onRoof : e.mode !== "working" && roofCount > 0 && e.loungeCycle < 2 && e.random() < (onRoof ? 0.25 : 0.9);
+      // Long rests keep outings occasional. Some rooftop departures visit a
+      // neighbouring roof before a later trip returns to the meadow.
+      const wantsRoof = stayLevel ? onRoof : e.mode !== "working" && roofCount > 0 && e.loungeCycle < 2 && e.random() < (onRoof ? 0.55 : 0.9);
+      const roofTour = !spawn && onRoof && wantsRoof && !stayLevel && e.random() < 0.5;
+      const currentRoof = roofTour ? roofAt(p.x, p.y, p.z) : -1;
       const pose = loungePose(e);
       e.compact = false; e.height = Math.max(height, 2.7);
       // Prefer a small group on some visits; a crowded group always falls back
@@ -1407,7 +1429,8 @@
           // built. Recheck the live firing lanes for cached candidates too.
           if (trafficAt(x, y, z)) continue;
           const distance = Math.hypot(x - p.x, z - p.z);
-          const tripLimit = !stayLevel && roof !== onRoof ? 18 : 12;
+          if (roofTour && !pass && roof && roofAt(x, y, z) === currentRoof) continue;
+          const tripLimit = roofTour && roof ? 24 : !stayLevel && roof !== onRoof ? 18 : 12;
           if (!spawn && (distance < 2 || distance > tripLimit || loungeFailed(e, x, z))) continue;
           // Filter a future walking arrival, not the current reclining body's
           // large fallback circle. The exact new rest and rise are proved by
@@ -1495,6 +1518,17 @@
       }
       m.sitLook = damp(m.sitLook, m.sitLookTarget, 4, dt);
       m.sitShift = damp(m.sitShift, m.sitShiftTarget, 3, dt);
+      if (e.lounge && !e.loungeDepart && !partner && m.groom < 0.05 && !e.roam.transition && e.rest > 5
+        && (e.roam.poseWait -= dt) <= 0) {
+        e.roam.poseWait = 20 + e.random() * 25;
+        const pose = loungePose(e);
+        // Keep the destination and heading. Only change posture when both
+        // the full resting pose and its transition fit beside scenery/peers.
+        if (pose !== e.lounge && restSpace(e, pose, p.x, p.y, p.z, e.heading) && restTransitionClear(e, pose, dt)) {
+          e.lounge = e.roam.pose = pose;
+          m.sitTime = m.sitLookTarget = m.sitShiftTarget = 0;
+        }
+      }
     };
     const departLounge = (e, dt) => {
       e.speed = 0; e.motion.groom = 0;
@@ -1676,7 +1710,7 @@
         loungePartner: null, loungeHeading: NaN, loungeCycle: 0, loungeRoof: false, loungeDepart: false, groomTime: 0, groomWait: 0,
         planningRoam: false, planningSeat: false, walkPoseChecked: false, roam: { path: new Float64Array(12), count: 0, index: 0, wall: false, level: 0, reverseStart: false, departHeading: 0, propDeparture: false,
           targetX: NaN, targetY: NaN, targetZ: NaN, order: 0, waitUntil: 0, blocked: 0, obstacle: null, waitPeer: null, waitX: 0, waitZ: 0,
-          plans: 0, arrived: false, pose: "", lastPose: "", transition: 0, nextChoice: 0, failedChoices: 0, runUp: 0, jumpRetry: 0,
+          plans: 0, arrived: false, pose: "", poseWait: 0, lastPose: "", transition: 0, nextChoice: 0, failedChoices: 0, runUp: 0, jumpRetry: 0,
           departPending: false, departAt: 0, departX: 0, departY: 0, departZ: 0, riseAdmitted: false,
           wallFailedX: NaN, wallFailedZ: NaN, wallFailedUntil: 0,
           levelOnlyUntil: 0, planAt: 0, progressTime: 0, progressX: NaN, progressZ: NaN, progressDistance: Infinity, progressTurn: Infinity, progressCursor: -1, progressClaim: 0, backoutX: NaN, backoutZ: NaN, alignTime: 0, failedX: NaN, failedZ: NaN, failedUntil: 0 },
@@ -1812,6 +1846,24 @@
       }
       jump.active = true; jump.wall = wall; jump.progress = 0; jump.reverse = false; jump.blocked = 0; e.jumps++;
       return true;
+    };
+    const tryRoofHop = (e, heading, destination) => {
+      const p = e.root.position, previousHeading = e.heading;
+      if (Math.cos(heading - previousHeading) < 0.85) return false;
+      const sx = Math.sin(heading), sz = Math.cos(heading);
+      e.heading = heading;
+      // Land on the destination hill's supported top. The shared jump proof
+      // bounds the gravity arc and sweeps every segment against live scenery.
+      for (let distance = 2; distance <= MAX_JUMP; distance += 0.4) {
+        const x = p.x + sx * distance, z = p.z + sz * distance, y = ctx.surfaceAt(x, z);
+        if (roofAt(x, y, z) !== destination
+          || Math.abs(pointSupportAt(x, z, y + 0.02) - y) > 0.05) continue;
+        if (prepareJump(e, x, y, z, 0, false, true)) {
+          e.roam.runUp = 0; e.motion.takeoff = 1; return true;
+        }
+      }
+      e.heading = previousHeading;
+      return false;
     };
     const tryRoofJump = (e, heading) => {
       const p = e.root.position, previousHeading = e.heading;
@@ -2771,7 +2823,10 @@
           || !actorLanding(e, tx, floor, tz)) continue;
         // Enter at the lowest height the actual opening permits. Crossing
         // high and only lowering at the far end leaves the head in the lintel.
-        const highestCrossing = platform ? floor + 0.5 : y + 1.05;
+        // Descending past a rim must not raise the body back onto the roof
+        // to reach a lower-looking landing beyond it. Ascending windows and
+        // the measured balcony capture keep their certified crossing range.
+        const highestCrossing = platform ? floor + 0.5 : descending ? y : y + 1.05;
         for (let crossY = platform ? floor : Math.max(floor, y - 2.4); crossY <= highestCrossing; crossY += 0.25) {
           if (floor > crossY + 0.1 || !ctx.climbOpeningClear(e, tx, crossY, tz, tx, floor, tz)) continue;
           // A falling body may meet the projecting ceiling before it can
@@ -3050,7 +3105,7 @@
         && wallBodyClear(tx, ty, tz, heading)
         && climbClear(e, p.x, p.y, p.z, tx, ty, tz, heading, true, true)) {
         p.x = tx; p.y = ty; p.z = tz;
-        if (!openingLanding(e, tx, ty, tz, heading)) dropRectangleClimb(e);
+        if (!openingLanding(e, tx, ty, tz, heading, null, true)) dropRectangleClimb(e);
         return;
       }
       // A projecting voxel can occupy the tangent step while the wall is
@@ -3410,7 +3465,7 @@
       const c = e.climb, d = e.drive, m = e.motion;
       const forwardX = Math.sin(e.heading), forwardZ = Math.cos(e.heading);
       const side = d.climbSide * 1.2;
-      c.active = c.free = c.holdPose = false;
+      c.active = c.free = c.lipBypass = c.mountPending = c.holdPose = c.openingStagePending = false;
       c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
       c.handoffDirection = 0; c.autoTo = -1; c.retry = 0.4; c.airAttachAfter = elapsed + 0.25;
       c.debugRole = -1; c.debugTraverse = c.waitRelease = false;
@@ -3442,7 +3497,12 @@
       // An autonomous route may walk up to the wall, but the upright
       // rectangle owns travel once stone actually supports it. The old rail
       // no longer dictates the wall or crest portion of an ordinary climb.
-      if (wallContactShare(e, p.x, p.y, p.z, e.heading) >= WALL_ENTER_SHARE) {
+      // On a roof departure, torso contact can appear before the feet have
+      // cleared the crest. Finish that supported approach before handing the
+      // fully wall-facing rectangle its direction; partial crest yaw points
+      // it back at roof terrain instead of down the face.
+      if ((!c.fromTop || c.progress <= c.mantleStart + 0.001)
+        && wallContactShare(e, p.x, p.y, p.z, e.heading) >= WALL_ENTER_SHARE) {
         c.free = true; c.handoffDirection = 0;
         updateRectangleClimb(e, dt); return;
       }
@@ -4169,19 +4229,30 @@
       }
       const roofTrip = !e.debugMove.active && e.mode === "chilling" && e.loungeRoof
         && e.goalY > p.y + 0.8 && caveAt(p.x, p.y, p.z) < 0;
+      const heading = Math.atan2(e.goalX - p.x, e.goalZ - p.z);
+      const roofWall = roofTrip && cliffRiserAhead(p.x, p.z, heading, 1);
+      const currentRoof = !e.debugMove.active && e.mode === "chilling" && e.loungeRoof ? roofAt(p.x, p.y, p.z) : -1;
+      const destinationRoof = currentRoof >= 0 ? roofAt(e.goalX, e.goalY, e.goalZ) : -1;
+      const roofHop = destinationRoof >= 0 && destinationRoof !== currentRoof;
+      const roofGap = roofHop && ctx.surfaceAt(p.x + Math.sin(heading) * 4.5, p.z + Math.cos(heading) * 4.5) < p.y - 0.8;
       r.jumpRetry = Math.max(0, r.jumpRetry - dt);
-      if (roofTrip && r.runUp >= ROOF_RUN_UP && !r.jumpRetry && !e.fire.burning) {
+      if (roofGap && r.runUp >= ROOF_RUN_UP && !r.jumpRetry && !e.fire.burning) {
         r.jumpRetry = 0.4;
-        if (tryRoofJump(e, Math.atan2(e.goalX - p.x, e.goalZ - p.z))) return;
+        if (tryRoofHop(e, heading, destinationRoof)) return;
       }
-      if (!roofTrip && Math.abs(e.goalY - p.y) >= 1 && caveAt(p.x, p.y, p.z) < 0) {
-        const heading = Math.atan2(e.goalX - p.x, e.goalZ - p.z);
+      // Approach the base before choosing a jump. A supported wall mount
+      // takes priority; jumping remains available above an inaccessible mouth.
+      if ((!roofTrip || roofWall) && Math.abs(e.goalY - p.y) >= 1 && caveAt(p.x, p.y, p.z) < 0) {
         if (tryClimb(e, heading, e.goalY < p.y) || holdClimbSearch(e)) { e.speed = 0; return; }
       }
+      if (roofWall && r.runUp >= ROOF_RUN_UP && !r.jumpRetry && !e.fire.burning) {
+        r.jumpRetry = 0.4;
+        if (tryRoofJump(e, heading)) return;
+      }
       const beforeX = p.x, beforeZ = p.z, beforeY = p.y;
-      move(e, dt, roofTrip ? SPEED : CHILL_SPEED);
+      move(e, dt, roofTrip || roofHop ? SPEED : CHILL_SPEED);
       const travelled = Math.hypot(p.x - beforeX, p.z - beforeZ);
-      r.runUp = roofTrip && !e.climb.active && travelled >= SPEED * dt * 0.5
+      r.runUp = (roofTrip || roofHop) && !e.climb.active && travelled >= SPEED * dt * 0.5
         && Math.abs(p.y - beforeY) <= STEP
         && (p.x - beforeX) * Math.sin(e.heading) + (p.z - beforeZ) * Math.cos(e.heading) > travelled * 0.85
         ? Math.min(ROOF_RUN_UP, r.runUp + travelled) : 0;
@@ -4586,7 +4657,9 @@
             || !climbClear(e, p.x, p.y, p.z, x, y, z, heading)) continue;
           p.x = x; p.y = y; p.z = z; e.heading = heading;
           c.active = c.free = true; c.fromTop = descending || !e.controlled; c.descending = descending;
-          c.lipBypass = false;
+          // A new grip owns its wall rectangle. An interrupted roof mount or
+          // window entry must not resume translation toward its old target.
+          c.mountPending = c.openingStagePending = c.lipBypass = false;
           c.waitRelease = descending && e.controlled && d.climbAxis > 0;
           c.holdPose = c.debugStuck = false; c.blocked = c.retry = c.handoffDirection = 0;
           c.autoTo = -1; c.airAttachAfter = 0; c.handoffDirection = 0;
@@ -5386,7 +5459,7 @@
             if (!fits && pose !== "sit") { pose = "sit"; fits = restTransitionClear(e, pose, dt); }
             if (fits) {
               e.speed = 0; e.lounge = pose; e.roam.arrived = true; e.roam.alignTime = 0;
-              if (e.rest <= 0) e.rest = (e.loungeRoof ? 20 : 30) + e.random() * (e.loungeRoof ? 20 : 30);
+              if (e.rest <= 0) e.rest = CHILL_REST_SECONDS + e.random() * CHILL_REST_VARIATION;
             } else { e.roam.alignTime += dt; if (e.roam.alignTime > 0.5) e.rest = 0; }
           }
           if (e.lounge) e.rest = Math.max(0, e.rest - dt);
