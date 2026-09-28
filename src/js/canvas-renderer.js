@@ -324,6 +324,11 @@
       }
       return -1;
     };
+    // A projective geometry's matrices carry a last row, so its transformed points are homogeneous: divide them out.
+    const divideW = (out, m, x, y, z) => {
+      const h = m[3] * x + m[7] * y + m[11] * z + m[15];
+      out[0] /= h; out[1] /= h; out[2] /= h;
+    };
     const shadeNode = (node) => {
       const opacity = (node.smokeOpacity === undefined ? 1 : node.smokeOpacity) * (node.geometry.glassOpacity || node.geometry.glass || 1) * (node.geometry.cutawayHide ? 1 - cutawayFade : 1);
       if (opacity === 0) return;
@@ -341,7 +346,7 @@
       const mirrorFace = !!(node.mirror || node.mirrorPortal || node.mirrorShard || node.mirrorRippleOnly || node.geometry.reflector);
       const portalFace = !!node.mirrorPortal || !!node.mirrorWalkThrough && mirrorDebug.portal;
       const localMatrixGlyph = !!node.geometry.matrixGlyph;
-      const liquid = !!node.geometry.portalSurface;
+      const liquid = !!node.geometry.portalSurface, projective = !!node.geometry.projective;
       // Every voxel face in a glyph shares this instance plane and basis.
       const glyphLength = localMatrixGlyph ? Math.hypot(w[8], w[9], w[10]) : 1;
       const glyphNx = w[8] / glyphLength, glyphNy = w[9] / glyphLength, glyphNz = w[10] / glyphLength;
@@ -382,6 +387,7 @@
             }
             const displacement = liquid ? BL.oogaPortalModels.liquidHeight(x, z, node.portalTime, node.portalSurge) : 0;
             mat4.transformPoint(V[k], w, x, verts[b + 1] + displacement, z);
+            if (projective) divideW(V[k], w, x, verts[b + 1] + displacement, z);
             centerX += V[k][0];
             centerY += V[k][1];
             centerZ += V[k][2];
@@ -526,6 +532,22 @@
               surface = destination;
               if (surfaceCount < 3) continue;
             }
+            // A slab (n, d) keeps |n.p + d| <= 1: two planes, n.p + d - 1 <= 0 and -n.p - d - 1 <= 0.
+            const slab = node.geometry.clipSlab;
+            if (slab) {
+              if (!surface) {
+                surface = MIRROR_CLIP_IN;
+                for (let k = 0; k < count; k++) {
+                  surface[k * 3] = V[k][0]; surface[k * 3 + 1] = V[k][1]; surface[k * 3 + 2] = V[k][2];
+                }
+              }
+              for (let sign = 1; sign >= -1 && surfaceCount >= 3; sign -= 2) {
+                const destination = surface === MIRROR_CLIP_IN ? MIRROR_CLIP_OUT : MIRROR_CLIP_IN;
+                surfaceCount = clipPlane(surface, surfaceCount, slab[0] * sign, slab[1] * sign, slab[2] * sign, slab[3] * sign - 1, destination);
+                surface = destination;
+              }
+              if (surfaceCount < 3) continue;
+            }
             if (selective) beginCutaway(surface, surfaceCount);
             for (let piece = 0; selective ? nextCutaway() : piece < 1; piece++) {
               if (selective) { surface = cutawaySurface; surfaceCount = cutawayCount; }
@@ -665,6 +687,10 @@
           const a = line.i[0] * 3, b = line.i[1] * 3;
           mat4.transformPoint(V[0], w, verts[a], verts[a + 1], verts[a + 2]);
           mat4.transformPoint(V[1], w, verts[b], verts[b + 1], verts[b + 2]);
+          if (projective) {
+            divideW(V[0], w, verts[a], verts[a + 1], verts[a + 2]);
+            divideW(V[1], w, verts[b], verts[b + 1], verts[b + 2]);
+          }
           const objectClip = node.geometry.clipPlane;
           if (objectClip) {
             const da = objectClip[0] * V[0][0] + objectClip[1] * V[0][1] + objectClip[2] * V[0][2] + objectClip[3];

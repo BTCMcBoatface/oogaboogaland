@@ -349,7 +349,7 @@
   const clankerGroundTarget = (owner) => owner.kind === "prop" && (owner.prop === "crate" || owner.prop === "barrel" || owner.prop === "rock");
   const CLANKER_CAVITY = { floor: 0, ceiling: 0, caveIndex: 0 };
   const JETPACK_HUD_STATE = { owned: false, equipped: false, fuel: 1, blocked: false };
-  let enteringTween = null, pitDeparting = false, pitArrival = null;
+  let enteringTween = null, pitDeparting = false, factoryDeparting = false, pitArrival = null;
   const pitArrivalPoint = { x: 0, y: 0, z: 0 };
   const pitPrevious = { x: 0, y: 0, z: 0 };
   let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null;
@@ -4825,8 +4825,9 @@
   };
   // The Lightning Factory's shield: the lab's phase plane set further down the tunnel. Nothing works at this
   // mouth to keep it rippling as the lab's crew does, so it hums on its own, a glyph wave every fraction of a
-  // second somewhere on it, and bodies crossing it leave their outline. The played Ooga walking through it goes
-  // in, with a full ripple where it crossed and no dolly back out to the mouth.
+  // second somewhere on it, and bodies crossing it leave their outline. The factory's node runs on behind it, so the
+  // show seen through it is the one inside. The played Ooga walking through it goes in, with a full ripple where it
+  // crossed and no dolly back out to the mouth.
   const factoryShield = (dt, elapsed) => {
     const f = factoryMouth, m = f.mouth, o = f.opening, player = pilot.player;
     f.phase.update(dt, elapsed);
@@ -4837,15 +4838,19 @@
       f.hum = 0.1 + Math.random() * 0.22;
       f.phase.ripples.pulse(o.minX + Math.random() * (o.maxX - o.minX), o.floorY + Math.random() * (o.ceilingY - o.floorY), 0);
     }
+    f.node.tick(dt);
     if (!player || entering || !BL.scenes.factory) return;
     const p = player.root.position, sr = Math.sin(m.ry), cr = Math.cos(m.ry), shield = BL.factoryModels.SHIELD_Z;
     const along = (p.x - m.x) * sr + (p.z - m.z) * cr, across = (p.x - m.x) * cr - (p.z - m.z) * sr;
     const feet = p.y - player.baseY - m.floorY;
     if (along > shield || along < shield - 2 || Math.abs(across) > 2.4 || feet < o.floorY - 0.12 || feet >= o.ceilingY) return;
     f.phase.ripples.pulse(across, p.y - m.floorY + 1, 0);
-    entering = true;
+    // Through: still played, so the crew never stands it up and turns it back out to work, and it and the camera hold
+    // where it crossed (the update stops after this) while the ripple spreads and the screen goes dark.
+    entering = factoryDeparting = true;
     world.pilot = player.traits.name;
-    releaseForScene("factory");
+    f.snap = true;
+    pilot.controls.reset(); input.reset(); pilot.setActive(false); hud.tooltip.hide();
     go("factory");
   };
   // The Lightning Factory looks back out through its own end of this tunnel, so on the way in the island is
@@ -4974,7 +4979,7 @@
     return true;
   };
   const onTap = (hit, p) => {
-    if (pitArrival || pitGate?.isOpen) return;
+    if (pitArrival || factoryDeparting || pitGate?.isOpen) return;
     if (debugMovementTap(hit, p)) return;
     if (!hit) return;
     const o = hit.owner;
@@ -6197,7 +6202,11 @@
       control.setActive(pitGate.on);
     }
     if (pitDeparting) return; // The accepted fall stays frozen through the director fade.
-    if (pitArrival) { updatePitArrival(dt); return; }
+    if (pitArrival) {
+      updatePitArrival(dt);
+      if (factoryMouth && factoryMouth.hall) factoryMouth.hall.update(dt, camera, RENDER_OPTS);
+      return;
+    }
     hour = clock.read();
     daylight.sample(hour, RENDER_OPTS, clock.dayOfYear, islandLatitude, clock.continuousDay);
     RENDER_OPTS.time = elapsed;
@@ -6224,6 +6233,7 @@
     mirrorCave.ripples.update(dt, elapsed);
     entropyLab.phase.update(dt, elapsed);
     if (factoryMouth) factoryShield(dt, elapsed);
+    if (factoryDeparting) return; // The Ooga through the shield and its camera hold through the director fade.
     prepareClankerRiders(elapsed);
     prepareClankerStrike();
     clankers.update(dt);
@@ -6323,6 +6333,8 @@
     // clampCamera resolves the eye's entrance crossing inside pilot.update.
     // Commit portal and Matrix state after that, before rendering, so mirror and interior never disagree.
     syncMatrixInside(player);
+    // The factory's window follows the eye, so it moves once the camera is final for the frame.
+    if (factoryMouth && factoryMouth.hall) factoryMouth.hall.update(dt, camera, RENDER_OPTS);
     updateMatrixWorld(dt, elapsed);
     updateMatrixControl(dt, player);
     mirrorCave.body.update(dt);
@@ -7723,7 +7735,7 @@
     location.reload();
   };
   const onKey = (e) => {
-    if (pitArrival) return;
+    if (pitArrival || factoryDeparting) return;
     if (e.key === "Escape" && debugSelectedGorilla) { selectDebugGorilla(null); e.preventDefault(); return; }
     if (clankerPlay.active) {
       if (!e.repeat && (e.key === "x" || e.key === "X")) clankerPlay.action("mode-toggle");
@@ -7759,7 +7771,7 @@
   const enter = (ctx) => {
     ({ renderer, game, world, go, lootEnabled, testBananas } = ctx);
     glCanvas = ctx.canvas;
-    pitDeparting = false; pitArrival = null;
+    pitDeparting = factoryDeparting = false; pitArrival = null;
     const travel = world.oogaPortalTravel;
     const pitReturn = ctx.from === "dsb" && travel?.from === "dsb" && travel.to === "hub" && travel.arrival === "pit" && travel.name === world.pilot;
     delete world.oogaPortalTravel; // Consume once; ordinary scene visits cannot inherit this route.
@@ -7991,7 +8003,12 @@
     mirrorCave.shattered = false;
     mirrorCave.ripples = BL.mirrorRipples.create(mirrorCave.node);
     entropyLab.phase = BL.labPhase.create(entropyLab.group, entropyLab.mouth, entropyLab.opening);
-    if (factoryMouth) Object.assign(factoryMouth, { phase: BL.labPhase.create(factoryMouth.group, factoryMouth.mouth, factoryMouth.opening, BL.factoryModels.SHIELD_Z), hum: 0 });
+    // The factory's shield crests in its emitters' cyan, and on WebGL its window into the hall, which shows the page's
+    // one factory node: the island ticks it while it is here, as the hall does.
+    if (factoryMouth) {
+      Object.assign(factoryMouth, { phase: BL.labPhase.create(factoryMouth.group, factoryMouth.mouth, factoryMouth.opening, BL.factoryModels.SHIELD_Z, BL.factoryWindow.TINT), hum: 0, node: BL.factoryFeed.node(world) });
+      factoryMouth.hall = renderer.kind === "webgl2" ? BL.factoryWindow.create({ group: factoryMouth.group, mouth: factoryMouth.mouth, node: factoryMouth.node }) : null;
+    }
     headquarters.entropyLab = entropyLab;
     entropyLab.updateEquipment = updateLabEquipment;
     shared.clipProjectileTarget = entropyLab.phase.clipTarget;
@@ -8257,7 +8274,7 @@
         else pilot.hooks.onZoom(factor, gesture, px, py);
       },
       onDoubleTap: (hit, p) => {
-        if (pitArrival || pitGate?.isOpen) return;
+        if (pitArrival || factoryDeparting || pitGate?.isOpen) return;
         if (hit && hit.owner.kind === "clanker") {
           if (clankerPlay.player === hit.owner.entry) clankerPlay.release();
           else if (clankerPlay.possess(hit.owner.entry)) selectDebugGorilla(null);
@@ -8272,10 +8289,10 @@
     entering = false;
     enteringTween = null;
     now = 0;
-    hud.onPreset(name => { if (!pitArrival) navigate(name); });
+    hud.onPreset(name => { if (!pitArrival && !factoryDeparting) navigate(name); });
     hud.setDetachedView("pile");
     hud.onAction((action, value) => {
-      if (pitArrival || pitGate.isOpen) return;
+      if (pitArrival || factoryDeparting || pitGate.isOpen) return;
       if (clankerPlay.active && clankerPlay.action(action)) return;
       if (action === "tip") demoTip(1200);
       else if (action === "tip-legendary") demoTip(120000);
@@ -8361,6 +8378,7 @@
       root, camera, input,
       debug: {
         get timechainIsland() { return timechainIsland; },
+        get factory() { return factoryMouth && factoryMouth.hall ? factoryMouth.hall.debug : null; },
         slots: pile.slots, drops: pile.drops, core: pile.core, shell: pile.shell, delivery: pile.delivery, spillEffect: pile.spillEffect, cavemen: crew.cavemen, crates: crates.list, lab: null, hud, applyAllSwag: crew.applyAllSwag, renderLocker: crew.renderLocker, demoTip, setPileLevel: pile.setLevel, refreshStates: crew.refreshStates, trimPool: fx.trimPool,
         get shown() {
           return pile.shown;
@@ -8680,7 +8698,10 @@
     mirrorCave.ripples.dispose();
     entropyLab.phase.dispose();
     entropyLab = null;
-    if (factoryMouth) factoryMouth.phase.dispose();
+    if (factoryMouth) {
+      if (factoryMouth.hall) factoryMouth.hall.dispose();
+      factoryMouth.phase.dispose();
+    }
     factoryMouth = null;
     mirrorCave.body.dispose();
     pilot.dispose();

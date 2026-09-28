@@ -19,6 +19,7 @@
   // The loop's beats, in seconds: a line closes and is dismantled, a new one is built in its place, the
   // feed goes quiet, and the node stops and comes back.
   const BEATS = { close: 24, closed: 36, open: 48, active: 62, quiet: 100, loud: 118, stop: 124, start: 132, ready: 136 };
+  const BEAT_ORDER = ["close", "closed", "open", "active", "quiet", "loud", "stop", "start", "ready"];
   // The smaller lines' churn, [second in the loop, beat]: the spare line opens and comes up, and another closes and
   // becomes the next spare, three times a loop and clear of the featured line's beats, the quiet and the restart.
   const CHURN = [[4, "open"], [14, "active"], [18, "close"], [22, "closed"], [72, "open"], [82, "active"], [86, "close"], [90, "closed"],
@@ -142,7 +143,7 @@
     const script = (emit) => {
       const at = t - loop * LOOP;
       churnBeat(emit, at);
-      const next = ["close", "closed", "open", "active", "quiet", "loud", "stop", "start", "ready"][beat];
+      const next = BEAT_ORDER[beat];
       if (!next || at < BEATS[next]) return;
       beat++;
       const fresh = newest === "harbor" ? "tidepool" : "harbor";

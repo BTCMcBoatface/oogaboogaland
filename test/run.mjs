@@ -6792,6 +6792,35 @@ scene("dsb", { label: "lifecycle", url: hubPage(src), steps: [{ name: "dsb lifec
   record("soak: dsb cycles: GPU records, listeners and heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
 } }] });
 
+scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "factory lifecycle", why: "contract: repeated factory visits release the window and hall's listeners, nodes and GPU resources while retaining one bounded shared node", run: async (b) => {
+  const { rendered, settled, snapshot, travel, heapDetail, within } = await dsbSoak(b);
+  await b.evaluate(`(() => {
+    const node = __ooga.factory.node, feed = node.feed, subscribe = feed.subscribe;
+    window.__factoryLife = { node, subscriptions: 0 };
+    feed.subscribe = (fn) => {
+      const off = subscribe(fn); let live = true;
+      __factoryLife.subscriptions++;
+      return () => { if (live) { live = false; __factoryLife.subscriptions--; } return off(); };
+    };
+  })()`);
+  // Warm both scenes and replace the window's initial, uninstrumented subscription.
+  await travel("factory"); await travel("hub"); await settled(); await rendered(2);
+  const before = await snapshot(), visits = [];
+  for (let i = 0; i < 6; i++) {
+    await travel("factory"); await travel("hub"); await settled(); await rendered(2);
+    visits.push(await b.evaluate(`(() => {
+      const f = __ooga.factory, n = f.node;
+      return { same: n === __factoryLife.node, subscriptions: __factoryLife.subscriptions,
+        lines: n.placeOf.size, places: n.bays.length + n.stands.length, sats: f.sats,
+        finite: Object.values(f.batches).every((b) => b.instanceCount * 20 <= b.instanceData.length && b.instanceData.every(Number.isFinite)) };
+    })()`));
+  }
+  const after = await snapshot(), same = (key) => before.stats[key] === after.stats[key];
+  record("soak: factory cycles: one bounded node and one view subscription survive six round trips without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.subscriptions === 1 && v.lines <= v.places && v.sats <= 48 && v.finite)
+    && same("allNodes") && same("targets") && same("dom") && after.stats.tweens === 0, JSON.stringify({ visits, before: before.stats, after: after.stats }));
+  record("soak: factory cycles: GPU records, listeners and retained heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
+} }] });
+
 // Node tier: pure computation over window.BL under a minimal DOM shim, calling the same probe functions.
 // 30 checks in about three seconds, against ~3.7 s of launch and boot per browser task.
 // The Lightning Factory in Node: the feed's two contracts, the demo node that stands in for a real one, and the
