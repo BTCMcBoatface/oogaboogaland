@@ -481,7 +481,7 @@
       route: null, routeIndex: 0, idleFor: 1 + Math.random() * 2, gaitFor: 0, beat: 0,
       pace: null, driven: false, walkStyle: "knuckle", inX: 0, inZ: 0, inRun: false,
       vy: 0, air: false, jumps: 0, revealFor: 0, pound: 0, chewing: 0, biped: false, lounge: "", hipHeight: HIP,
-      poundCharge: 0, dragging: false, takeoff: 0, landing: 0, crouch: 0, roll: 0, rollBlend: 0, rollAngle: 0, rollTarget: 0,
+      poundCharge: 0, takeoff: 0, landing: 0, crouch: 0, roll: 0, rollBlend: 0, rollAngle: 0, rollTarget: 0, rollSide: 0,
       smash: false, hipOffsetZ: 0, sideAngle: 0,
       climb: 0, climbBlend: 0, climbPose: NaN, climbStride: 0, climbDirection: 0, climbSide: 0,
       climbArmBaseL: 0, climbArmBaseR: 0, climbFitArms: 0,
@@ -674,12 +674,7 @@
       if (managed) {
         state.crouch = damp(state.crouch, state.air ? 0 : Math.min(1, state.landing * 2), state.air ? 24 : 20, dt);
         state.rollBlend = damp(state.rollBlend, state.roll, 9, dt);
-        // Follow the shortest angular step across full turns; multiplying by
-        // rollBlend here would spin the body backwards as the pose recovers.
-        const rollStep = Math.atan2(Math.sin(state.rollTarget - state.rollAngle), Math.cos(state.rollTarget - state.rollAngle));
-        state.rollAngle += rollStep * (1 - Math.exp(-18 * dt));
-        if (state.rollAngle > Math.PI) state.rollAngle -= Math.PI * 2;
-        else if (state.rollAngle < -Math.PI) state.rollAngle += Math.PI * 2;
+        state.rollAngle = damp(state.rollAngle, state.rollTarget * state.rollBlend, 18, dt);
         state.sideAngle = damp(state.sideAngle, onSide ? (lounge === "left" ? 1 : -1) * 1.32 : 0, 5, dt);
         // Wall and ground rectangles select the pose directly, without a
         // separate mount or over-the-edge animation.
@@ -709,7 +704,7 @@
         pitch += 0.12 * wave(state.phase, 0.25) * moving;
         bob = 0.08 * Math.max(0, wave(state.phase, 0.25)) * moving;
       } else if (moving > 0) bob = 0.02 * Math.abs(wave(state.phase, 0)) * moving;
-      let poundLift = 0;
+      let poundLift = 0, slamDrive = 0;
       if (managed && state.poundCharge > 0 && state.pound <= 0) {
         poundLift = state.poundCharge * 0.8;
         pitch = 1.02 - 0.45 * poundLift;
@@ -721,16 +716,22 @@
         // their shorter equipment-pounding gesture.
         poundLift = state.smash ? t < 0.34 ? t / 0.34 : t < 0.46 ? 1 : t < 0.66 ? 1 - (t - 0.46) / 0.2 : 0
           : t < 0.28 ? t / 0.28 : t < 0.58 ? 1 - (t - 0.28) / 0.3 : 0;
-        pitch = state.smash ? 1.02 - 0.86 * poundLift : 1.02 - 0.36 * poundLift;
+        if (state.smash) {
+          // Put the weight behind the downward stroke, hold it briefly at
+          // impact, then recover through the remaining gesture.
+          const drive = t < 0.46 ? 0 : t < 0.66 ? (t - 0.46) / 0.2 : t < 0.76 ? 1 : (1 - t) / 0.24;
+          slamDrive = drive * drive * (3 - 2 * drive);
+        }
+        pitch = state.smash ? 1.02 - 0.86 * poundLift + 0.46 * slamDrive : 1.02 - 0.36 * poundLift;
         state.pound = Math.max(0, state.pound - dt);
       }
       if (lounge) { pitch = reclining ? 0 : leaning ? -0.46 : -0.18 + grooming * 0.12 + Math.abs(sitShift) * 0.07; bob = 0; }
       // Takeoff extends the limbs before the airborne tuck; landing compresses them.
       if (crouch > 0) { pitch += (1.12 - pitch) * crouch; bob *= 1 - crouch; }
       if (jumping) { pitch += (0.82 - pitch) * takeoff; bob = 0; }
-      if (rolling > 0) { pitch += (Math.PI / 2 - pitch) * rolling; bob *= 1 - rolling; }
+      if (rolling > 0) { pitch *= 1 - rolling; bob *= 1 - rolling; }
       if (climbing > 0) { pitch += (0.18 - pitch) * climbing; bob *= 1 - climbing; }
-      state.pitch = managed && Number.isFinite(state.climbPose) ? pitch : damp(state.pitch, pitch, 6, dt);
+      state.pitch = managed && Number.isFinite(state.climbPose) ? pitch : damp(state.pitch, pitch, slamDrive > 0 ? 24 : 6, dt);
       chest.rotation.x = state.pitch;
       if (managed) {
         const tilt = -0.22 * climbing;
@@ -741,7 +742,7 @@
         // whole torso above them on straight arms. A one-hand lean also moves
         // its weight toward that hand; the other hand stays near the lap.
         chest.position.x = damp(chest.position.x, sitShift * 0.035, 5, dt);
-        chest.position.y = damp(chest.position.y, lounge === "sit" ? -0.324 + Math.abs(sitShift) * 0.018 : leaning ? -0.35 : 0, 6, dt);
+        chest.position.y = damp(chest.position.y, lounge === "sit" ? -0.324 + Math.abs(sitShift) * 0.018 : leaning ? -0.35 : -0.04 * slamDrive, slamDrive > 0 ? 18 : 6, dt);
         chest.position.z = damp(chest.position.z, 0.13 * climbing, 16, dt);
         chest.rotation.z = damp(chest.rotation.z, leaning ? -leanSide * 0.08 : -sitShift * 0.065, 6, dt);
       }
@@ -770,14 +771,15 @@
         }
         let legAngle = lounge ? onSide ? -0.42 : reclining ? 0.1 : leaning ? leanSide ? -1.1 : -1.14 : -1.28 + l.side * sitShift * 0.1 : jumping ? 0.7 - takeoff * 0.85 : o ? -(squeeze ? 0.1 : labSqueeze ? 0.16 : g.legs) * moving * wave(state.phase, o[l.leg]) : 0;
         legAngle += (-1.2 - legAngle) * crouch;
-        legAngle += (-0.6 - legAngle) * rolling;
+        legAngle -= 0.42 * slamDrive;
+        legAngle += (-1.25 - legAngle) * rolling;
         legAngle += (-0.16 + 0.06 * climbStroke - legAngle) * climbing;
         // The pelvis follows the rectangle's front-to-back grade. Keep the
         // rear feet beneath it while the front knuckles reach the higher pad.
         legAngle -= groundPitch;
         limb(leg, legAngle, dt, managed && state.landing > 0 ? 32 : 18);
         if (rolling > 0.001) {
-          limb(arm, -state.pitch - 0.7 * rolling, dt);
+          limb(arm, -state.pitch - 1.25 * rolling, dt);
           arm.rotation.z = damp(arm.rotation.z, -l.side * 0.22 * rolling, 12, dt);
         } else if (lounge) {
           // The lower arm cushions the head on its side; the upper hand rests
@@ -810,13 +812,10 @@
           limb(arm, working ? reach : -state.pitch - g.arms * moving * wave(state.phase, i * 0.5), dt);
           arm.rotation.z = damp(arm.rotation.z, working ? -l.side * 0.08 : 0, 12, dt);
         } else if (managed && (state.pound > 0 || poundLift > 0)) {
-          limb(arm, -state.pitch - (state.smash ? 2.7 : 1.65) * poundLift, dt);
+          // Reach ahead of the lowered shoulders with straight arms as the
+          // torso folds nearly parallel to the ground at impact.
+          limb(arm, -state.pitch - (state.smash ? 2.7 : 1.65) * poundLift - 0.9 * slamDrive, dt, slamDrive > 0 ? 28 : 18);
           arm.rotation.z = damp(arm.rotation.z, 0, 18, dt);
-        } else if (managed && state.dragging && l.side > 0) {
-          // Keep one knuckle around the Ooga's trailing ankle while the free
-          // arm can still counter-swing through the walk.
-          limb(arm, -state.pitch + 0.72, dt);
-          arm.rotation.z = damp(arm.rotation.z, -0.2, 18, dt);
         } else if (state.gait === "beat") {
           // Alternate fists on the chest, easing in and out of the pose
           const beatTime = managed ? MANAGED_BEAT_TIME : BEAT_TIME;
@@ -891,21 +890,29 @@
         parts.jaw.rotation.x = chew * 0.16;
       }
       if (managed) {
-        const hipHeight = (lounge ? reclining ? 0 : 0.12 : HIP - 0.17 * crouch + 0.08 * takeoff) * (1 - rolling) + 0.4 * rolling;
-        state.hipHeight = damp(state.hipHeight, hipHeight, crouch > 0 || jumping ? 14 : 6, dt);
+        const hipHeight = (lounge ? reclining ? 0 : 0.12 : HIP - 0.17 * crouch + 0.08 * takeoff - 0.06 * slamDrive) * (1 - rolling);
+        state.hipHeight = damp(state.hipHeight, hipHeight, slamDrive > 0 ? 18 : crouch > 0 || jumping ? 14 : 6, dt);
         const groundRoll = state.groundPlane ? Math.atan(state.groundX / Math.hypot(1, state.groundZ)) : 0;
-        hips.rotation.x = damp(hips.rotation.x, reclining ? -Math.PI / 2 : groundPitch, rolling > 0.0001 ? 9 : 6, dt);
+        hips.rotation.x = damp(hips.rotation.x, reclining ? -Math.PI / 2 : rolling ? Math.PI / 2 * rolling : groundPitch, rolling > 0.0001 ? 9 : 6, dt);
         hips.rotation.z = damp(hips.rotation.z, groundRoll, 6, dt);
         state.hipOffsetZ = damp(state.hipOffsetZ, reclining ? 0.5 : 0, 6, dt);
         hips.position.z = state.hipOffsetZ;
         hips.position.y = state.hipHeight + bob;
-        // The chest points its long axis forward while rolling. Turn around
-        // that axis so the face points up without reversing head and feet.
-        if (rolling > 0.0001 || Math.abs(state.rollAngle) > 0.0001 || Math.abs(state.sideAngle) > 0.0001) {
+        // A fire roll turns halfway around the body's length before it rocks on its back.
+        // Side sleepers still rotate about the chest's forward axis.
+        if (rolling > 0.0001 || Math.abs(state.rollAngle) > 0.0001 || Math.abs(state.rollSide) > 0.0001 || Math.abs(state.sideAngle) > 0.0001) {
           const sx = Math.sin(hips.rotation.x * 0.5), cx = Math.cos(hips.rotation.x * 0.5);
-          const angle = state.rollAngle + state.sideAngle, sz = Math.sin(angle * 0.5), cz = Math.cos(angle * 0.5);
-          rollQuaternion[0] = cz * sx; rollQuaternion[1] = sz * sx;
-          rollQuaternion[2] = sz * cx; rollQuaternion[3] = cz * cx;
+          if (rolling > 0.0001 || Math.abs(state.rollAngle) > 0.0001 || Math.abs(state.rollSide) > 0.0001) {
+            const sz = Math.sin(state.rollSide * 0.5), cz = Math.cos(state.rollSide * 0.5);
+            const sy = Math.sin(state.rollAngle * 0.5), cy = Math.cos(state.rollAngle * 0.5);
+            const bx = cz * sx, by = sz * sx, bz = sz * cx, bw = cz * cx;
+            rollQuaternion[0] = bx * cy - bz * sy; rollQuaternion[1] = bw * sy + by * cy;
+            rollQuaternion[2] = bz * cy + bx * sy; rollQuaternion[3] = bw * cy - by * sy;
+          } else {
+            const sz = Math.sin(state.sideAngle * 0.5), cz = Math.cos(state.sideAngle * 0.5);
+            rollQuaternion[0] = cz * sx; rollQuaternion[1] = sz * sx;
+            rollQuaternion[2] = sz * cx; rollQuaternion[3] = cz * cx;
+          }
           // A slight slope plants the lower foot alongside the hip and forearm.
           // A steeper tilt leaves the torso suspended between those extremities.
           const tilt = 0.1 * Math.abs(Math.sin(state.sideAngle)), st = Math.sin(tilt * 0.5), ct = Math.cos(tilt * 0.5);
@@ -1187,6 +1194,7 @@
       state.landing = motion ? clamp(motion.landing || 0, 0, 1) : 0;
       state.roll = motion ? clamp(motion.roll || 0, 0, 1) : 0;
       state.rollTarget = motion && Number.isFinite(motion.rollAngle) ? motion.rollAngle : 0;
+      state.rollSide = motion ? motion.rollSide || 0 : 0;
       state.climb = motion && !airborne && !state.roll
         ? clamp(Math.max(motion.climb || 0, motion.openingSettle || 0), 0, 1) : 0;
       state.climbPose = motion && Number.isFinite(motion.climbBlend)
@@ -1220,7 +1228,6 @@
       }
       if (motion && Number.isFinite(motion.groomPhase)) state.groomTime = motion.groomPhase;
       state.smash = !!(motion && motion.smash && !airborne && !state.roll);
-      state.dragging = !!(motion && motion.dragging && !airborne && !state.roll);
       state.lounge = !airborne && state.speed <= 0.1 && (lounge === "sit" || lounge === "back" || lounge === "left" || lounge === "right"
         || lounge === "lean-left" || lounge === "lean-right" || lounge === "lean-back") ? lounge : "";
       if (state.roll > 0 || airborne || state.climb > 0) state.lounge = "";
@@ -1228,7 +1235,8 @@
       if (state.speed > 0.1 || airborne) state.beat = 0;
       state.groundPlane = !!(groundPlaneAt && !airborne && !lab && !lounge && !state.climb && !state.roll
         && !state.beat && !state.pound && groundPlaneAt(px, py, pz, facing, state, motion));
-      state.gait = state.beat > 0 ? "beat" : state.biped ? "upright" : state.speed > 1.7 ? "gallop" : state.speed > 0.01 ? "knuckle" : "idle";
+      state.gait = state.beat > 0 ? "beat" : state.biped ? "upright" : state.speed <= 0.01 ? "idle"
+        : motion && motion.walkGait ? motion.walkGait : state.speed > 1.7 ? "gallop" : "knuckle";
       pose(Math.max(0, dt));
       if (state.climbFitArms) {
         // Bent feet can lift the rig above its nominal pelvis height. Fit the
@@ -1794,7 +1802,7 @@
       get pounding() { return state.pound > 0; },
       get beating() { return state.beat > 0; },
       get chewing() { return state.chewing > 0; },
-      get motionActive() { return managed && (state.air || state.crouch > 0.001 || state.takeoff > 0 || state.rollBlend > 0.001 || Math.abs(state.rollAngle) > 0.001 || state.climb > 0 || state.climbBlend > 0.001); },
+      get motionActive() { return managed && (state.air || state.crouch > 0.001 || state.takeoff > 0 || state.rollBlend > 0.001 || Math.abs(state.rollAngle) > 0.001 || Math.abs(state.rollSide) > 0.001 || state.climb > 0 || state.climbBlend > 0.001); },
       get smashActive() { return managed && state.smash && state.pound > 0; },
       get revealed() { return state.revealFor > 0; },
       get airborne() { return state.air; },

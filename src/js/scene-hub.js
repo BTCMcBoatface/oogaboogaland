@@ -3799,7 +3799,7 @@
       break;
     }
   };
-  const prepareClankerRiders = () => {
+  const prepareClankerRiders = (elapsed) => {
     for (let i = 0; i < crew.list.length; i++) {
       const cave = crew.list[i], ride = cave.clankerRide;
       ride.entry = ride.node = null;
@@ -3816,6 +3816,7 @@
       math.mat4.invert(CLANKER_RIDER_INVERSE, ride.node.world);
       math.mat4.transformPoint(CLANKER_RIDER_POINT, CLANKER_RIDER_INVERSE, p.x, feet, p.z);
       ride.localX = CLANKER_RIDER_POINT[0]; ride.localY = CLANKER_RIDER_POINT[1]; ride.localZ = CLANKER_RIDER_POINT[2];
+      jumpOffClanker(cave, ride, elapsed);
     }
   };
   const clankerRidersClear = (entry, x, y, z, toX, toY, toZ, fromHeading, toHeading) => {
@@ -3830,6 +3831,29 @@
         toX + cosine * dx + sine * dz, ride.y + toY - ride.carrierY, toZ - sine * dx + cosine * dz, entry)) return false;
     }
     return true;
+  };
+  const jumpOffClanker = (cave, ride, elapsed) => {
+    if (elapsed < ride.nextJumpAt || cave.health.stunned || cave.camp.burning || cave.bedTravel.mode) return;
+    ride.nextJumpAt = elapsed + 0.35;
+    const p = cave.root.position, feet = p.y - cave.baseY;
+    const awayX = p.x - ride.entry.root.position.x, awayZ = p.z - ride.entry.root.position.z;
+    const base = Math.hypot(awayX, awayZ) > 0.1 ? Math.atan2(awayX, awayZ) : cave.root.rotation.y;
+    for (let i = 0; i < 8; i++) {
+      const turn = i ? Math.ceil(i / 2) * (i & 1 ? 1 : -1) * Math.PI / 4 : 0;
+      const angle = base + turn, dx = Math.sin(angle), dz = Math.cos(angle);
+      const x = p.x + dx * 1.5, z = p.z + dz * 1.5;
+      const floor = playerSupportAt(x, z, feet + 0.4, feet + 0.4, cave);
+      if (floor <= ABYSS_FLOOR || floor < feet - 2.5 || floor > feet + 0.4
+        || clankerMeshes.supportAt(x, z, feet + 0.4, 0, PLAYER_RADIUS) >= floor - 0.05
+        || !flyable(p.x, p.z, x, z, feet + 0.4, cave.bodyHeight, cave)
+        || cave !== pilot.player && shared.npcLandingAllowed && !shared.npcLandingAllowed(x, floor, z, cave.bodyHeight, cave)) continue;
+      cave.hopV = crewMod.JUMP_SPEED;
+      cave.jumps = 1;
+      cave.leap.vx = dx * pilotMod.WALK.ledgeSpeed;
+      cave.leap.vz = dz * pilotMod.WALK.ledgeSpeed;
+      ride.entry = ride.node = null;
+      return;
+    }
   };
   const carryClankerRiders = () => {
     for (let i = 0; i < crew.list.length; i++) {
@@ -3851,52 +3875,6 @@
       }
       p.x = x; p.y = cave.baseY + floor; p.z = z;
       cave.hop = 0; cave.hopV = 0;
-    }
-  };
-  const releaseClankerDrag = (entry) => {
-    const drag = entry.drag, cave = drag.cave;
-    if (!cave) return;
-    drag.cave = null; drag.time = 0;
-    entry.motion.dragging = false;
-    cave.clankerDragged = false;
-    cave.root.rotation.x = 0;
-    cave.root.position.y = cave.baseY + island.supportAt(cave.root.position.x, cave.root.position.z,
-      cave.root.position.y - cave.baseY, 0.52);
-    cave.hop = cave.hopV = 0;
-  };
-  const grabClankerOoga = (entry) => {
-    const p = entry.root.position;
-    let nearest = null, distance = 2.6;
-    for (let i = 0; i < crew.list.length; i++) {
-      const cave = crew.list[i], q = cave.root.position;
-      if (!cave.root.visible || cave.state === "sleeping" || cave.health.stunned || cave.clankerDragged || cave.bedTravel.mode) continue;
-      const gap = Math.hypot(p.x - q.x, p.z - q.z);
-      if (gap < distance && Math.abs(p.y - (q.y - cave.baseY)) < 1.5) { nearest = cave; distance = gap; }
-    }
-    if (!nearest) return false;
-    entry.drag.cave = nearest; entry.drag.time = 2;
-    entry.motion.dragging = true;
-    nearest.clankerDragged = true;
-    nearest.riding.support = null;
-    nearest.hop = nearest.hopV = 0;
-    return true;
-  };
-  const updateClankerDrags = (dt) => {
-    for (let i = 0; i < clankers.list.length; i++) {
-      const entry = clankers.list[i], drag = entry.drag, cave = drag.cave;
-      if (!cave) continue;
-      if (!entry.controlled || !entry.active || !cave.root.visible || entry.fire.rolling || (drag.time -= dt) <= 0) {
-        releaseClankerDrag(entry); continue;
-      }
-      const p = entry.root.position, q = cave.root.position;
-      const x = p.x - Math.sin(entry.heading) * 1.25, z = p.z - Math.cos(entry.heading) * 1.25;
-      const floor = island.supportAt(x, z, p.y, 0.52), fromY = q.y - cave.baseY;
-      if (!characterCarryClear(cave, q.x, fromY, q.z, x, floor, z, entry)) {
-        releaseClankerDrag(entry); continue;
-      }
-      q.x = x; q.y = cave.baseY + floor + 0.48; q.z = z;
-      cave.root.rotation.x = -Math.PI / 2;
-      cave.root.rotation.y = entry.heading;
     }
   };
   const inBananas = (cave, x = cave.root.position.x, z = cave.root.position.z) => bananaCover.intersectsBody(x, cave.root.position.y - cave.baseY, z, cave.bodyHeight);
@@ -3953,6 +3931,19 @@
       const dx = x - m.x, dz = z - m.z;
       const across = dx * entry.cr - dz * entry.sr, along = dx * entry.sr + dz * entry.cr;
       if (Math.abs(across) <= 3 + PLAYER_RADIUS && along >= -PLAYER_RADIUS && along <= 1 + PLAYER_RADIUS) return true;
+    }
+    return false;
+  };
+  const npcCaveRoofAt = (x, y, z) => {
+    if (npcRampRoofAt(x, y, z)) return true;
+    const surface = island.surfaceAt(x, z);
+    if (y < surface - 0.15 || y > surface + STEP_MAX || surface <= STEP_MAX) return false;
+    for (let i = 0; i < island.mouths.length; i++) {
+      const m = island.mouths[i], sr = Math.sin(m.ry), cr = Math.cos(m.ry);
+      const dx = x - m.x, dz = z - m.z;
+      const across = dx * cr - dz * sr, along = dx * sr + dz * cr;
+      if (Math.abs(across) <= m.room.w / 2 + PLAYER_RADIUS
+        && along >= -m.room.to - 1 && along <= 1 + PLAYER_RADIUS) return true;
     }
     return false;
   };
@@ -5482,7 +5473,6 @@
   const navigate = (name) => {
     const destination = NAVIGATION, p = destination.position, target = destination.target;
     const player = pilot.player, close = pilot.closeWanted, basement = name === "basement", underground = name === "underground" || basement;
-    if (hud.setDetachedView) hud.setDetachedView(name, !player);
     let x = 0, z = 0, yaw = 0, pitch = 0.18, dist = player ? 6 : 8;
     if (name === "pile") {
       z = Math.max(5, altar.platformRadius + 1.3);
@@ -5564,6 +5554,7 @@
       pilot.showAct();
     }
     syncMatrixInside(player);
+    if (hud.setDetachedView) hud.setDetachedView(name, true);
     hud.tooltip.hide();
   };
   // Keep navigation within the world's horizontal extent.
@@ -6233,9 +6224,26 @@
     mirrorCave.ripples.update(dt, elapsed);
     entropyLab.phase.update(dt, elapsed);
     if (factoryMouth) factoryShield(dt, elapsed);
-    prepareClankerRiders();
+    prepareClankerRiders(elapsed);
     prepareClankerStrike();
     clankers.update(dt);
+    for (let i = 0; i < clankers.list.length; i++) {
+      const entry = clankers.list[i], p = entry.root.position;
+      if (!entry.active || p.y >= ABYSS_RESPAWN_Y || island.supportAt(p.x, p.z, p.y, 0, ABYSS_FLOOR) !== ABYSS_FLOOR) continue;
+      if (!entry.controlled) { clankers.respawn(entry); continue; }
+      // Use the character's pile arrival and abyss threshold. Keep possession
+      // and translate the camera with the body instead of trailing its fall.
+      const oldX = p.x, oldY = p.y, oldZ = p.z, z = Math.max(5, altar.platformRadius + 1.3);
+      let found = false;
+      for (let j = 0; j < NAVIGATION_OFFSETS.length; j++) {
+        const x = NAVIGATION_OFFSETS[j], y = island.surfaceAt(x, z);
+        if (!clankerCenterClear(entry, x, y, z, x, y, z)) continue;
+        clankers.respawn(entry, x, y, z);
+        clankerPlay.respawn(p.x - oldX, p.y - oldY, p.z - oldZ);
+        found = true; break;
+      }
+      if (!found) throw new Error("No clear gorilla respawn at pile");
+    }
     if (dt > 0) updateClankerFireContacts(clankerFireReachable);
     if (debugSelectedGorilla && (!debugSelectedGorilla.active || !debugSelectedGorilla.root.visible || pilot.player || clankerPlay.active)) selectDebugGorilla(null);
     updateLabEquipment(dt);
@@ -6258,7 +6266,6 @@
     // Sweep before any abyss equipment loss or respawn, including a whole-shaft fall in one step.
     if (!entering && !pilot.poseHeld && fallingPlayer && fallingPlayer === pilot.player
       && pitGate.traverse(pitPrevious, fallingPlayer.root.position, fallingPlayer.bodyRadius)) return;
-    updateClankerDrags(dt);
     dockStairs.update(dt, pilot.player);
     updateRoomSigns(dt);
     pile.update(dt);
@@ -6446,6 +6453,10 @@
   let clankerPassingEntry = null;
   const clankerPassingPeer = (entry, other) => !!entry && entry === clankerPassingEntry && other !== entry;
   const clankerSatelliteLandAt = (x, y, z, radius) => {
+    // The rounded underside's balconies extend past the surface land mask.
+    // Admit their actual footing so a window landing can continue walking.
+    const terrainFloor = island.supportAt(x, z, y, STEP_MAX, -Infinity, radius);
+    if (Number.isFinite(terrainFloor) && Math.abs(terrainFloor - y) <= STEP_MAX) return true;
     let admitted = false;
     if (mempoolIsland) {
       const p = mempoolIsland.place, s = poolModels.SITE, dx = x - p.x, dz = z - p.z;
@@ -6453,7 +6464,7 @@
       const across = dx * cos - dz * sin, along = dx * sin + dz * cos;
       const reach = radius;
       const bridge = Math.abs(across) + reach < s.width / 2
-        && along >= p.bridgeLocalZ - reach - 0.4 && along <= p.bridgeLocalZ + s.span + reach;
+        && along >= p.bridgeLocalZ + s.deckStart - reach && along <= p.bridgeLocalZ + s.span + reach;
       admitted = bridge || Math.hypot(dx, dz) + reach < s.isletR * 0.9;
     }
     // These floors are solid-prop meshes outside the main terrain's domain.
@@ -6500,15 +6511,11 @@
         || !island.voxelSegmentClearAt(x, floor, z, toX, toFloor, toZ, radius, body))
       || !solids.segmentClear(x, floor, z, toX, toFloor, toZ, fromRadius, fromHeight - 0.002, ignore, toRadius, toHeight - 0.002, !!entry && !climbing, skipClimbMasonry)
       || !matrixGateSegmentClear(x, floor, z, toX, toFloor, toZ, radius, body, true)) return false;
-    for (let i = 0; i < fireHazards.length && !(entry && (entry.controlled || entry.fire.burning)); i++) {
-      const fire = fireHazards[i];
-      if (fire.pit.visible && !cylinderSegmentClear(x, floor, z, toX, toFloor, toZ, radius, body,
-        fire.x, fire.z, fire.y, fire.y + FIRE_TOP, fire.avoidRadius - PLAYER_RADIUS)) return false;
-    }
+    if ((!entry || !entry.controlled) && !npcFireClear(x, y, z, toX, toY, toZ, height)) return false;
     if (!actors) return true;
     for (let i = 0; i < crew.list.length; i++) {
       const other = crew.list[i], p = other.root.position;
-      if (!other.root.visible || entry && (other.clankerRide?.entry === entry || entry.drag.cave === other)) continue;
+      if (!other.root.visible || entry && other.clankerRide?.entry === entry) continue;
       const bounds = actorBounds(other);
       if (other.root.quaternion) {
         if (!terrain.segmentBoxClear(x, floor, z, toX - x, toFloor - floor, toZ - z, radius, body, bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5])) return false;
@@ -6521,7 +6528,46 @@
     }
     return true;
   };
-  const clankerCenterClear = (entry, x, y, z, toX, toY, toZ, allowOffLand = false) => {
+  const clankerFireDistance = (x, z, heading, hazard, forward, halfForward, halfSide) => {
+    const sine = Math.sin(heading), cosine = Math.cos(heading);
+    const dx = hazard.x - x - sine * forward, dz = hazard.z - z - cosine * forward;
+    const along = Math.max(0, Math.abs(dx * sine + dz * cosine) - halfForward);
+    const across = Math.max(0, Math.abs(dx * cosine - dz * sine) - halfSide);
+    return along * along + across * across;
+  };
+  const clankerFireClear = (entry, x, y, z, toX, toY, toZ, fromHeading = entry.heading, toHeading = fromHeading) => {
+    if (entry.controlled) return true;
+    // Prop-height blending can leave the rendered feet below their support
+    // position. Keep that lower body inside the pit's avoidance height band.
+    const offset = Math.min(0, entry.motion.supportOffset);
+    y += offset; toY += offset;
+    const rect = clankerRectangleAt(entry, CLANKER_RECTANGLE);
+    const forward = rect.centerForward, halfForward = rect.halfForward + 0.1, halfSide = rect.halfSide + 0.1;
+    const dx = toX - x, dz = toZ - z;
+    const turn = Math.atan2(Math.sin(toHeading - fromHeading), Math.cos(toHeading - fromHeading));
+    for (const hazard of fireHazards) {
+      if (!hazard.pit.visible || Math.max(y, toY) + entry.height <= hazard.y + FIRE_BOTTOM
+        || Math.min(y, toY) >= hazard.y + FIRE_TOP) continue;
+      const reach = hazard.avoidRadius + Math.max(Math.abs(forward) + halfForward, halfSide);
+      const hx = x - hazard.x, hz = z - hazard.z;
+      const t = dx * dx + dz * dz ? clamp(-(hx * dx + hz * dz) / (dx * dx + dz * dz), 0, 1) : 0;
+      if ((hx + dx * t) ** 2 + (hz + dz * t) ** 2 >= reach * reach) continue;
+      const radius2 = hazard.avoidRadius ** 2;
+      // A gorilla already inside the margin may walk out instead of being trapped there.
+      if (clankerFireDistance(x, z, fromHeading, hazard, forward, halfForward, halfSide) < radius2
+        && (hx + dx) ** 2 + (hz + dz) ** 2 > hx * hx + hz * hz
+        && hx * dx + hz * dz >= 0) continue;
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.25), Math.ceil(Math.abs(turn) / 0.15));
+      for (let i = 0; i <= steps; i++) {
+        const a = i / steps;
+        if (clankerFireDistance(x + dx * a, z + dz * a, fromHeading + turn * a,
+          hazard, forward, halfForward, halfSide) < radius2) return false;
+      }
+    }
+    return true;
+  };
+  const clankerCenterClear = (entry, x, y, z, toX, toY, toZ, allowOffLand = false,
+    fromHeading = entry.heading, toHeading = fromHeading) => {
     const radius = 0.025, centerY = 0.65, height = 0.12;
     const from = y + centerY, to = toY + centerY;
     if (!allowOffLand && !island.onLand(toX, toZ) && !clankerSatelliteLandAt(toX, toY, toZ, radius)
@@ -6530,12 +6576,7 @@
       || !island.voxelSegmentClearAt(x, from, z, toX, to, toZ, radius, height)
       || !solids.segmentClear(x, from, z, toX, to, toZ, radius, height, null, radius, height, true)
       || !matrixGateSegmentClear(x, from, z, toX, to, toZ, radius, height, true)) return false;
-    if (!entry.controlled && !entry.fire.burning) for (let i = 0; i < fireHazards.length; i++) {
-      const fire = fireHazards[i];
-      if (fire.pit.visible && !cylinderSegmentClear(x, from, z, toX, to, toZ, radius, height,
-        fire.x, fire.z, fire.y, fire.y + FIRE_TOP, fire.avoidRadius - PLAYER_RADIUS)) return false;
-    }
-    return true;
+    return clankerFireClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading);
   };
   const clankerOpeningClear = (entry, x, y, z, toX, toY, toZ) => {
     // An upright climber can swing its feet through a window before the
@@ -6547,16 +6588,50 @@
       && island.voxelSegmentClearAt(x, from, z, toX, to, toZ, radius, 0.12)
       && solids.segmentClear(x, from, z, toX, to, toZ, radius, 0.12, null, radius, 0.12, true);
   };
+  const clankerPlatformEntryAt = (x, y, z, out) => {
+    const hq = island.headquarters, radius = Math.hypot(x, z), angle = Math.atan2(x, -z);
+    for (let level = 0; level < 2; level++) {
+      const balconies = level ? hq.basement.balconies : hq.balconies;
+      for (let i = 0; i < balconies.length; i++) {
+        const platform = balconies[i];
+        if (angle <= platform.startAngle || angle >= platform.endAngle
+          || y < platform.floor - 0.1 || y > platform.ceiling + 2.4
+          || radius < Math.min(platform.radius, platform.openingRadius) - 4
+          || radius > Math.max(platform.radius, platform.openingRadius) + 2.5) continue;
+        // The root trails the front of the walking rectangle. Capture it
+        // before the projecting lip blocks its descent, and place its feet
+        // well inside the opening rather than at the outer floor edge.
+        const landingRadius = Math.min(platform.radius, platform.openingRadius) - 2.6;
+        out.x = x * landingRadius / radius; out.z = z * landingRadius / radius;
+        out.y = platform.floor; out.heading = Math.atan2(-x, -z);
+        out.radius = Math.max(platform.radius, platform.openingRadius) + 0.75;
+        return true;
+      }
+    }
+    return false;
+  };
   const clankerRigClear = (x, y, z, toX, toY, toZ, radius, height, entry = null, ignore = null,
     fromHeading = entry ? entry.heading : 0, toHeading = fromHeading) => {
     // Only a complete companion uses its posed rig for this sweep.
     if (!entry || ignore || radius !== entry.radius || height !== entry.height) {
       return clankerCylinderClear(x, y, z, toX, toY, toZ, radius, height, entry, ignore);
     }
+    // The climbing handoff places the feet on the inner floor before the
+    // quadruped body clears the window. Keep its certified center/foot sweep
+    // through the throat, then restore the ordinary walking envelope.
+    const exit = entry.climb;
+    if (exit.openingExit && !exit.active) {
+      const sx = Math.sin(exit.openingExitHeading), sz = Math.cos(exit.openingExitHeading);
+      const from = (x - exit.openingExitX) * sx + (z - exit.openingExitZ) * sz;
+      const to = (toX - exit.openingExitX) * sx + (toZ - exit.openingExitZ) * sz;
+      const side = (toX - exit.openingExitX) * sz - (toZ - exit.openingExitZ) * sx;
+      if (from >= -0.05 && to >= -0.05 && to < 2.4 && Math.abs(side) < 1.1)
+        return clankerOpeningClear(entry, x, y, z, toX, toY, toZ);
+    }
     if (!entry.motion.lab && !entry.planningLab && !entropyLab.phase.inside(toX, toY, toZ)
       && !entry.climb.active)
       return clankerCenterClear(entry, x, y, z, toX, toY, toZ,
-        entry.drive.airborne && !entry.drive.passiveFall);
+        entry.drive.airborne && !entry.drive.passiveFall, fromHeading, toHeading);
     if (!clankerRidersClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading)) return false;
     const labPose = entry.planningLab || entropyLab.phase.inside(toX, toY, toZ)
       && !entry.gorilla.motionActive && !entry.pound && !entry.beat && !entry.climb.active;
@@ -6622,7 +6697,7 @@
     island.supportAt(x, z, y, 0.02, ABYSS_FLOOR), solids.supportAt(x, z, y, 0.02, 0));
   const clankerRestFootingClear = (entry, x, y, z, heading) => {
     if (!entropyLab.phase.inside(x, y, z))
-      return clankerCenterClear(entry, x, y, z, x, y, z)
+      return clankerCenterClear(entry, x, y, z, x, y, z, false, heading, heading)
         && Math.abs(clankerPointFootingAt(x, z, y) - y) < 0.1;
     CLANKER_REST_FOOTING.lab = entropyLab.phase.inside(x, y, z);
     return entry.gorilla.walkPoseClear(x, y, z, x, y, z, heading, heading,
@@ -6699,8 +6774,8 @@
     x = entry.root.position.x, y = entry.root.position.y, z = entry.root.position.z, heading = entry.heading, fromLounge = null, sequenceStep = 0) => {
     const p = entry.root.position, c = entry.climb;
     const sx = staticPose ? x : p.x, sy = staticPose ? y : p.y, sz = staticPose ? z : p.z;
-    if (!entry.motion.lab) return clankerCenterClear(entry, sx, sy, sz, x, y, z);
     const fromHeading = staticPose ? heading : entry.heading;
+    if (!entry.motion.lab && !clankerCenterClear(entry, sx, sy, sz, x, y, z, false, fromHeading, heading)) return false;
     if (!clankerRidersClear(entry, sx, sy, sz, x, y, z, fromHeading, heading)) return false;
     c.peerX = sx; c.peerY = sy; c.peerZ = sz; c.peerHeading = fromHeading; c.peerCheck = true;
     try {
@@ -6739,16 +6814,66 @@
     const nx = p.x + cosine * side * 1.55 + sine * 0.55, nz = p.z - sine * side * 1.55 + cosine * 0.55;
     return clankerCylinderClear(x, p.y + 1.1, z, nx, p.y + 1.1, nz, 0.22, 0.5, entry, partner);
   };
+  const FIRE_BODY_PARTS = ["torso", "head", "jaw", "armL", "armR", "legL", "legR"];
+  const FIRE_PART_ROT = new Float64Array(9);
+  const FIRE_PART_ABS = new Float64Array(9), FIRE_PART_EXTENT = new Float64Array(3);
+  const FIRE_PART_TRANSLATION = new Float64Array(3), FIRE_PART_LOCAL = new Float64Array(3);
+  const fireBoxTouchesPart = (part, fx, fy, fz, hx, hy, hz, dx, dy, dz) => {
+    const b = BL.scene.boundsOf(part.geometry), m = part.world;
+    const cx = m[0] * b.center[0] + m[4] * b.center[1] + m[8] * b.center[2] + m[12] + dx;
+    const cy = m[1] * b.center[0] + m[5] * b.center[1] + m[9] * b.center[2] + m[13] + dy;
+    const cz = m[2] * b.center[0] + m[6] * b.center[1] + m[10] * b.center[2] + m[14] + dz;
+    const t = FIRE_PART_TRANSLATION, local = FIRE_PART_LOCAL, extent = FIRE_PART_EXTENT;
+    const rotation = FIRE_PART_ROT, absolute = FIRE_PART_ABS;
+    t[0] = fx - cx; t[1] = fy - cy; t[2] = fz - cz;
+    for (let i = 0; i < 3; i++) {
+      const col = i * 4, row = i * 3;
+      const length = Math.hypot(m[col], m[col + 1], m[col + 2]);
+      extent[i] = (b.max[i] - b.min[i]) * length * 0.5;
+      for (let j = 0; j < 3; j++) {
+        const axis = m[col + j] / length;
+        rotation[row + j] = axis;
+        absolute[row + j] = Math.abs(axis);
+      }
+      local[i] = t[0] * rotation[row] + t[1] * rotation[row + 1] + t[2] * rotation[row + 2];
+    }
+    const half = FIRE_FLAME_HALF;
+    half[0] = hx; half[1] = hy; half[2] = hz;
+    for (let i = 0; i < 3; i++) {
+      const row = i * 3;
+      if (Math.abs(local[i]) > extent[i] + half[0] * absolute[row] + half[1] * absolute[row + 1] + half[2] * absolute[row + 2]) return false;
+      if (Math.abs(t[i]) > half[i] + extent[0] * absolute[i] + extent[1] * absolute[3 + i] + extent[2] * absolute[6 + i]) return false;
+    }
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      const a = (i + 1) % 3, b = (i + 2) % 3, c = (j + 1) % 3, d = (j + 2) % 3;
+      if (Math.abs(local[b] * rotation[a * 3 + j] - local[a] * rotation[b * 3 + j])
+        > extent[a] * absolute[b * 3 + j] + extent[b] * absolute[a * 3 + j]
+          + half[c] * absolute[i * 3 + d] + half[d] * absolute[i * 3 + c]) return false;
+    }
+    return true;
+  };
+  const FIRE_FLAME_HALF = new Float64Array(3);
   const clankerFireContact = (entry, fromX, fromY, fromZ) => {
     if (entry.fire.burning || entry.fire.cooldown > 0) return false;
-    const p = entry.root.position, samples = Math.min(8, Math.max(1, Math.ceil(Math.hypot(p.x - fromX, p.y - fromY, p.z - fromZ) / 0.2)));
+    const p = entry.root.position, parts = entry.gorilla.parts;
+    const samples = Math.min(8, Math.max(1, Math.ceil(Math.hypot(p.x - fromX, p.y - fromY, p.z - fromZ) / 0.2)));
+    let posed = false;
     for (let i = 0; i < fireHazards.length; i++) {
       const hazard = fireHazards[i];
       if (!hazard.node.visible) continue;
+      const boxes = hazard.node.geometry.fireBoxes, reach = entry.gorilla.bodyRadius + 0.5;
       for (let s = 0; s <= samples; s++) {
-        const k = s / samples;
-        if (BL.agent.footprint.circleOverlaps(entry, lerp(fromX, p.x, k), lerp(fromY, p.y, k), lerp(fromZ, p.z, k), entry.heading,
-          hazard.x, hazard.y + FIRE_BOTTOM, hazard.z, FIRE_CONTACT_RADIUS, FIRE_TOP - FIRE_BOTTOM)) return true;
+        const k = s / samples, x = lerp(fromX, p.x, k), y = lerp(fromY, p.y, k), z = lerp(fromZ, p.z, k);
+        if (Math.hypot(x - hazard.x, z - hazard.z) > reach) continue;
+        if (!posed) { BL.scene.updateWorld(entry.root, root.world); posed = true; }
+        for (let partIndex = 0; partIndex < FIRE_BODY_PARTS.length; partIndex++) {
+          const part = parts[FIRE_BODY_PARTS[partIndex]];
+          if (!part?.visible || !part.geometry) continue;
+          for (let box = 0; box < boxes.length; box += 6) {
+            if (fireBoxTouchesPart(part, hazard.x + boxes[box], hazard.y + boxes[box + 1], hazard.z + boxes[box + 2],
+              boxes[box + 3], boxes[box + 4], boxes[box + 5], x - p.x, y - p.y, z - p.z)) return true;
+          }
+        }
       }
     }
     return false;
@@ -6982,6 +7107,7 @@
   const CLANKER_REST_SLOPE = { supportEntry: null, lab: false,
     groundRects: { flat: {}, angled: { walkable: false, uneven: Infinity, groundX: 0, groundZ: 0 } } };
   const clankerRestSiteClear = (entry, x, y, z, heading) => {
+    if (!clankerFireClear(entry, x, y, z, x, y, z, heading, heading)) return false;
     const slope = CLANKER_REST_SLOPE, angled = slope.groundRects.angled;
     slope.supportEntry = entry;
     clankerGroundPlaneAt(x, y, z, heading, slope, slope);
@@ -7227,23 +7353,57 @@
       && Math.abs(dx * axisX + dz * axisZ) <= radiusX + frontRadius * Math.abs(forwardAxis) + halfSide * Math.abs(rightAxis)
       && Math.abs(dx * depthX + dz * depthZ) <= radiusZ + frontRadius * Math.abs(forwardDepth) + halfSide * Math.abs(rightDepth);
   };
+  const CLANKER_BURN_PARTS = ["legL", "legR", "armL", "armR", "torso", "head"];
   const updateClankerEffects = (dt) => {
     for (let i = 0; i < clankers.list.length; i++) {
       const entry = clankers.list[i];
       if (!entry.active) continue;
-      const f = entry.fire, parts = entry.renderParts;
+      const f = entry.fire, parts = entry.renderParts, fireFX = entry.fireFX, spread = fireFX.spread;
+      if (f.burning && !fireFX.burning) {
+        if (f.soot === 0) spread.fill(0);
+        fireFX.next = 0;
+      }
+      fireFX.burning = f.burning;
+      if (f.burning && !f.rolling) {
+        const limb = clamp(0.12 + f.age * 0.88, 0, 1);
+        const torso = clamp((f.age - 0.35) * 0.72, 0, 1);
+        const head = clamp((f.age - 1.1) * 0.8, 0, 1);
+        for (let j = 0; j < 4; j++) spread[j] = Math.max(spread[j], limb);
+        spread[4] = Math.max(spread[4], torso);
+        spread[5] = Math.max(spread[5], head);
+      }
       const heat = f.burning ? f.heat * (f.rolling ? Math.max(0, 1 - f.rollTime / 3) : 1) : 0;
-      for (let j = 0; j < parts.length; j++) { parts[j].ember = heat; parts[j].scorch = f.soot; }
+      for (let j = 0; j < parts.length; j++) { parts[j].ember = 0; parts[j].scorch = 0; }
+      for (let j = 0; j < CLANKER_BURN_PARTS.length; j++) {
+        const part = entry.gorilla.parts[CLANKER_BURN_PARTS[j]];
+        part.ember = spread[j] * heat;
+        part.scorch = spread[j] * f.soot;
+        for (let k = 0; k < part.children.length; k++) {
+          const child = part.children[k];
+          if (child === entry.gorilla.labFlask || !child.geometry) continue;
+          child.ember = part.ember;
+          child.scorch = part.scorch;
+        }
+      }
       if (f.burning || f.soot > 0.7) {
-        entry.fireFX.next -= dt;
-        if (entry.fireFX.next <= 0) {
-          entry.fireFX.next = f.burning ? 0.08 : 0.2;
+        fireFX.next -= dt;
+        if (fireFX.next <= 0) {
+          fireFX.next = f.burning ? 0.08 : 0.2;
           BL.scene.updateWorld(entry.root, root.world);
-          const part = parts[Math.floor(Math.random() * parts.length)], b = BL.scene.boundsOf(part.geometry), m = part.world;
-          const x = lerp(b.min[0], b.max[0], Math.random()), y = lerp(b.min[1], b.max[1], Math.random()), z = b.max[2];
-          fx.spawnParticle(f.burning ? CLANKER_FIRE[i % 2] : CLANKER_SMOKE,
-            m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14],
-            0, 0.8, 0, 0.65, 2, -0.2, -Infinity);
+          let total = 0;
+          for (let j = 0; j < spread.length; j++) total += spread[j];
+          if (total > 0) {
+            let pick = Math.random() * total, index = spread.length - 1;
+            for (let j = 0; j < spread.length; j++) {
+              pick -= spread[j];
+              if (pick < 0) { index = j; break; }
+            }
+            const part = entry.gorilla.parts[CLANKER_BURN_PARTS[index]], b = BL.scene.boundsOf(part.geometry), m = part.world;
+            const x = lerp(b.min[0], b.max[0], Math.random()), y = lerp(b.min[1], b.max[1], Math.random() * spread[index]), z = b.max[2];
+            fx.spawnParticle(f.burning ? CLANKER_FIRE[i % 2] : CLANKER_SMOKE,
+              m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14],
+              0, 0.8, 0, 0.65, 2, -0.2, -Infinity);
+          }
         }
       }
       if (!entry.controlled || !entry.actionControlled || entry.pound > 0.43 || entry.pound < 0.17) continue;
@@ -7284,6 +7444,8 @@
   };
   const registerClanker = (entry) => {
     entry.renderParts = [];
+    entry.fireFX.spread = new Float32Array(CLANKER_BURN_PARTS.length);
+    entry.fireFX.burning = false;
     entry.combat = { left: math.mat4.create(), right: math.mat4.create(), hit: false, hitOwner: null, groundChecked: false };
     const owner = { kind: "clanker", entry, cave: entry, priority: 2, weaponType: "none" };
     const visit = (node) => {
@@ -7774,6 +7936,7 @@
     shared.npcRouteBlocked = (cave, x, y, z) => npcClosedCaveAt(x, z, y, cave.bodyHeight) || npcWorkZoneAt(cave, x, y, z)
       || npcRampRoofAt(x, y, z) || cave.state === "chilling" && Math.hypot(x, z) < island.path.debug.ringOuterRadius + 1.5;
     shared.npcStrandedAt = (cave, x, y, z) => npcRampRoofAt(x, y, z);
+    shared.npcCaveRoofAt = npcCaveRoofAt;
     shared.npcRecoverySpot = npcRecoverySpot;
     shared.shoulderObstacleActive = solids.isActive;
     shared.shoulderObstacle = (cave, fx, fz, reach, out) => {
@@ -7982,38 +8145,39 @@
     for (const owner of scenery) breakables.register(owner);
     clankerMeshes = BL.solidProps.create();
     clankerPartOwners = new WeakMap();
-    for (const cave of crew.list) cave.clankerRide = { entry: null, node: null, x: 0, y: 0, z: 0,
+    for (const cave of crew.list) cave.clankerRide = { entry: null, node: null, x: 0, y: 0, z: 0, nextJumpAt: 0,
       carrierX: 0, carrierY: 0, carrierZ: 0, heading: 0, localX: 0, localY: 0, localZ: 0 };
-    for (const cave of crew.list) cave.clankerDragged = false;
     headquarters.solids.companions = clankerMeshes;
-    const loungeRoofs = [];
+    const loungeRoofs = [], climbRoofs = [];
     for (const mouth of island.mouths) {
-      if (caves.slots.find(slot => slot.id === mouth.id)?.status !== "dark") continue;
       const x = mouth.x - Math.sin(mouth.ry) * 4.8, z = mouth.z - Math.cos(mouth.ry) * 4.8;
       const y = island.surfaceAt(x, z);
-      if (Number.isFinite(y)) loungeRoofs.push({ x, y, z, angle: mouth.ry });
+      if (!Number.isFinite(y)) continue;
+      const roof = { x, y, z, angle: mouth.ry };
+      climbRoofs.push(roof);
+      if (caves.slots.find(slot => slot.id === mouth.id)?.status === "dark") loungeRoofs.push(roof);
     }
     const labSiteIndex = shared.workSites.findIndex(site => site.mouth === entropyLab.mouth);
     const debugLabShuttle = DEBUG && !contributors.solo && !contributors.debugState && labSiteIndex >= 0
       ? crew.list.find(cave => cave.state === "working" && cave.work.site === labSiteIndex) || crew.list[0] : null;
     if (debugLabShuttle) debugLabShuttle.override = "working";
-    clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs,
+    clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, climbRoofs,
       debugMovement: DEBUG_GORILLA_MOVE, debugMinY: ABYSS_RESPAWN_Y,
       labSite: labSiteIndex,
       labInside: entropyLab.phase.inside, labStations: entropyLab.stations,
       labEquipment: entropyLab.equipment, labPickup: pickUpLabEquipment, labReturn: returnLabEquipment, labRoll: rollLabEquipment,
       solidAt: island.solidAt, climbSolidAt: clankerClimbSolidAt, climbSurfaceAt: clankerClimbSurfaceAt,
-      climbClear: clankerClimbClear, climbOpeningClear: clankerOpeningClear,
+      climbClear: clankerClimbClear, climbOpeningClear: clankerOpeningClear, platformEntryAt: clankerPlatformEntryAt,
       climbTransitionClear: clankerClimbTransitionClear, climbPeersClear: clankerPeersClear,
       climbRidersClear: clankerRidersClear, restPoseClear: clankerRestPoseClear, restFootingClear: clankerRestFootingClear,
       groomClear: clankerGroomClear, restSiteClear: clankerRestSiteClear,
       groundAt: (x, z, y) => island.supportAt(x, z, y, 0.52), groundPlaneAt: clankerGroundPlaneAt, rectangleAt: clankerRectangleAt, groundHullAt: island.hullClearAt, surfaceAt: island.surfaceAt,
-      pointSupportAt: (x, z, y) => Math.max(island.supportAt(x, z, y, 0.02), solids.supportAt(x, z, y, 0.02)),
+      pointSupportAt: (x, z, y) => Math.max(island.supportAt(x, z, y, 0.02, -Infinity), solids.supportAt(x, z, y, 0.02)),
       isGrass: island.isGrassAt, restSurfaceClear: clankerRestSurfaceClear, onLand: island.onLand,
       roamRadius: island.radius, meadowRadius: island.meadowRadius,
       clear: clankerClear, tallObstacleAhead: clankerTallObstacleAhead,
-      onPound: poundClankerEquipment, onGrab: grabClankerOoga, onReleaseDrag: releaseClankerDrag,
-      fireContact: clankerFireContact, fireReachable: shared.fireReachable,
+      onPound: poundClankerEquipment,
+      fireContact: clankerFireContact, fireReachable: shared.fireReachable, fireClear: clankerFireClear,
       canSmash: canClankerSmash, supportAt: clankerSupportAt, terrainSupportAt: clankerTerrainSupportAt,
       track: (entry) => trackMirrorObject(entry.root, 3.6, 4248), untrack: (entry) => untrackMirrorObject(entry.root) });
     shared.fireThreats = () => clankers.list;

@@ -64,7 +64,7 @@
   // The crossing shares the terrain's grass-topped stair terrace between the hilltops.
   const APPROACH = BL.terrain.POOL_APPROACH, BEARING = APPROACH.bearing;
   const DIR = { x: Math.sin(BEARING), z: -Math.cos(BEARING) };
-  const SITE = { approachFrom: APPROACH.from, span: 17, sag: 0.5, width: 5.2, isletR: 13, isletDepth: 16, caveR: 14, caveH: 8, stationR: 12, shaftR: 2.9, shaftDepth: 8, bearing: BEARING, dir: DIR };
+  const SITE = { approachFrom: APPROACH.from, span: 17, sag: 0.5, width: 5.2, deckStart: -2.5, isletR: 13, isletDepth: 16, caveR: 14, caveH: 8, stationR: 12, shaftR: 2.9, shaftDepth: 8, bearing: BEARING, dir: DIR };
   const UNIT = 0.5;
 
   // Built in a local frame whose +z points back at the home island, which is what `rotation.y = -bearing`
@@ -117,8 +117,8 @@
     return geometry;
   });
 
-  // Meet the level top tread with a short overlap instead of floating over the rising stairs.
-  const DECK_START = -0.3, DECK_END = SITE.span + 0.25;
+  // Bury the islet end inside its scalloped edge, and meet the top tread at the other end.
+  const DECK_START = SITE.deckStart, DECK_END = SITE.span + 0.25;
   const deckY = (t) => { t = Math.max(0, Math.min(1, t)); return -SITE.sag * 4 * t * (1 - t); };
   // The crossing as it was first built, kept as the bridge's collision shell so walking on it never changes.
   const bridgeShell = cached(() => {

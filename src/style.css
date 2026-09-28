@@ -1566,8 +1566,11 @@ body[data-active-scene="mine"] .mode-hud {
 }
 
 .mode-hud[data-gorilla="true"] .mode-face-icon {
-  left: 50%;
-  transform: translateX(-50%);
+  width: 40px;
+  height: 40px;
+  left: 7px;
+  top: calc(50% - 3px);
+  transform: translateY(-50%);
 }
 
 .gorilla-hud {
@@ -1582,6 +1585,7 @@ body[data-active-scene="mine"] .mode-hud {
 .gorilla-action-icon {
   width: 40px;
   height: 40px;
+  transform: translateY(-2px);
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
 }
 
@@ -1629,7 +1633,6 @@ body[data-active-scene="mine"] .mode-hud {
   transform-origin: bottom;
 }
 
-.mode-hud[data-selected="true"] .freeroam-icon,
 .mode-hud[data-selected="false"] .mode-face-icon {
   display: none !important;
 }
@@ -1654,21 +1657,18 @@ body[data-active-scene="mine"] .mode-hud {
   pointer-events: auto;
 }
 
-.mode-hud[data-selected="true"] .detached-destinations,
-.mode-hud[data-selected="true"] .detached-destination-name {
-  display: none;
-}
-
 .detached-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: #77736d;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
+  transition: background-color 0.4s ease-out;
 }
 
 .detached-dot[data-current="true"] {
   background: var(--accent);
+  transition-duration: 0s;
 }
 
 .detached-destination-name {

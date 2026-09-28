@@ -274,7 +274,6 @@
     const action = (name) => {
       if (!player) return false;
       if (name === "gorilla-smash") clankers.smash();
-      else if (name === "gorilla-drag") clankers.grab();
       else if (name === "gorilla-beat") clankers.chestBeat();
       else if (name === "mode-release") release();
       else if (name === "mode-toggle") {
@@ -303,9 +302,9 @@
         else if (key === "escape") release();
       }
       else if (key === "shift" && event.code !== "ShiftRight" && event.location !== 2) { run = true; consume(event); }
-      else if (key === "1" || key === "2") {
+      else if (key === "1") {
         consume(event);
-        if (!event.repeat) action(key === "1" ? "gorilla-smash" : "gorilla-drag");
+        if (!event.repeat) action("gorilla-smash");
       } else if (key === "x") {
         consume(event);
         if (!event.repeat) action("mode-toggle");
@@ -388,6 +387,7 @@
       else if (view === "shoulder") next = direction < 0 ? "first-person" : combat ? "birds-eye" : "orbit";
       else if (view === "birds-eye") {
         orbit.tDist = overheadHeight = clamp(overheadHeight * factor, birdsEyeMin, maxDistance);
+        if (direction < 0 && overheadHeight <= birdsEyeMin) next = "shoulder";
       } else if (view === "orbit") {
         orbit.tDist = clamp(orbit.tDist * factor, SHOULDER_DISTANCE, maxDistance);
         if (direction < 0 && orbit.tDist <= SHOULDER_DISTANCE) { combat = true; next = "shoulder"; }
@@ -588,7 +588,8 @@
       camera.orthoHeight = Math.max(0.1, orbit.dist * 2 * Math.tan(camera.fov / 2));
       cameraUp.x = -sy * Math.sin(orbit.pitch); cameraUp.y = cp; cameraUp.z = -cy * Math.sin(orbit.pitch);
       camera.up = cameraUp;
-      if (constrainCamera) constrainCamera(player, camera, anchored, previousEye, first, overhead);
+      // Shoulder framing keeps its fixed boom through scenery and stone.
+      if (constrainCamera && view !== "shoulder") constrainCamera(player, camera, anchored, previousEye, first, overhead);
       if (first && orbit.dist < 0.65 && !headHidden) {
         headHidden = player.gorilla.parts.head; savedHeadHidden = headHidden.cameraHidden; headHidden.cameraHidden = true;
       } else if (!first && headHidden) {
@@ -610,12 +611,21 @@
       hud.setGorilla(player, view, combat);
       showAct();
     };
+    const respawn = (dx, dy, dz) => {
+      cancelInput();
+      holdingFollow = pinnedFollow = handoffBefore = false;
+      followOffset.x = followOffset.y = followOffset.z = 0;
+      orbit.tx += dx; orbit.ty += dy; orbit.tz += dz;
+      camera.position.x += dx; camera.position.y += dy; camera.position.z += dz;
+      camera.target.x += dx; camera.target.y += dy; camera.target.z += dz;
+      viewChanged = true; targetWait = 0;
+    };
     const dispose = () => {
       if (disposed) return;
       release(); disposed = true; cursor.dispose();
       for (const off of listeners) off();
     };
-    return { possess, release, readInput, update, action, orbit: moveView, zoom, cancelInput, dispose,
+    return { possess, release, respawn, readInput, update, action, orbit: moveView, zoom, cancelInput, dispose,
       get active() { return !!player; }, get player() { return player; }, get view() { return view; },
       get birdsEye() { return !!player && view === "birds-eye"; }, get birdsEyeMix() { return player ? camera.orthoMix || 0 : 0; },
       get firstPerson() { return !!player && view === "first-person"; },

@@ -18,10 +18,11 @@
   const CLIMB_POINTS = 128, CLIMB_RADIUS = 1.05, CLIMB_HEIGHT = 3.1, CLIMB_STANDOFF = 0.87;
   const CLIMB_SPEED = 2.1, CLIMB_APPROACH_SPEED = 3.15, CLIMB_CREST_SPEED = 2.75, CLIMB_TURN_TIME = 0.42, CLIMB_MOUNT_DISTANCE = 0.75;
   const WALL_RECT_SAMPLES = 4, WALL_ENTER_SHARE = 0.25, TOP_EXIT_SHARE = 0.75;
-  const ROLL_SECONDS = 3, SOOT_SECONDS = 10, MOTION_RADIUS = BL.agent.MANAGED_MOTION_RADIUS, MOTION_HEIGHT = BL.agent.MANAGED_MOTION_HEIGHT;
+  const ROLL_SECONDS = 3, ROLL_ENTRY_SECONDS = 0.45, ROLL_RECOVER_SECONDS = 0.8, SOOT_SECONDS = 10, MOTION_RADIUS = BL.agent.MANAGED_MOTION_RADIUS, MOTION_HEIGHT = BL.agent.MANAGED_MOTION_HEIGHT;
   const FIRE_FLEE_REACH = 8, FIRE_FLEE_CLEAR = 10, FIRE_MEMORY = 1.5;
   const GRAVITY = BL.pilot.WALK.gravity, LEDGE_RISE = BL.pilot.WALK.ledgeRise;
   const PLAYER_JUMP_SPEED = BL.crew.JUMP_SPEED * Math.sqrt(1.5);
+  const ROOF_JUMP_HEIGHT = 7.5, ROOF_RUN_UP = 1.5;
   const STEERING = [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4];
   const FIRE_STEERING = [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.1, -2.1, Math.PI];
   const REST_TRANSITION_TIMES = [1 / 120, 1 / 60, 1 / 30, 0.06, 0.15, 0.3, 0.6, 1.2];
@@ -70,7 +71,7 @@
     const clearWallSearch = (e) => {
       if (wallSearch && wallSearch.owner === e) wallSearch.owner = null;
     };
-    const WALL_POINT = { x: 0, y: 0, z: 0, heading: 0 };
+    const WALL_POINT = { x: 0, y: 0, z: 0, heading: 0, radius: 0 };
     const WALL_RECTANGLE = { halfForward: 0, halfSide: 0, centerForward: 0 };
     const alive = (cave) => cave.state === "working" || cave.state === "chilling";
     const releasePortal = (e) => {
@@ -145,7 +146,7 @@
       return torso || footprint;
     };
     const unusedRoof = (x, y, z, foot) => {
-      const roofs = ctx.loungeRoofs;
+      const roofs = ctx.climbRoofs || ctx.loungeRoofs;
       if (!roofs || !ctx.surfaceAt || Math.abs(ctx.surfaceAt(x, z) - y) > 0.05) return false;
       let patch = false;
       for (let i = 0; i < roofs.length; i++) {
@@ -170,7 +171,9 @@
         && ctx.isGrass(x, z - foot, y) && ctx.isGrass(x, z + foot, y) || unusedRoof(x, y, z, foot));
     const landing = (x, y, z) => Number.isFinite(y) && Math.hypot(x, z) < roamRadius && (!ctx.onLand || ctx.onLand(x, z));
     const actorLanding = (e, x, y, z) => (!e.debugMove.active || y > ctx.debugMinY)
-      && (landing(x, y, z) || e.debugMove.active && Number.isFinite(y) && Math.abs(support(e, x, z, y, 0.02) - y) < 0.05);
+      // Underground platforms can extend beyond the top island footprint.
+      // A real floor beneath the centre also admits their inward handoff.
+      && (landing(x, y, z) || Number.isFinite(y) && Math.abs(pointSupportAt(x, z, y + 0.02) - y) < 0.05);
     const staticClear = (e, x, y, z, nx = x, ny = y, nz = z, fromHeading = e.heading, toHeading = fromHeading) =>
       clear(x, y, z, nx, ny, nz, e.radius, e.height, e, null, fromHeading, toHeading);
     // Retained routes double as short-lived space/time reservations. Predict
@@ -1239,16 +1242,16 @@
     const prepareLounges = (e) => {
       if (loungeReady) return;
       loungeReady = true;
-      const roofs = ctx.loungeRoofs, meadow = ctx.meadowRadius || 22;
+      const roofs = ctx.climbRoofs || ctx.loungeRoofs, meadow = ctx.meadowRadius || 22;
       const compact = e.compact, radius = e.radius, height = e.height;
       e.compact = false; e.radius = Math.max(radius, 2.12); e.height = Math.max(height, 2.7);
-      // Search the complete unused roof patch, including exposed stone. The
+      // Search clear patches on active and inactive roofs, including stone. The
       // first small ring often lands on trees or higher voxels; a bounded half-
       // metre grid finds the actual clearings without moving props or rock.
       if (roofs && ctx.surfaceAt) for (let i = 0; i < roofs.length && loungeCount < 80; i++) {
         const roof = roofs[i], start = loungeCount;
         for (let n = 0; n < 298 && loungeCount < 80; n++) {
-          if (n >= 9 && loungeCount - start >= 9) break;
+          if (loungeCount - start >= 5) break;
           const angle = roof.angle + (n - 1) * TAU / 8, spread = n ? 1.35 : 0;
           const dx = n < 9 ? Math.sin(angle) * spread : ((n - 9) % 17 - 8) * 0.5;
           const dz = n < 9 ? Math.cos(angle) * spread : (Math.floor((n - 9) / 17) - 8) * 0.5;
@@ -1290,7 +1293,8 @@
       e.roam.count = e.roam.index = 0; e.roam.wall = false;
       e.roam.targetX = x; e.roam.targetY = y; e.roam.targetZ = z;
       e.roam.progressDistance = Infinity; e.roam.progressTime = 0;
-      e.rest = (roof ? 45 : 30) + e.random() * (roof ? 35 : 30);
+      e.roam.runUp = e.roam.jumpRetry = 0;
+      e.rest = (roof ? 20 : 30) + e.random() * (roof ? 20 : 30);
       e.loungeRoof = roof; e.loungePartner = partner; e.loungeHeading = heading;
       e.loungeCycle = roof ? e.loungeCycle + 1 : 0;
       e.groomTime = 0; e.groomWait = 2 + e.random() * 6;
@@ -1362,7 +1366,10 @@
       }
       prepareLounges(e);
       const p = e.root.position, compact = e.compact, radius = e.radius, height = e.height;
-      const wantsRoof = stayLevel ? unusedRoof(p.x, p.y, p.z, 0) : e.mode !== "working" && roofCount > 0 && e.loungeCycle < 2 && e.random() < 0.7;
+      const onRoof = unusedRoof(p.x, p.y, p.z, 0);
+      // Prefer climbing from the meadow, then favour a return trip instead
+      // of spending several long rests on neighbouring roof spots.
+      const wantsRoof = stayLevel ? onRoof : e.mode !== "working" && roofCount > 0 && e.loungeCycle < 2 && e.random() < (onRoof ? 0.25 : 0.9);
       const pose = loungePose(e);
       e.compact = false; e.height = Math.max(height, 2.7);
       // Prefer a small group on some visits; a crowded group always falls back
@@ -1400,7 +1407,8 @@
           // built. Recheck the live firing lanes for cached candidates too.
           if (trafficAt(x, y, z)) continue;
           const distance = Math.hypot(x - p.x, z - p.z);
-          if (!spawn && (distance < 2 || distance > 12 || loungeFailed(e, x, z))) continue;
+          const tripLimit = !stayLevel && roof !== onRoof ? 18 : 12;
+          if (!spawn && (distance < 2 || distance > tripLimit || loungeFailed(e, x, z))) continue;
           // Filter a future walking arrival, not the current reclining body's
           // large fallback circle. The exact new rest and rise are proved by
           // restSpace below (or by the retained route's endpoint admission).
@@ -1589,7 +1597,7 @@
         else waitSpot(e);
       }
     };
-    const activate = (e, recovering = false) => {
+    const activate = (e, recovering = false, atPosition = false) => {
       clearWallSearch(e);
       const d = e.drive, f = e.fire, m = e.motion;
       e.backoutLeft = 0;
@@ -1597,9 +1605,10 @@
       d.climbExitHeading = d.climbExitLook = NaN;
       d.jumpHeld = d.jumpDown = d.jumpPressed = d.airborne = d.resume = d.motionEnvelope = false; d.jumpBuffer = 0; d.grounded = true;
       f.burning = f.rolling = f.requested = f.escaping = f.panic.active = false; f.retry = f.escapeRetry = 0; f.age = f.heat = f.soot = f.cooldown = f.rollRecover = 0;
-      m.takeoff = m.landing = m.roll = m.rollAngle = m.climb = m.climbSide = m.mantle = m.groom = m.supportOffset = 0;
+      m.takeoff = m.landing = m.roll = m.rollAngle = m.rollSide = m.climb = m.climbSide = m.mantle = m.groom = m.supportOffset = 0;
       m.verifyGrip = false;
       e.climb.active = e.climb.claimPending = e.climb.crestPending = e.climb.searchPending = e.climb.free = false;
+      e.climb.openingExit = e.climb.openingStagePending = false;
       e.climb.debugTraverse = e.climb.debugStuck = false; e.climb.debugRole = -1;
       e.debugMove.active = e.debugMove.cancelled = e.debugMove.wallPending = false; e.debugMove.status = "";
       e.climb.traverseStart = e.climb.traverseEnd = 0;
@@ -1615,7 +1624,13 @@
       e.compact = e.parked ? e.gorilla.standCompact : false;
       e.active = true; e.root.visible = false; e.hasSlot = false; e.jump.active = false; e.overflow = false;
       e.portalWait = false; e.portalRetry = 0;
-      if (e.mode === "working" && sites[e.site] && reserve(e, false, recovering)) {
+      if (atPosition) {
+        e.parked = e.biped = e.compact = false; e.footprintMode = "walk";
+        e.phase = "controlled"; e.route = ""; e.speed = e.rest = e.blocked = e.retry = 0;
+        d.run = d.passiveFall = d.cancelled = false; d.heading = e.heading;
+        e.exitFootprint = true; e.height = WALK_HEIGHT;
+        setGoal(e, e.root.position.x, e.root.position.y, e.root.position.z);
+      } else if (e.mode === "working" && sites[e.site] && reserve(e, false, recovering)) {
         e.root.position.x = e.slotX; e.root.position.y = e.slotY; e.root.position.z = e.slotZ;
         e.heading = e.site === labSite && labStations[e.lab.station] ? labStations[e.lab.station].heading : sites[e.site].mouth.ry;
         e.phase = "work"; e.route = ""; e.rest = 1 + e.random() * 2;
@@ -1630,7 +1645,7 @@
         } else { e.active = false; e.retry = 1; return; }
       }
       syncLab(e);
-      e.gorilla.poseManaged(e.lounge ? 2 : 1 / 60, e.root.position.x, e.root.position.y, e.root.position.z, e.heading, 0, false, e.biped, e.lounge, e.motion);
+      e.gorilla.poseManaged(atPosition || e.lounge ? 2 : 1 / 60, e.root.position.x, e.root.position.y, e.root.position.z, e.heading, 0, false, e.biped, e.lounge, e.motion);
       labEnvelope(e);
       if (e.lounge === "sit" && e.gorilla.sitCompact) { e.footprintMode = "sit"; e.compact = true; }
       e.root.visible = true;
@@ -1657,12 +1672,11 @@
           retryAt: 0, reason: "", x: NaN, y: NaN, z: NaN, workTime: 0, workCycles: 0, workReach: 0, workStage: "", workItem: -1,
           turnError: Infinity, heading: NaN, searchCursor: 0 },
         overflow: false, activity: 0, hits: 0, pounds: 0, pound: 0, poundHit: false, poundPower: 2,
-        drag: { cave: null, time: 0 },
         beat: 0, beats: 0, stand: 0, parked: false, parkFor: 0, exitFootprint: false, workCycle: 0, recover: 0, lounge: "", jumps: 0,
         loungePartner: null, loungeHeading: NaN, loungeCycle: 0, loungeRoof: false, loungeDepart: false, groomTime: 0, groomWait: 0,
         planningRoam: false, planningSeat: false, walkPoseChecked: false, roam: { path: new Float64Array(12), count: 0, index: 0, wall: false, level: 0, reverseStart: false, departHeading: 0, propDeparture: false,
           targetX: NaN, targetY: NaN, targetZ: NaN, order: 0, waitUntil: 0, blocked: 0, obstacle: null, waitPeer: null, waitX: 0, waitZ: 0,
-          plans: 0, arrived: false, pose: "", lastPose: "", transition: 0, nextChoice: 0, failedChoices: 0,
+          plans: 0, arrived: false, pose: "", lastPose: "", transition: 0, nextChoice: 0, failedChoices: 0, runUp: 0, jumpRetry: 0,
           departPending: false, departAt: 0, departX: 0, departY: 0, departZ: 0, riseAdmitted: false,
           wallFailedX: NaN, wallFailedZ: NaN, wallFailedUntil: 0,
           levelOnlyUntil: 0, planAt: 0, progressTime: 0, progressX: NaN, progressZ: NaN, progressDistance: Infinity, progressTurn: Infinity, progressCursor: -1, progressClaim: 0, backoutX: NaN, backoutZ: NaN, alignTime: 0, failedX: NaN, failedZ: NaN, failedUntil: 0 },
@@ -1685,7 +1699,7 @@
           cancelled: false, vx: 0, vy: 0, vz: 0, airborne: false, passiveFall: false, grounded: true, resume: false, motionRecover: 0, motionEnvelope: false },
         motion: { poundCharge: 0, takeoff: 0, landing: 0, supportOffset: 0, supportEntry: null,
           groundRects: { flat: { x: 0, y: 0, z: 0, heading: 0 }, angled: { x: 0, y: 0, z: 0, heading: 0, groundX: 0, groundZ: 0, steep: false, walkable: true } },
-          walkPhase: NaN, roll: 0, rollAngle: 0, smash: false, dragging: false,
+          walkPhase: NaN, roll: 0, rollAngle: 0, rollSide: 0, smash: false,
           climbGripX: NaN, climbGripY: NaN, climbGripZ: NaN, climbGripStride: 0, climbGripDirection: 0, climbGripSide: 0, climbGripRelease: 0,
           climb: 0, climbBlend: NaN, openingSettle: 0, climbStride: 0, climbDirection: 0, climbSide: 0, verifyGrip: false, mantle: 0, groom: 0, groomSide: 1, groomPhase: 0,
           sitWait: 3, sitTime: 0, sitLook: 0, sitShift: 0, sitLookTarget: 0, sitShiftTarget: 0,
@@ -1700,6 +1714,8 @@
           claimPending: false, crestPending: false, claimOrder: 0, claimFor: -1, claimOwnerOrder: 0, claimProgress: 0, claimProgressAt: 0, claimRetreat: false,
           returning: false, reversals: 0, holdPose: false, free: false, lipBypass: false, mountPending: false, airAttachAfter: 0, handoffDirection: 0,
           freeTargetX: 0, freeTargetY: NaN, freeTargetZ: 0, openingCrossY: 0,
+          openingStagePending: false, openingStageX: 0, openingStageZ: 0,
+          openingExit: false, openingExitX: 0, openingExitZ: 0, openingExitHeading: 0,
           handoffStartX: 0, handoffStartY: 0, handoffStartZ: 0,
           debugRole: -1, debugTraverse: false, debugStuck: false, debugStop: -1, traverseStart: 0, traverseEnd: 0, lowerClearance: 0, lowerClearanceAscent: false,
           peerCheck: false, peerX: 0, peerY: 0, peerZ: 0, peerHeading: 0,
@@ -1711,7 +1727,7 @@
           panic: { active: false, x: 0, y: 0, z: 0, seenAt: -Infinity, awayX: 0, awayZ: 0 } },
         fireFX: { next: 0 },
         jump: { active: false, progress: 0, reverse: false, blocked: 0, duration: 0, fromX: 0, fromY: 0, fromZ: 0,
-          toX: 0, toY: 0, toZ: 0, lift: 0,
+          toX: 0, toY: 0, toZ: 0, lift: 0, wall: false,
           points: new Float64Array((JUMP_SAMPLES + 1) * 3) }
       };
       entry.motion.supportEntry = entry;
@@ -1751,11 +1767,25 @@
       out.y = jump.fromY + (jump.toY - jump.fromY) * t + jump.lift * 4 * t * (1 - t);
       out.z = jump.fromZ + (jump.toZ - jump.fromZ) * t;
     };
-    const prepareJump = (e, x, y, z, lift = 0, vault = false) => {
+    const prepareJump = (e, x, y, z, lift = 0, vault = false, running = false, wall = false) => {
       if (e.motion.lab && !e.controlled) return false;
       const p = e.root.position, jump = e.jump, distance = Math.hypot(x - p.x, z - p.z);
-      if (distance > MAX_JUMP || y > p.y + 1.7 || y < p.y - 7.5 || !landing(x, y, z)
+      if (distance > MAX_JUMP || y > p.y + (running ? ROOF_JUMP_HEIGHT : 1.7) || y < p.y - 7.5
+        || (wall ? wallContactShare(e, x, y, z, e.heading) < WALL_ENTER_SHARE
+          || !climbClear(e, x, y, z, x, y, z, e.heading) : !landing(x, y, z))
         || e.phase === "work" && caveAt(x, y, z, AIR_RADIUS) !== e.site) return false;
+      const duration = running ? distance / SPEED : Math.max(vault ? 1 : 0.52, distance / (vault ? 2.4 : 3.3));
+      if (running) {
+        // Keep horizontal running speed and a gravity-shaped arc. Reject
+        // landings above the apex or beyond the bounded running-jump height.
+        const velocity = (y - p.y) / duration + GRAVITY * duration * 0.5;
+        if (velocity <= 0 || velocity - GRAVITY * duration > 0
+          || velocity * velocity / (2 * GRAVITY) > ROOF_JUMP_HEIGHT) return false;
+        lift = GRAVITY * duration * duration / 8;
+      }
+      // A voluntary jump must not bypass the fireplace detour just because
+      // its airborne arc clears the flame. Walk around the pit and rim.
+      if (!e.controlled && ctx.fireClear && !ctx.fireClear(e, p.x, p.y, p.z, x, y, z)) return false;
       const previousRadius = e.radius, previousHeight = e.height, previousCompact = e.compact;
       e.compact = false;
       // Use the same measured envelope that poseEntry retains throughout flight.
@@ -1766,7 +1796,7 @@
       jump.fromX = p.x; jump.fromY = p.y; jump.fromZ = p.z;
       jump.toX = x; jump.toY = y; jump.toZ = z;
       jump.lift = lift || 0.5 + distance * 0.16;
-      jump.duration = Math.max(vault ? 1 : 0.52, distance / (vault ? 2.4 : 3.3));
+      jump.duration = duration;
       if (y < p.y - 1.7) {
         jump.lift = Math.max(jump.lift, (p.y - y) * 0.55 + 0.4);
         jump.duration = Math.max(jump.duration, Math.sqrt((p.y - y) * 2 / 9.8) + 0.45);
@@ -1780,8 +1810,31 @@
           || occupied(e, POINT.x, POINT.y, POINT.z)) { e.radius = previousRadius; e.height = previousHeight; e.compact = previousCompact; return false; }
         points[j] = POINT.x; points[j + 1] = POINT.y; points[j + 2] = POINT.z;
       }
-      jump.active = true; jump.progress = 0; jump.reverse = false; jump.blocked = 0; e.jumps++;
+      jump.active = true; jump.wall = wall; jump.progress = 0; jump.reverse = false; jump.blocked = 0; e.jumps++;
       return true;
+    };
+    const tryRoofJump = (e, heading) => {
+      const p = e.root.position, previousHeading = e.heading;
+      heading = wallFaceHeading(e, heading, false);
+      if (Math.cos(heading - previousHeading) < 0.85) return false;
+      const sx = Math.sin(heading), sz = Math.cos(heading);
+      e.heading = heading;
+      // Aim for a real grip above the opening, not a roof landing. Twelve
+      // candidates bound the arc proofs; the ordinary climber finishes the trip.
+      for (let distance = 2.4; distance <= 4.81; distance += 0.8) {
+        const x = p.x + sx * distance, z = p.z + sz * distance;
+        for (let level = 0; level < 3; level++) {
+          const y = e.goalY - 1.4 - level * 0.8;
+          if (y <= p.y + 1
+            || !climbSolidAt(x + sx * CLIMB_STANDOFF, y + 0.25, z + sz * CLIMB_STANDOFF)
+            || !climbSolidAt(x + sx * CLIMB_STANDOFF, y + 0.85, z + sz * CLIMB_STANDOFF)) continue;
+          if (prepareJump(e, x, y, z, 0, false, true, true)) {
+            e.roam.runUp = 0; e.motion.takeoff = 1; return true;
+          }
+        }
+      }
+      e.heading = previousHeading;
+      return false;
     };
     const tryJump = (e, heading) => {
       const p = e.root.position, sx = Math.sin(heading), sz = Math.cos(heading);
@@ -1825,6 +1878,19 @@
       jump.blocked = 0;
       p.x = POINT.x; p.y = POINT.y; p.z = POINT.z; jump.progress = next;
       e.speed = Math.hypot(jump.toX - jump.fromX, jump.toZ - jump.fromZ) / jump.duration;
+      if (next === 1 && jump.wall) {
+        const d = e.drive;
+        d.airborne = true;
+        d.vx = (jump.toX - jump.fromX) / jump.duration;
+        d.vz = (jump.toZ - jump.fromZ) / jump.duration;
+        d.vy = (jump.toY - jump.fromY - jump.lift * 4) / jump.duration;
+        if (attachContactWall(e)) {
+          jump.active = false; e.climb.fromTop = false; return;
+        }
+        // A moved obstruction can invalidate the grip during flight. Retrace
+        // the checked arc to the takeoff footing instead of standing in air.
+        d.airborne = false; d.vx = d.vy = d.vz = 0; jump.reverse = true; return;
+      }
       if (next === 1 || next === 0 && jump.reverse) {
         jump.active = false; e.blocked = 0; e.rest = Math.max(e.rest, 0.12);
       }
@@ -2251,6 +2317,7 @@
       if (!climbGroundPeersClear(e)) { c.failure = "landing occupied"; c.claimPending = false; return false; }
       c.claimPending = false; c.claimFor = -1; c.claimRetreat = false;
       c.mount = 0; c.finish = c.blocked = c.bottomTurn = c.lowerClearance = 0; c.active = true; c.climbs++; c.failure = "";
+      c.openingExit = false;
       c.returning = c.holdPose = c.debugStuck = c.lowerClearanceAscent = false; c.reversals = 0;
       c.free = c.lipBypass = false; c.handoffDirection = 0;
       c.debugStop = -1;
@@ -2268,7 +2335,6 @@
       e.motion.climb = 1; e.motion.climbBlend = 0; e.motion.mantle = 1;
       e.drive.climbExitHeading = e.drive.climbExitLook = NaN;
       e.lounge = ""; if (e.controlled) e.loungePartner = null;
-      if (e.drag.cave && ctx.onReleaseDrag) ctx.onReleaseDrag(e);
       e.speed = 0; e.biped = false;
       releasePortal(e);
       return true;
@@ -2663,7 +2729,7 @@
     const finishRectangleClimb = (e, y, facing, wallDismount = false) => {
       const c = e.climb, d = e.drive, m = e.motion, p = e.root.position;
       p.y = y; e.heading = facing; e.speed = 0;
-      c.active = c.free = c.lipBypass = c.mountPending = c.holdPose = false; c.handoffDirection = 0; c.retry = 0.25;
+      c.active = c.free = c.lipBypass = c.mountPending = c.holdPose = c.openingStagePending = false; c.handoffDirection = 0; c.retry = 0.25;
       c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
       d.airborne = d.passiveFall = false; d.grounded = true; d.vy = d.jumps = 0;
       d.climbExitHeading = wallDismount && e.controlled ? facing : NaN;
@@ -2675,7 +2741,7 @@
     };
     const dropRectangleClimb = (e, away = true) => {
       const c = e.climb, d = e.drive, m = e.motion;
-      c.active = c.free = c.lipBypass = c.mountPending = c.holdPose = false; c.handoffDirection = 0;
+      c.active = c.free = c.lipBypass = c.mountPending = c.holdPose = c.openingStagePending = false; c.handoffDirection = 0;
       c.airAttachAfter = elapsed + 0.2; c.retry = 0.25;
       d.airborne = d.passiveFall = true; d.grounded = false; d.vy = 0;
       d.vx = away ? -Math.sin(e.heading) * 1.5 : 0;
@@ -2685,27 +2751,60 @@
       e.footprintMode = "walk"; e.compact = false;
       e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
     };
-    const openingLanding = (e, x, y, z, heading) => {
+    const openingLanding = (e, x, y, z, heading, platform = null) => {
       if (!ctx.climbOpeningClear) return false;
       const c = e.climb, sx = Math.sin(heading), sz = Math.cos(heading);
-      for (let reach = 1.8; reach <= 3; reach += 0.3) {
+      // Balcony floors extend inward from a spherical overhang. Measure the
+      // landing and outward clearance from that geometry, not the root.
+      const radius = Math.hypot(x, z);
+      const firstReach = platform ? Math.max(0.3, radius - Math.hypot(platform.x, platform.z)) : 1.8;
+      const lastReach = platform ? firstReach + 2.4 : 3;
+      const clearance = platform ? Math.max(0, platform.radius - radius) : 0;
+      for (let reach = firstReach; reach <= lastReach; reach += 0.3) {
         const tx = x + sx * reach, tz = z + sz * reach;
-        const floor = pointSupportAt(tx, tz, y + 1.05);
-        if (!Number.isFinite(floor) || floor > y + 1.05 || y - floor > 2.4
+        const floor = pointSupportAt(tx, tz, platform ? platform.y + 0.05 : y + 1.05);
+        if (!Number.isFinite(floor) || floor > y + 1.05 || !platform && y - floor > 2.4
+          || platform && Math.abs(floor - platform.y) > 0.1
           || !actorLanding(e, tx, floor, tz)) continue;
-        for (let lift = 0; lift <= 1.05; lift += 0.35) {
-          const crossY = y + lift;
-          if (floor > crossY + 0.1
-            || !ctx.climbOpeningClear(e, x, y, z, x, crossY, z)
-            || !ctx.climbOpeningClear(e, x, crossY, z, tx, crossY, tz)
-            || !ctx.climbOpeningClear(e, tx, crossY, tz, tx, floor, tz)) continue;
-          c.freeTargetX = tx; c.freeTargetY = floor; c.freeTargetZ = tz; c.openingCrossY = crossY;
-          c.handoffStartX = x; c.handoffStartY = y; c.handoffStartZ = z;
-          c.handoffDirection = -2; c.blocked = 0;
-          return true;
+        // Enter at the lowest height the actual opening permits. Crossing
+        // high and only lowering at the far end leaves the head in the lintel.
+        const highestCrossing = platform ? floor + 0.5 : y + 1.05;
+        for (let crossY = platform ? floor : Math.max(floor, y - 2.4); crossY <= highestCrossing; crossY += 0.25) {
+          if (floor > crossY + 0.1 || !ctx.climbOpeningClear(e, tx, crossY, tz, tx, floor, tz)) continue;
+          // A falling body may meet the projecting ceiling before it can
+          // descend. Clear that lip outward, lower, then swing feet inward.
+          for (let trial = 0; trial < (platform ? 7 : 1); trial++) {
+            const retreat = trial ? clearance + (trial - 1) * 0.3 : 0;
+            const ax = x - sx * retreat, az = z - sz * retreat;
+            if (!ctx.climbOpeningClear(e, x, y, z, ax, y, az)
+              || !ctx.climbOpeningClear(e, ax, y, az, ax, crossY, az)
+              || !ctx.climbOpeningClear(e, ax, crossY, az, tx, crossY, tz)) continue;
+            c.freeTargetX = tx; c.freeTargetY = floor; c.freeTargetZ = tz; c.openingCrossY = crossY;
+            c.openingStagePending = retreat > 0; c.openingStageX = ax; c.openingStageZ = az;
+            c.handoffStartX = ax; c.handoffStartY = y; c.handoffStartZ = az;
+            c.handoffDirection = -2; c.blocked = 0;
+            return true;
+          }
         }
       }
       return false;
+    };
+    const beginPlatformEntry = (e) => {
+      const p = e.root.position, c = e.climb, d = e.drive, m = e.motion;
+      if (!ctx.platformEntryAt || !ctx.platformEntryAt(p.x, p.y, p.z, WALL_POINT)) return false;
+      const heading = WALL_POINT.heading;
+      if (!openingLanding(e, p.x, p.y, p.z, heading, WALL_POINT)) return false;
+      e.heading = c.heading = c.topHeading = heading;
+      c.active = c.free = c.descending = c.fromTop = true;
+      c.mountPending = c.holdPose = c.waitRelease = c.lipBypass = false;
+      c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
+      c.autoTo = -1; c.airAttachAfter = 0;
+      d.vx = d.vy = d.vz = d.motionRecover = 0;
+      d.airborne = d.passiveFall = d.grounded = d.motionEnvelope = false;
+      m.climb = m.climbBlend = 1; m.mantle = m.takeoff = m.supportOffset = 0;
+      m.climbGripX = m.climbGripY = m.climbGripZ = NaN; m.climbGripRelease = 0;
+      e.speed = 0; e.biped = false; e.lounge = "";
+      return true;
     };
     const updateRectangleClimb = (e, dt) => {
       const c = e.climb, d = e.drive, m = e.motion, p = e.root.position;
@@ -2715,7 +2814,11 @@
       const goalY = e.debugMove.active ? goal.y : e.goalY;
       const goalZ = e.debugMove.active ? goal.z : e.goalZ;
       let side = e.controlled ? d.climbSide : clamp((goalX - p.x) * sz - (goalZ - p.z) * sx, -1, 1);
-      let vertical = e.controlled ? d.climbAxis : clamp(goalY - p.y, -1, 1);
+      // A normal NPC's climb is a leg of its trip, not its final height.
+      // Preserve the chosen direction through the roof/wall handoff: a
+      // destination on another roof still requires descending this wall.
+      let vertical = e.controlled ? d.climbAxis : e.debugMove.active
+        ? clamp(goalY - p.y, -1, 1) : c.descending ? -1 : 1;
       if (!e.controlled && Math.abs(vertical) < 0.15) vertical = 0;
       if (!e.controlled && Math.abs(side) < 0.15) side = 0;
       if (e.debugMove.active && !side && !vertical) {
@@ -2732,30 +2835,55 @@
       e.compact = false; e.footprintMode = "pound";
       e.radius = CLIMB_RADIUS; e.height = CLIMB_HEIGHT; e.speed = 0; c.holdPose = false;
       if (c.handoffDirection === -2) {
-        // The feet cross the opening at their current height before descending
-        // onto its floor. Keep the wall-facing heading and the input live.
+        if (c.openingStagePending) {
+          const remaining = Math.hypot(c.openingStageX - p.x, c.openingStageZ - p.z);
+          const advance = Math.min(remaining, distance * 1.35);
+          const x = remaining ? p.x + (c.openingStageX - p.x) * advance / remaining : p.x;
+          const z = remaining ? p.z + (c.openingStageZ - p.z) * advance / remaining : p.z;
+          if (!ctx.climbOpeningClear(e, p.x, p.y, p.z, x, p.y, z)) { dropRectangleClimb(e, false); return; }
+          p.x = x; p.z = z; m.climbStride += advance;
+          if (remaining - advance < 0.001) c.openingStagePending = false;
+          return;
+        }
+        // Align with the window before crossing, then lower whenever the
+        // next inward position clears the sill. Keep the input live.
         const remaining = Math.hypot(c.freeTargetX - p.x, c.freeTargetZ - p.z);
-        const rising = p.y < c.openingCrossY - 0.03;
-        const advance = rising ? 0 : Math.min(remaining, distance * 1.35);
+        const alignment = c.openingCrossY - p.y;
+        const startDistance = Math.hypot(c.freeTargetX - c.handoffStartX, c.freeTargetZ - c.handoffStartZ);
+        const aligning = Math.abs(alignment) > 0.03 && remaining >= startDistance - 0.001;
+        const advance = aligning ? 0 : Math.min(remaining, distance * 1.35);
         const x = remaining > 0 ? p.x + (c.freeTargetX - p.x) * advance / remaining : p.x;
         const z = remaining > 0 ? p.z + (c.freeTargetZ - p.z) * advance / remaining : p.z;
-        const y = rising ? Math.min(c.openingCrossY, p.y + distance * 1.35)
-          : remaining - advance < 0.03 ? Math.max(c.freeTargetY, p.y - distance * 1.35) : p.y;
-        if (!ctx.climbOpeningClear(e, p.x, p.y, p.z, x, y, z)) {
+        if (!ctx.climbOpeningClear(e, p.x, p.y, p.z, x, p.y, z)) {
+          // A lower sill may require returning to the certified crossing
+          // height before the next horizontal step.
+          const raise = Math.min(c.openingCrossY, p.y + distance * 1.35);
+          if (raise > p.y + 0.001 && ctx.climbOpeningClear(e, p.x, p.y, p.z, p.x, raise, p.z)) {
+            m.climbStride += raise - p.y; p.y = raise; return;
+          }
           dropRectangleClimb(e, false); return;
+        }
+        let y = aligning ? p.y + clamp(alignment, -distance * 1.35, distance * 1.35)
+          : remaining - advance <= startDistance * 0.5
+            ? Math.max(c.freeTargetY, p.y - distance * 1.35) : p.y;
+        if (y !== p.y && !ctx.climbOpeningClear(e, x, p.y, z, x, y, z)) {
+          if (aligning) { dropRectangleClimb(e, false); return; }
+          y = p.y;
         }
         m.climbStride += Math.hypot(advance, y - p.y);
         p.x = x; p.y = y; p.z = z;
         const inward = clamp(1 - Math.hypot(c.freeTargetX - p.x, c.freeTargetZ - p.z)
           / Math.max(0.001, Math.hypot(c.freeTargetX - c.handoffStartX, c.freeTargetZ - c.handoffStartZ)), 0, 1);
-        const landing = clamp((c.openingCrossY - p.y) / Math.max(0.001, c.openingCrossY - c.freeTargetY), 0, 1);
-        m.climb = m.climbBlend = 1 - 0.45 * inward - 0.35 * landing;
+        // Release the upper grip once the feet are through the opening.
+        // Keeping any climb blend at the landing leaves the hands on the lintel.
+        m.climb = m.climbBlend = 1 - clamp(inward / 0.8, 0, 1);
         if (remaining - advance < 0.03 && Math.abs(y - c.freeTargetY) < 0.03) {
           if (Math.abs(pointSupportAt(p.x, p.z, p.y + 0.1) - c.freeTargetY) > 0.12) {
             dropRectangleClimb(e, false); return;
           }
           const settle = m.climb;
           finishRectangleClimb(e, c.freeTargetY, heading);
+          c.openingExit = true; c.openingExitX = p.x; c.openingExitZ = p.z; c.openingExitHeading = heading;
           m.climbGripX = m.climbGripY = m.climbGripZ = NaN;
           m.climbGripRelease = 0;
           m.openingSettle = settle;
@@ -2787,6 +2915,13 @@
         if (c.mountPending) m.climbDirection = m.climbSide = 0;
         return;
       }
+      // The lintel can still hold the upright rectangle after the feet reach
+      // a window. Try its certified inner footing before the ordinary wall
+      // and crest handoffs, both when climbing up and when climbing down.
+      if (!c.handoffDirection && vertical < 0 && beginPlatformEntry(e)) return;
+      if (!c.handoffDirection && vertical
+        && !climbSolidAt(p.x + sx, p.y + 0.65, p.z + sz)
+        && openingLanding(e, p.x, p.y, p.z, heading)) return;
       if (c.handoffDirection === 1 || vertical > 0 && wallVerticalShare(e, p.x, p.y, p.z, heading, true) >= WALL_ENTER_SHARE) {
         if (c.handoffDirection !== 1) {
           c.freeTargetY = NaN;
@@ -2819,10 +2954,13 @@
           return;
         }
       }
-      if (c.handoffDirection === -1 || vertical < 0 && wallVerticalShare(e, p.x, p.y, p.z, heading, false) >= WALL_ENTER_SHARE) {
+      // A supported step away from the face ends a descent. Do not wait for
+      // the upright rectangle's sample points to overlap the floor: a low
+      // ledge or uneven base can leave that test false after the feet arrive.
+      if (c.handoffDirection === -1 || vertical < 0) {
         if (c.handoffDirection !== -1) {
           c.freeTargetY = NaN;
-          for (let retreat = 0.3; retreat <= 1.8; retreat += 0.3) {
+          for (let retreat = 0.3; retreat <= 2.4; retreat += 0.3) {
             const x = p.x - sx * retreat, z = p.z - sz * retreat;
             const y = support(e, x, z, p.y, STEP, heading);
             if (!Number.isFinite(y) || y > p.y + 0.1 || p.y - y > 0.8
@@ -3071,9 +3209,18 @@
         if (climbTurn === e.index) climbTurn = -1;
         return true;
       }
-      // If the requested direction follows walkable treads, do not search
-      // adjacent cave faces for a climb the gorilla did not approach.
-      if (!cliffRiserAhead(p.x, p.z, heading, descending ? -1 : 1)) {
+      let normal = NaN, nearest = 10 * 10;
+      if (ctx.climbRoofs) for (let i = 0; i < ctx.climbRoofs.length; i++) {
+        const roof = ctx.climbRoofs[i], distance = (p.x - roof.x) ** 2 + (p.z - roof.z) ** 2;
+        if (distance < nearest) { nearest = distance; normal = roof.angle + (descending ? 0 : Math.PI); }
+      }
+      const normalDelta = Math.abs(Math.atan2(Math.sin(normal - heading), Math.cos(normal - heading)));
+      const nearbyNormal = normalDelta < Math.PI / 2;
+      // A diagonal approach can miss the tall riser even when the cave's
+      // actual face is directly ahead. Check that face before treating the
+      // route as walkable treads.
+      if (!cliffRiserAhead(p.x, p.z, heading, descending ? -1 : 1)
+        && (!nearbyNormal || !cliffRiserAhead(p.x, p.z, normal, descending ? -1 : 1))) {
         c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
         c.retry = 0;
         return false;
@@ -3098,18 +3245,13 @@
       // A diagonal approach can point through the corner of the cave rim.
       // Approach that same wall squarely, then resume the original goal above.
       const cardinal = Math.round(heading / (Math.PI / 2)) * Math.PI / 2;
-      let normal = cardinal, nearest = 10 * 10;
       if (Math.abs(Math.atan2(Math.sin(cardinal - heading), Math.cos(cardinal - heading))) > 0.02) {
         c.retry = 0;
         if (tryClimbAlong(e, cardinal, descending)) return true;
         if (c.searchDeferred) return false;
       }
-      if (ctx.loungeRoofs) for (let i = 0; i < ctx.loungeRoofs.length; i++) {
-        const roof = ctx.loungeRoofs[i], distance = (p.x - roof.x) ** 2 + (p.z - roof.z) ** 2;
-        if (distance < nearest) { nearest = distance; normal = roof.angle + (descending ? 0 : Math.PI); }
-      }
-      const delta = Math.abs(Math.atan2(Math.sin(normal - heading), Math.cos(normal - heading)));
-      if (delta > 0.02 && delta < Math.PI / 2 && Math.abs(Math.atan2(Math.sin(normal - cardinal), Math.cos(normal - cardinal))) > 0.02) {
+      if (normalDelta > 0.02 && nearbyNormal
+        && Math.abs(Math.atan2(Math.sin(normal - cardinal), Math.cos(normal - cardinal))) > 0.02) {
         e.climb.retry = 0;
         if (tryClimbAlong(e, normal, descending)) return true;
         if (c.searchDeferred) return false;
@@ -3386,7 +3528,7 @@
       // approach at walking/running pace, then hand off to wall speed instead
       // of carrying a full run into an abrupt vertical stop.
       const phaseAt = c.progress + axis * travelDt * CLIMB_CREST_SPEED;
-      const approach = e.controlled ? d.run ? SPEED : CHILL_SPEED * 2 : CLIMB_APPROACH_SPEED;
+      const approach = e.controlled ? d.run ? SPEED : CHILL_SPEED * 2 : e.mode === "chilling" ? CHILL_SPEED : CLIMB_APPROACH_SPEED;
       const wallApproach = Math.min(approach, CLIMB_SPEED);
       const remainingGround = Math.max(0, c.lowerGroundDistance - c.progress);
       const groundPace = wallApproach + (approach - wallApproach)
@@ -3720,7 +3862,9 @@
     const tallBodyAhead = (e, heading) => {
       const p = e.root.position, sx = Math.sin(heading), sz = Math.cos(heading);
       return occupied(e, p.x + sx * 0.55, p.y, p.z + sz * 0.55)
-        || ctx.tallObstacleAhead(e, sx, sz);
+        || ctx.tallObstacleAhead(e, sx, sz)
+        || !e.controlled && ctx.fireClear && !ctx.fireClear(e, p.x, p.y, p.z,
+          p.x + sx * 2, p.y, p.z + sz * 2, e.heading, heading);
     };
     const move = (e, dt, speed) => {
       if (e.recover > 0) { e.speed = 0; return; }
@@ -4020,11 +4164,24 @@
         r.targetX = e.goalX; r.targetY = e.goalY; r.targetZ = e.goalZ;
         r.progressDistance = Infinity; r.progressTime = 0;
       }
-      if (Math.abs(e.goalY - p.y) >= 1 && caveAt(p.x, p.y, p.z) < 0) {
+      const roofTrip = !e.debugMove.active && e.mode === "chilling" && e.loungeRoof
+        && e.goalY > p.y + 0.8 && caveAt(p.x, p.y, p.z) < 0;
+      r.jumpRetry = Math.max(0, r.jumpRetry - dt);
+      if (roofTrip && r.runUp >= ROOF_RUN_UP && !r.jumpRetry && !e.fire.burning) {
+        r.jumpRetry = 0.4;
+        if (tryRoofJump(e, Math.atan2(e.goalX - p.x, e.goalZ - p.z))) return;
+      }
+      if (!roofTrip && Math.abs(e.goalY - p.y) >= 1 && caveAt(p.x, p.y, p.z) < 0) {
         const heading = Math.atan2(e.goalX - p.x, e.goalZ - p.z);
         if (tryClimb(e, heading, e.goalY < p.y) || holdClimbSearch(e)) { e.speed = 0; return; }
       }
-      move(e, dt, SPEED);
+      const beforeX = p.x, beforeZ = p.z, beforeY = p.y;
+      move(e, dt, roofTrip ? SPEED : CHILL_SPEED);
+      const travelled = Math.hypot(p.x - beforeX, p.z - beforeZ);
+      r.runUp = roofTrip && !e.climb.active && travelled >= SPEED * dt * 0.5
+        && Math.abs(p.y - beforeY) <= STEP
+        && (p.x - beforeX) * Math.sin(e.heading) + (p.z - beforeZ) * Math.cos(e.heading) > travelled * 0.85
+        ? Math.min(ROOF_RUN_UP, r.runUp + travelled) : 0;
       if (e.debugMove.active) return;
       const distance = Math.hypot(e.goalX - p.x, e.goalZ - p.z) + Math.abs(e.goalY - p.y) * 0.5;
       if (distance < r.progressDistance - 0.15) { r.progressDistance = distance; r.progressTime = 0; }
@@ -4205,12 +4362,22 @@
     const release = () => {
       if (!player) return false;
       const e = player;
-      e.drag.time = 0;
-      if (e.drag.cave && ctx.onReleaseDrag) ctx.onReleaseDrag(e);
       cancelInput(); player = null; e.controlled = false;
       e.drive.resume = true;
       if (!e.drive.airborne && !e.fire.rolling && !e.climb.active) resumeEntry(e);
       return true;
+    };
+    const respawn = (e, x = 0, y = 0, z = 0) => {
+      releasePortal(e);
+      e.drive.passiveFall = false;
+      e.motion.climbBlend = NaN; e.motion.openingSettle = e.motion.poundCharge = 0;
+      e.motion.climbGripX = e.motion.climbGripY = e.motion.climbGripZ = NaN;
+      e.climb.holdPose = e.climb.mountPending = e.climb.waitRelease = false;
+      if (e.controlled) {
+        cancelInput();
+        e.root.position.x = x; e.root.position.y = y; e.root.position.z = z;
+      }
+      activate(e, false, e.controlled);
     };
     const possess = (value) => {
       const e = entryFor(value);
@@ -4322,7 +4489,8 @@
       f.rolling = true; f.requested = f.escaping = false; f.rollTime = 0; f.x = p.x; f.z = p.z; f.heading = e.heading;
       e.pound = e.beat = e.stand = e.recover = e.speed = 0; e.actionControlled = e.motion.smash = false; e.lounge = ""; e.parked = false;
       e.drive.vx = e.drive.vy = e.drive.vz = 0;
-      e.drive.jumpPressed = false; e.drive.motionEnvelope = true; e.motion.roll = 1;
+      e.drive.jumpPressed = false; e.drive.motionEnvelope = true;
+      e.motion.roll = e.motion.rollAngle = e.motion.rollSide = 0;
       return true;
     };
     const smash = (charge = 0) => {
@@ -4334,11 +4502,6 @@
       e.footprintMode = "pound"; e.compact = e.gorilla.poundCompact; e.radius = Math.max(e.radius, 2.25);
       e.pound = BL.agent.POUND_TIME; e.poundHit = false; e.actionControlled = e.motion.smash = true;
       return true;
-    };
-    const grab = () => {
-      const e = player;
-      return !!e && !e.climb.active && !e.fire.rolling && !e.drive.airborne && !e.pound && !e.beat && !e.drag.cave
-        && !!ctx.onGrab && ctx.onGrab(e);
     };
     const chestBeat = () => {
       const e = player;
@@ -4373,11 +4536,12 @@
         const distance = edge + CLIMB_STANDOFF;
         const x = p.x + sx * distance, y = p.y - 0.7, z = p.z + sz * distance;
         if (wallContactShare(e, x, y, z, heading) < WALL_ENTER_SHARE
-          || !climbClear(e, p.x, p.y, p.z, x, y, z, heading, true, true)) continue;
+          || !climbClear(e, p.x, p.y, p.z, x, p.y, z, heading, true, true)
+          || !climbClear(e, x, p.y, z, x, y, z, heading, true, true)) continue;
         c.active = c.free = c.mountPending = c.descending = c.fromTop = true;
         c.handoffDirection = 0; c.freeTargetX = x; c.freeTargetY = y; c.freeTargetZ = z;
         c.handoffStartX = p.x; c.handoffStartY = p.y; c.handoffStartZ = p.z;
-        c.waitRelease = d.climbAxis > 0;
+        c.waitRelease = e.controlled && d.climbAxis > 0;
         c.heading = c.topHeading = heading; c.blocked = 0; c.autoTo = -1; c.climbs++;
         c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
         d.airborne = d.passiveFall = d.grounded = false;
@@ -4401,7 +4565,6 @@
       }
       const sx = Math.sin(heading), sz = Math.cos(heading);
       if (!descending && (d.vx * sx + d.vz * sz < 0.2
-        || wallRectangleShare(e, p.x, p.y, p.z, heading) < WALL_ENTER_SHARE
         || !d.airborne && !cliffRiserAhead(p.x, p.z, heading, 1))) return false;
       let wall = NaN;
       for (let distance = 0.35; distance <= 1.3; distance += 0.08) {
@@ -4442,17 +4605,17 @@
       return false;
     };
     const updateRoll = (e, dt) => {
-      const f = e.fire;
-      f.rollTime = Math.min(ROLL_SECONDS, f.rollTime + dt);
+      const f = e.fire, p = e.root.position;
+      f.rollTime = Math.min(ROLL_ENTRY_SECONDS + ROLL_SECONDS, f.rollTime + dt);
+      const progress = clamp(f.rollTime / ROLL_ENTRY_SECONDS, 0, 1), entry = progress * progress * (3 - 2 * progress);
+      const angle = entry < 1 ? 0 : Math.sin((f.rollTime - ROLL_ENTRY_SECONDS) * 7), offset = angle * 0.35;
+      const x = f.x + Math.cos(f.heading) * offset, z = f.z - Math.sin(f.heading) * offset;
       e.compact = false; e.radius = MOTION_RADIUS; e.height = MOTION_HEIGHT;
-      // Keep turning about the forward body axis, so the head and feet
-      // keep pointing ahead through each full roll.
-      e.speed = 0; e.biped = false;
-      e.motion.roll = Math.min(1, f.rollTime / 0.35, (ROLL_SECONDS - f.rollTime) / 0.45);
-      e.motion.rollAngle = f.rollTime / ROLL_SECONDS * Math.PI * 6;
-      if (f.rollTime >= ROLL_SECONDS) {
+      if (!occupied(e, x, p.y, z) && staticClear(e, p.x, p.y, p.z, x, p.y, z)) { p.x = x; p.z = z; }
+      e.speed = 0; e.biped = false; e.motion.roll = entry; e.motion.rollSide = entry * Math.PI; e.motion.rollAngle = angle * 1.25;
+      if (f.rollTime >= ROLL_ENTRY_SECONDS + ROLL_SECONDS) {
         f.burning = f.rolling = false; f.soot = Math.max(f.soot, f.heat); f.heat = 0;
-        f.cooldown = 1.2; f.rollRecover = e.recover = 0.8; e.motion.roll = 0; e.motion.rollAngle = 0;
+        f.cooldown = 1.2; f.rollRecover = e.recover = ROLL_RECOVER_SECONDS; e.motion.roll = e.motion.rollAngle = 0;
       }
     };
     const updateFire = (e, dt) => {
@@ -4466,6 +4629,7 @@
         if (f.requested && !f.retry && !e.drive.airborne && !e.jump.active && !dropRoll(e)) f.retry = 0.2;
       } else f.soot = Math.max(0, f.soot - dt / SOOT_SECONDS);
       if (f.rolling) updateRoll(e, dt);
+      else e.motion.rollSide = f.rollRecover > 0 ? Math.PI * f.rollRecover / ROLL_RECOVER_SECONDS : 0;
       if (ctx.onFire && (f.burning || f.soot > 0 || f.rollRecover > 0)) ctx.onFire(e, dt);
     };
     const senseFireThreat = (e) => {
@@ -4711,21 +4875,21 @@
       }
       const delta = Math.atan2(Math.sin(wantedHeading - e.heading), Math.cos(wantedHeading - e.heading));
       const heading = e.heading + clamp(delta, -dt * 7, dt * 7);
-      if (d.airborne && attachContactWall(e)) return;
+      if (d.airborne && (d.vy <= 0 && beginPlatformEntry(e) || attachContactWall(e))) return;
       if (!d.airborne && amount > 0.05 && !e.climb.retry && caveAt(p.x, p.y, p.z) < 0
         && p.y - groundAt(p.x, p.z, p.y) <= STEP) {
         const direction = Math.atan2(d.x, d.z), sx = Math.sin(direction), sz = Math.cos(direction);
         const drop = climbSurfaceAt && climbSurfaceAt(p.x + sx * 2.2, p.z + sz * 2.2) < p.y - 0.8;
         if (drop && !d.run && beginEdgeClimb(e, direction)) return;
         const wall = !drop && wallRectangleShare(e, p.x, p.y, p.z, direction) >= WALL_ENTER_SHARE;
-        if (wall && attachContactWall(e)) return;
         // The rectangle sees a wall before the hands reach it. Keep walking
         // until a local grip is close enough, then use the checked route if
         // the direct mount is obstructed.
         let nearWall = false;
-        if (wall) for (let distance = 0.4; distance <= 1.4; distance += 0.2) {
+        if (wall || e.controlled && !drop) for (let distance = 0.4; distance <= 1.4; distance += 0.2) {
           if (climbSolidAt(p.x + sx * distance, p.y + 0.85, p.z + sz * distance)) { nearWall = true; break; }
         }
+        if (nearWall && attachContactWall(e)) return;
         if (!e.controlled && (nearWall || drop || e.climb.searchPending)
           && tryClimb(e, direction, !!drop)) return;
       }
@@ -4733,6 +4897,7 @@
       const count = Math.max(1, Math.ceil(Math.max(Math.hypot(d.vx, d.vz), Math.abs(d.vy)) * dt / 0.1));
       const step = dt / count, oldX = p.x, oldZ = p.z;
       for (let i = 0; i < count; i++) {
+        if (d.airborne && d.vy <= 0 && beginPlatformEntry(e)) return;
         const facing = e.heading + (heading - e.heading) / (count - i);
         if (!d.airborne) {
           const dx = d.vx * step, dz = d.vz * step, drop = raisedSupport(e) ? PROP_STEP : STEP;
@@ -4786,6 +4951,12 @@
     const poseEntry = (e, dt, beforeX, beforeY, beforeZ) => {
       const p = e.root.position;
       if (e.climb.active && e.climb.holdPose) return;
+      const exit = e.climb;
+      if (exit.openingExit) {
+        const dx = p.x - exit.openingExitX, dz = p.z - exit.openingExitZ;
+        const sx = Math.sin(exit.openingExitHeading), sz = Math.cos(exit.openingExitHeading);
+        if (dx * sx + dz * sz > 2.4 || Math.abs(dx * sz - dz * sx) > 1.1) exit.openingExit = false;
+      }
       syncLab(e);
       e.motion.openingSettle = Math.max(0, e.motion.openingSettle - dt * 1.4);
       e.motion.supportOffset = damp(e.motion.supportOffset, 0, 12, dt);
@@ -4827,7 +4998,8 @@
           e.roam.transition = Math.max(0, e.roam.transition - dt);
         }
       }
-      e.gorilla.poseManaged(dt, p.x, p.y, p.z, e.heading, e.speed, e.jump.active || e.drive.airborne && !e.drive.passiveFall, e.biped, e.lounge, e.motion);
+      e.gorilla.poseManaged(dt, p.x, p.y, p.z, e.heading, e.speed,
+        e.jump.active || e.drive.airborne && !e.drive.passiveFall, e.biped, e.lounge, e.motion);
       e.motion.walkPhase = NaN;
       e.roam.riseAdmitted = false;
       if (!e.motion.lab && e.footprintMode === "lab") {
@@ -4978,6 +5150,7 @@
       const p = e.root.position, beforeX = p.x, beforeY = p.y, beforeZ = p.z;
       e.motion.labDt = dt;
       e.motion.walkPhase = NaN;
+      e.motion.walkGait = e.controlled ? e.drive.run ? "gallop" : "knuckle" : "";
       if (!e.climb.active) e.motion.climbSide = 0;
       syncLab(e);
       e.motion.takeoff = Math.max(0, e.motion.takeoff - dt * 5);
@@ -5127,7 +5300,7 @@
             setGoal(e, POINT.x, POINT.y, POINT.z);
             move(e, dt, 0.6);
           }
-        } else if (travelGoal(e, dt)) { if (!e.jump.active) { if (e.motion.lab && !e.motion.labRunIn && (e.fromSite === labSite && e.route === "exit" || e.site === labSite && (e.route === "enter" || e.phase === "work"))) moveLab(e, dt); else move(e, dt, SPEED); } }
+        } else if (travelGoal(e, dt)) { if (!e.jump.active) { if (e.motion.lab && !e.motion.labRunIn && (e.fromSite === labSite && e.route === "exit" || e.site === labSite && (e.route === "enter" || e.phase === "work"))) moveLab(e, dt); else move(e, dt, e.mode === "chilling" ? CHILL_SPEED : SPEED); } }
         else { e.speed = damp(e.speed, 0, 12, dt); }
       } else if (e.phase === "wait") {
         yieldSpace(e);
@@ -5210,7 +5383,7 @@
             if (!fits && pose !== "sit") { pose = "sit"; fits = restTransitionClear(e, pose, dt); }
             if (fits) {
               e.speed = 0; e.lounge = pose; e.roam.arrived = true; e.roam.alignTime = 0;
-              if (e.rest <= 0) e.rest = (e.loungeRoof ? 45 : 30) + e.random() * (e.loungeRoof ? 35 : 30);
+              if (e.rest <= 0) e.rest = (e.loungeRoof ? 20 : 30) + e.random() * (e.loungeRoof ? 20 : 30);
             } else { e.roam.alignTime += dt; if (e.roam.alignTime > 0.5) e.rest = 0; }
           }
           if (e.lounge) e.rest = Math.max(0, e.rest - dt);
@@ -5323,7 +5496,6 @@
         // body inside another actor or scenery just to make a timeout pass.
         const soot = e.fire.soot, cooldown = e.fire.cooldown;
         e.climb.active = e.drive.passiveFall = false;
-        if (e.drag.cave && ctx.onReleaseDrag) ctx.onReleaseDrag(e);
         // An existing lab occupant need not join the entrance queue again to
         // recover into a free workstation. Claimed stations, bodies and solid
         // scenery still reject the candidate through the normal reservation.
@@ -5460,7 +5632,7 @@
       portals.fill(null);
     };
     return { list, sync, update, target, hit, plan, startLabShuttle, debugMove, cancelDebugMove, stats, liveGeometry, dispose, contactAt,
-      possess, release, control, cancelInput, smash, grab, chestBeat, ignite, dropRoll, supportRemoved,
+      possess, release, respawn, control, cancelInput, smash, chestBeat, ignite, dropRoll, supportRemoved,
       get player() { return player; } };
   };
   BL.clankers = { create, WALK_RADIUS, WALK_HEIGHT, PROP_STEP };

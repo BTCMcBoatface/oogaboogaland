@@ -1470,7 +1470,7 @@
       hud.setPrimary(primaryReady, !!weapon && !weapon.equipped, primaryReady ? cave.parts.club.geometry : null,
         weapon ? weapon.meleeCharge : 0, !!weapon && weapon.meleeHeld,
         weapon && weapon.meleeTime > 0 && !(weapon.meleeHeld && weapon.meleeHeldTime < BL.crew.MELEE_TAP_TIME)
-          ? weapon.meleePower : 0.5, !!weapon && weapon.aiming);
+          ? weapon.meleePower : 0.5, !!weapon && weapon.aiming, cave ? cave.traits.name : "");
       hud.setWeapon(secondaryReady, !!weapon && weapon.equipped, weapon ? weapon.ammo : 0, !!weapon && weapon.reloading, reload, !!weapon && weapon.unlimited);
       const count = secondaryReady && crew ? crew.magazineCount(cave) : 0, canSwap = !!crew && secondaryReady && crew.canSwapMagazine(cave);
       hud.setMagazine(count, crew ? crew.magazineAmmo(cave, 0) : 0, crew ? crew.magazineAmmo(cave, 1) : 0, canSwap,

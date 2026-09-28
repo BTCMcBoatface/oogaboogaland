@@ -568,6 +568,7 @@
         traffic: { moving: false, waiting: false, leader: null, crossing: null, tx: 0, tz: 0, fx: 0, fz: 1, distance: 0, speed: 0 },
         progress: { x: NaN, z: NaN, stalled: 0, motionless: 0, retry: 0, replanned: false, navigationHop: false, escaped: false,
           backoff: 0, backX: 0, backZ: 0, detours: 0, replans: 0, resets: 0, roofTime: 0 },
+        roofEscape: { active: false, jumping: false, blocked: 0 },
         avoidance: { active: false, side: i & 1 ? 1 : -1, stalled: 0, best: Infinity, tx: NaN, tz: NaN,
           detour: { site: -1, phase: 0, side: 1, entryX: 0, goalX: NaN, goalZ: NaN, x: 0, z: 0 },
           navigation: { mode: 0, x: 0, z: 0, count: 0, index: 0, searches: 0, expansions: 0,
@@ -768,6 +769,7 @@
       if (ctx.refreshMirrorObject) ctx.refreshMirrorObject(cave.root);
     };
     const resetPose = (cave) => {
+      cave.roofEscape.active = cave.roofEscape.jumping = false; cave.roofEscape.blocked = 0;
       clearMeleeThrust(cave);
       takeBedWeapons(cave);
       clearHeadLook(cave);
@@ -3133,7 +3135,8 @@
       traffic.moving = false;
       if (cave === player || !cave.root.visible || cave.camp.seat || cave.camp.panic.active || cave.hop > 0 || cave.hopV > 0) return;
       let target = null;
-      if (travel.mode === "walk") target = travel.route[travel.index];
+      if (cave.roofEscape.active) { traffic.tx = traffic.tz = 0; traffic.moving = true; }
+      else if (travel.mode === "walk") target = travel.route[travel.index];
       else if (!travel.mode && (cave.state === "working" || cave.state === "chilling")) {
         if (cave.walk) { traffic.tx = cave.walk.tx; traffic.tz = cave.walk.tz; traffic.moving = true; }
         else if (workSites && cave.state === "working") {
@@ -3154,7 +3157,7 @@
       }
       const length = Math.hypot(dx, dz);
       traffic.moving = length > 1e-6;
-      traffic.speed = cave.walk ? cave.walk.speed : travel.mode === "walk" ? 2 : RUSH_SPEED;
+      traffic.speed = cave.roofEscape.active ? RUSH_SPEED : cave.walk ? cave.walk.speed : travel.mode === "walk" ? 2 : RUSH_SPEED;
       if (traffic.moving) { traffic.fx = dx / length; traffic.fz = dz / length; }
     };
     const waitingFor = (other, cave) => {
@@ -3404,7 +3407,7 @@
       const progress = cave.progress, p = cave.root.position, travel = cave.bedTravel, work = cave.work;
       const airborne = cave.hop > 0 || cave.hopV > 0;
       const roof = dt > 0 && cave !== player && cave.root.visible && (cave.state === "working" || cave.state === "chilling")
-        && !cave.health.stunned && !cave.clankerDragged && !cave.camp.burning && !cave.camp.rolling
+        && !cave.roofEscape.active && !cave.health.stunned && !cave.camp.burning && !cave.camp.rolling
         && ctx.npcStrandedAt && ctx.npcStrandedAt(cave, p.x, p.y - cave.baseY, p.z);
       if (!roof) progress.roofTime = 0;
       else if ((progress.roofTime += dt) >= 8 && !airborne && ctx.npcRecoverySpot) {
@@ -3427,8 +3430,8 @@
       const attempting = cave.walk || travel.mode === "walk" || cave.state === "working" && workSites
         && (work.phase === "outbound" || work.phase === "return" || work.phase === "station");
       if (dt <= 0 || !attempting || !navigationHop && (!cave.traffic.moving || cave.traffic.distance < 0.15) || cave === player || !cave.root.visible
-        || cave.health.stunned || cave.clankerDragged || cave.camp.seat || cave.camp.burning || cave.camp.rolling || cave.cheer > 0
-        || airborne && !navigationHop || cave.root.quaternion) {
+        || cave.health.stunned || cave.camp.seat || cave.camp.burning || cave.camp.rolling || cave.cheer > 0
+        || airborne && !navigationHop || cave.root.quaternion || cave.roofEscape.active) {
         progress.x = p.x; progress.z = p.z; progress.stalled = progress.motionless = progress.retry = progress.backoff = 0;
         progress.replanned = progress.navigationHop = progress.escaped = false; return;
       }
@@ -4307,6 +4310,59 @@
         cave.parts.head.rotation.x = -k * 0.2;
       } else cave.parts.head.rotation.x = 0;
     };
+    const runRoofEscape = (cave, dt) => {
+      if (!ctx.npcCaveRoofAt || cave.humanControlled || cave.health.stunned || cave.jet) return false;
+      const escape = cave.roofEscape, p = cave.root.position;
+      if (!escape.active) {
+        if (!grounded(cave) || !ctx.npcCaveRoofAt(p.x, p.y - cave.baseY, p.z)) return false;
+        escape.active = true; escape.jumping = false; escape.blocked = 0;
+        resetWalkerRoute(cave); stopBurst(cave);
+      }
+      if (escape.jumping) {
+        if (grounded(cave)) {
+          escape.active = escape.jumping = false; escape.blocked = 0;
+          resetWalkerRoute(cave);
+          return false;
+        }
+        // Keep the inward running momentum throughout the fall. The usual
+        // airborne sweep, ceiling clamp and support query own the landing.
+        const distance = Math.hypot(p.x, p.z);
+        cave.leap.vx = distance ? -p.x / distance * RUSH_SPEED : 0;
+        cave.leap.vz = distance ? -p.z / distance * RUSH_SPEED : 0;
+        runPlayer(cave, dt, false);
+        return true;
+      }
+      if (p.y - cave.baseY <= STEP && !ctx.npcCaveRoofAt(p.x, p.y - cave.baseY, p.z)) {
+        escape.active = false; resetWalkerRoute(cave); return false;
+      }
+      let remaining = RUSH_SPEED * dt, moved = 0;
+      while (remaining > 1e-8) {
+        const distance = Math.hypot(p.x, p.z);
+        if (distance < 0.1) { escape.active = false; return false; }
+        const sx = -p.x / distance, sz = -p.z / distance, feet = p.y - cave.baseY;
+        const ahead = groundAt(p.x + sx * 0.75, p.z + sz * 0.75, feet, feet, cave);
+        if (feet - ahead > STEP || escape.blocked >= 0.4) {
+          escape.jumping = true; escape.blocked = 0;
+          cave.root.rotation.y = Math.atan2(sx, sz);
+          clearShoulder(cave);
+          cave.hopV = JUMP_SPEED; cave.jumps = 1;
+          cave.leap.vx = sx * RUSH_SPEED; cave.leap.vz = sz * RUSH_SPEED;
+          cave.parts.snack.visible = false;
+          flyPose(cave);
+          return true;
+        }
+        const step = walkToward(cave, 0, 0, remaining);
+        if (!step) { escape.blocked += dt; break; }
+        escape.blocked = 0; moved += step; remaining -= step;
+      }
+      if (moved) {
+        cave.act.phase += moved * 5;
+        walkPose(cave, cave.act.phase);
+        p.y = groundY(cave);
+      } else standPose(cave);
+      cave.parts.snack.visible = false;
+      return true;
+    };
     // Every voxel part is paired with its twin both ways, so one pass over the
     // body changes the colourway and a second pass changes it back.
     const swapTint = (cave) => {
@@ -4432,6 +4488,7 @@
         }
         return;
       }
+      if (runRoofEscape(cave, dt)) return;
       if (cave.hop > 0 || cave.hopV > 0) { runPlayer(cave, dt, false); return; }
       if (workSites && cave.state === "working" && cave.cheer > 0) {
         standPose(cave);
@@ -5389,11 +5446,6 @@
         riding.updated = true;
         return;
       }
-      if (cave.clankerDragged) {
-        riding.continuous = false;
-        riding.updated = true;
-        return;
-      }
       // Test both endpoints against the same current heap. A resize or a
       // relocation between frames must not masquerade as an exit.
       const wasInBananas = cave.root.visible && (cave.state === "working" || cave.state === "chilling") && inBananas(cave);
@@ -5565,7 +5617,7 @@
       updateStunGear(dt);
       syncMagazine();
       if (dt > 0) updateFireContacts();
-      // Collision exclusions belong to this ordered update only; input, dragging and relocation see ordinary bodies.
+      // Collision exclusions belong to this ordered update only; input and relocation see ordinary bodies.
       for (let i = 0; i < crewList.length; i++) crewList[i].riding.support = null;
     };
     const dispose = () => {
