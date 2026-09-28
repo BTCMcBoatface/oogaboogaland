@@ -5,8 +5,9 @@
 // glows brighter as someone comes near. Nobody but an Ooga crosses, so a visit without one only looks.
 //
 // Whoever walked in stays themselves: the Ooga the island handed over (`world.pilot`), or on a page that opens here,
-// `character=`. From DSB the Ooga comes back out of the DSB window; otherwise it stands at the tunnel's inner end.
-// Walking back out through the tunnel's field, Escape and the Leave button all go to the island.
+// `character=`. From the island it comes in through the tunnel's field, from DSB out of the DSB window; on a page that
+// opens here it stands at the tunnel's inner end. Walking back out through the field, Escape and the Leave button all
+// take it back out to the island's gate.
 //
 // The DSB window shows DSB Land itself: its land is built off the graph and photographed once a page from above its
 // falls, in its own light, while the screen is dark, and the picture hangs at the end of the window's passage. Until
@@ -78,6 +79,9 @@
   // 0.35, so 1.9 brings it to full) while it climbs its rim's steps.
   const NEAR = 1.4, FAR = 7.5, EASE = 5, BRIGHTEN = 1.9;
   const BACK = { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0.3, dist: 3.4 };
+  // In from the island's gate: a few steps inside the field, walking on down the tunnel toward the mechanism, the camera
+  // just inside the field behind it.
+  const GATE = { position: { x: 0, y: 0, z: ENTRY.field - 3 }, target: { x: 0, y: 1, z: ENTRY.field - 3 }, yaw: 0, pitch: 0.16, dist: 2.7 };
   // The picture of DSB Land: taken from above its falls, looking down over the turtle to the far stars, in DSB's own
   // light (scene-dsb.js: `RENDER`, and the two lamps `buildLand` hangs), then given back the saturation the page's
   // grade adds again and tinted a little toward the field's blue.
@@ -156,10 +160,10 @@
     }
   };
 
+  // Back out to the island's gate, as the same Ooga.
   const leaveChamber = () => {
     if (leaving) return;
-    // The island does not take an Ooga back from here yet, so nobody is handed over.
-    world.pilot = null;
+    world.pilot = avatar ? avatar.traits.name : null;
     leaving = go("hub");
   };
   // Through a window to its world, as the same Ooga, once a transition is free to start.
@@ -419,9 +423,11 @@
       avatar.root.rotation.y = Math.PI;
       pilot.possess(avatar);
       scene.gate.phase.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
-      // Back from a world, out of its window: standing in front of it, facing the mechanism.
+      // Back from a world, out of its window: standing in front of it, facing the mechanism. In from the island: through
+      // the field at the tunnel's end.
       const from = scene.windows.find((w) => w.kind === "travel" && w.row.scene === ctx.from);
       if (from) standBefore(from, 2.8);
+      else if (ctx.from === "hub") pilot.navigate(GATE);
     }
     lightUp(scene);
     leaving = false;
@@ -633,7 +639,7 @@
 
   const leave = () => {
     // Left by Back or Forward rather than by a way out of its own, the chamber hands the Ooga on, so the next scene
-    // plays the same one; the way out to the island hands nobody over, and a window has handed its traveller over.
+    // plays the same one; the way out to the island and a window have handed theirs over already.
     if (avatar && !leaving) world.pilot = avatar.traits.name;
     for (const w of scene.windows) {
       w.phase.dispose();

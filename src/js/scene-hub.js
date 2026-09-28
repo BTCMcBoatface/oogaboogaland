@@ -22,7 +22,7 @@
   const dayParam = DEBUG ? parseFloat(params.get("day")) : NaN;
   const latitudeParam = DEBUG ? parseFloat(params.get("latitude")) : NaN;
   const requestedView = DEBUG ? params.get("view") : null;
-  const preloadedView = requestedView === "hq" ? "underground" : requestedView === "bsmt" ? "basement" : requestedView === "pile" || requestedView === "lab" || requestedView === "mirror" || requestedView === "timechain" ? requestedView : null;
+  const preloadedView = requestedView === "hq" ? "underground" : requestedView === "bsmt" ? "basement" : requestedView === "pile" || requestedView === "lab" || requestedView === "mirror" || requestedView === "timechain" || requestedView === "bifrost" ? requestedView : null;
   const preloadedPose = DEBUG ? readPositionPose(params.get("pose")) : null;
   const preloadedMode = DEBUG ? params.get("mode") || preloadedPose?.mode : null;
   const preloadedFirstPerson = DEBUG && (params.get("firstperson") === "1" || preloadedMode === "first-person" || preloadedMode === "eye-level");
@@ -171,8 +171,8 @@
   const WANDER_COUNT = 36, WANDER_INNER = 5.5;
   const ALTAR_HEIGHT = 0.34, ALTAR_BLOCK_WIDTH = 0.2, ALTAR_BLOCK_ARC = 0.3, ALTAR_RING_GAP = 0.02, ALTAR_MAX_BLOCKS = 512;
   const RIPEN = 25, TREE_CHANCE = 0.5, BUSH_CHANCE = 0.25;
-  const PROP_TIPS = { tree: "Tree · shake it", bush: "Bush · rustle it", rock: "Rock · hit to break", crate: "Box · hit to break", barrel: "Barrel · hit to break", flower: "Flowers", torch: "Torch · warm", firepit: "Fire pit", bedroll: "Somebody's bed", ladder: "Ladder · wobbly", dock: "Dock · creaky", magazine: "Spare magazine · walk into it to collect", plane: "Ooga Drop · tap to fly", sign: "Ooga Drop · the plane flies from here", launchpad: "Ooga Orbit · tap to build a rocket", rocket: "Ooga Orbit · tap to fly", tower: "Launch tower · steady", orbitsign: "Ooga Orbit · the pad past the bridge", bridge: "Rope bridge · to the launch pad", poolbridge: "Vine bridge · to the Mempool island", poolstair: "The Mempool · tap to climb down", poolsign: "The Mempool · the cave reads the chain", chainsign: "The chain, at a glance · tap to read it", weathersign: "Reading the weather · tap for the key", poolrock: "Mossy rock", poolfern: "Fern · rustle it", poollog: "Fallen log · something lives in it", jaguar: "Jaguar · do not poke", monkey: "Monkey · it watches you", toucan: "Toucan · big beak", canopy: "Rainforest tree · shake it", windsock: "Windsock · a fair wind", jumbotron: "Jumbotron · OogaBoogaX on the big screen · tap the screen for a close-up", palm: "Palm · shake it", gate: null };
-  const RETICLE_PROPS = new Set(["tree", "bush", "rock", "crate", "barrel", "flower", "torch", "firepit", "ladder", "plane", "sign", "launchpad", "rocket", "tower", "orbitsign", "poolstair", "poolsign", "chainsign", "weathersign", "poolfern", "poollog", "jaguar", "monkey", "toucan", "canopy", "jumbotron", "palm", "timechainentrance", "timechainboard", "timechainchair", "timechainbeer"]);
+  const PROP_TIPS = { tree: "Tree · shake it", bush: "Bush · rustle it", rock: "Rock · hit to break", crate: "Box · hit to break", barrel: "Barrel · hit to break", flower: "Flowers", torch: "Torch · warm", firepit: "Fire pit", bedroll: "Somebody's bed", ladder: "Ladder · wobbly", dock: "Dock · creaky", magazine: "Spare magazine · walk into it to collect", plane: "Ooga Drop · tap to fly", sign: "Ooga Drop · the plane flies from here", launchpad: "Ooga Orbit · tap to build a rocket", rocket: "Ooga Orbit · tap to fly", tower: "Launch tower · steady", orbitsign: "Ooga Orbit · the pad past the bridge", bridge: "Rope bridge · to the launch pad", poolbridge: "Vine bridge · to the Mempool island", poolstair: "The Mempool · tap to climb down", poolsign: "The Mempool · the cave reads the chain", chainsign: "The chain, at a glance · tap to read it", weathersign: "Reading the weather · tap for the key", poolrock: "Mossy rock", poolfern: "Fern · rustle it", poollog: "Fallen log · something lives in it", jaguar: "Jaguar · do not poke", monkey: "Monkey · it watches you", toucan: "Toucan · big beak", canopy: "Rainforest tree · shake it", windsock: "Windsock · a fair wind", jumbotron: "Jumbotron · OogaBoogaX on the big screen · tap the screen for a close-up", palm: "Palm · shake it", bifrostbridge: "Bifröst · the bridge to ₿IFRÖST", bifrostgate: "₿IFRÖST · walk an Ooga through the field", heimdall: "Heimdall · keeper of the bridge", gate: null };
+  const RETICLE_PROPS = new Set(["tree", "bush", "rock", "crate", "barrel", "flower", "torch", "firepit", "ladder", "plane", "sign", "launchpad", "rocket", "tower", "orbitsign", "poolstair", "poolsign", "chainsign", "weathersign", "poolfern", "poollog", "jaguar", "monkey", "toucan", "canopy", "jumbotron", "palm", "timechainentrance", "timechainboard", "timechainchair", "timechainbeer", "bifrostgate", "heimdall"]);
   const workCave = (slot) => slot.repo && (slot.status === "open" || slot.status === "mirror")
     && (slot.repo !== OBL_REPO || slot.status === "mirror");
   const MATRIX_LIVING_PROPS = new Set(["tree"]);
@@ -349,11 +349,11 @@
   const clankerGroundTarget = (owner) => owner.kind === "prop" && (owner.prop === "crate" || owner.prop === "barrel" || owner.prop === "rock");
   const CLANKER_CAVITY = { floor: 0, ceiling: 0, caveIndex: 0 };
   const JETPACK_HUD_STATE = { owned: false, equipped: false, fuel: 1, blocked: false };
-  let enteringTween = null, pitDeparting = false, factoryDeparting = false, pitArrival = null;
+  let enteringTween = null, pitDeparting = false, factoryDeparting = false, bifrostDeparting = false, pitArrival = null;
   const pitArrivalPoint = { x: 0, y: 0, z: 0 };
   const pitPrevious = { x: 0, y: 0, z: 0 };
   let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null;
-  let weather = null, unsubscribeMempool = null, unsubscribeChain = null, mempoolIsland = null, timechainIsland = null;
+  let weather = null, unsubscribeMempool = null, unsubscribeChain = null, mempoolIsland = null, timechainIsland = null, bifrostIsle = null;
   // The two boards across the hole from the vine bridge, one reading the chain and one reading the
   // weather. Each holds its canvas, its panel node and the reading it last drew, so a snapshot saying
   // nothing new replaces no geometry.
@@ -2486,6 +2486,38 @@
     addProp("timechainbeer", beer.mug, site.chair.position.x - 0.95, site.chair.position.z, 0.3);
     return { site, place: p, cos, sin, boards: null, seat, beer, claimGround, hangout, residentPlaced: false, show: T.show(site) };
   };
+  // ₿IFRÖST's islet off the north rim, while its chamber is open (a `wip` scene is unregistered unless the page opts in):
+  // the crystal bridge out from the old gate at the top of the north pass, the islet and its gate, whose field takes a
+  // played Ooga into the chamber, and their lamps. The bridge and its head, the rock and the gate are solid; the field,
+  // the deck's light and the dressing are not. The field and its window hang in their own group straight under the root, in
+  // the portal's frame, as the factory's do.
+  const buildBifrostIsle = () => {
+    const I = BL.bifrostIsle, site = I.site(I.spot(island)), p = site.portal;
+    for (const node of site.roots) addChild(root, node);
+    placed.push(...site.roots);
+    addTerrainSection(site.islet.geometry.cutawaySource, site.node, site.node.position.y);
+    // Architecture, as the cave rims are: a walker climbs its stairs rather than shouldering past them as a tall prop.
+    for (const node of site.solids) {
+      node.sightSolid = true;
+      solids.add(node);
+    }
+    addProp("bifrostbridge", site.bridge, (site.cloud.head.x + site.cloud.end.x) / 2, (site.cloud.head.z + site.cloud.end.z) / 2, site.cloud.width);
+    addProp("bifrostgate", site.gatehouse, p.x, p.z, p.halfW + 1);
+    // Early in the dusk ramp, as the mouths' lanterns are, or registered this late they would never come on; each where its
+    // lights come on, for the sparks: the gate, the court's lanterns and fires, the bridge's lanterns and the landing's.
+    const c = site.cloud, court = site.arrival, at = [[p.x, p.floorY + 2, p.z], [court.x, court.y + 1.5, court.z], [court.x, court.y + 1.5, court.z],
+      [(c.head.x + c.end.x) / 2, c.y + 1.6, (c.head.z + c.end.z) / 2], [c.head.x, c.y + 1.6, c.head.z]];
+    site.lamps.forEach((node, i) => addLamp(node, LAMP.lantern, at[i][0], at[i][1], at[i][2], false, i));
+    const group = createNode({ position: { x: p.x, y: p.floorY, z: p.z }, rotation: { x: 0, y: p.ry, z: 0 } });
+    addChild(root, group);
+    placed.push(group);
+    presets.bifrost = site.view;
+    // After the home scatter, as the other islets claim theirs: the pass's end and the bridge head.
+    const claimGround = () => {
+      for (const [x, z, r] of site.claims) claim(x, z, r);
+    };
+    return { site, group, claimGround, phase: null, window: null, heimdall: null, hum: 0 };
+  };
   // The Sphere's walls and their feed (six slow API calls, then polls, each repainting a wall) wait until the camera
   // comes near, so a visit that never goes there never pays for them. They sit on the shell's inner face, which keeps
   // its outline, so they stay out of the outline registry.
@@ -4103,6 +4135,11 @@
     cloudBridgeBox(sphere.x - sphereDir.x * sphere.bridgeZ, sphere.z - sphereDir.z * sphere.bridgeZ,
       sphere.x - sphereDir.x * (sphere.bridgeZ + sphereSite.span),
       sphere.z - sphereDir.z * (sphere.bridgeZ + sphereSite.span), sphere.y, sphereSite.width);
+    if (bifrostIsle) {
+      const c = bifrostIsle.site.cloud;
+      cloudBox(c.x - c.r - 3, c.y - 18, c.z - c.r - 3, c.x + c.r + 3, c.y + 17, c.z + c.r + 3);
+      cloudBridgeBox(c.head.x, c.head.z, c.end.x, c.end.z, c.y, c.width);
+    }
   };
   const cloudToward = (value, target, distance) => value + clamp(target - value, -distance, distance);
   const cloudClearAt = (cloud, x, y, z, ahead = 0) => {
@@ -4509,7 +4546,7 @@
       case "cave":
         return o.slot.status === "open" ? o.slot.scene === "lab" ? `${o.slot.name} · island workshop` : `${o.slot.name} · tap to enter` : o.slot.status === "headquarters" ? "Headquarters · walk down the ramp" : o.slot.status === "mirror" ? `${o.slot.name} · mirror` : o.slot.status === "sleeping" ? "A project sleeps here · zzz" : o.slot.soon ? `${o.slot.name} · coming soon` : "An empty cave";
       case "gate":
-        return `${caves.gate.name} · leads nowhere yet`;
+        return bifrostIsle ? `${caves.gate.name} · the way to ₿IFRÖST` : `${caves.gate.name} · leads nowhere yet`;
       case "matrix-button":
         return matrixCave.unlocked ? "Matrix gate lever · pull down" : "Matrix gate lever · push up";
       case "matrix-gate":
@@ -4639,7 +4676,7 @@
         hud.toast(pilot.player ? "Walk into it to collect it." : "Double-tap an Ooga, then walk into it.");
         break;
       case "gate":
-        hud.toast(`${caves.gate.name} · leads nowhere yet`);
+        hud.toast(bifrostIsle ? `${caves.gate.name} · the way to ₿IFRÖST` : `${caves.gate.name} · leads nowhere yet`);
         break;
       case "plane":
       case "sign":
@@ -4666,6 +4703,15 @@
         break;
       case "timechainbridge":
         hud.toast("Timechain Island · Sani's hangout. Walk across the wooden bridge.");
+        break;
+      case "bifrostbridge":
+        hud.toast("Bifröst hums underfoot. ₿IFRÖST is across.");
+        break;
+      case "bifrostgate":
+        hud.toast(pilot.player ? "Walk through the field to cross into ₿IFRÖST." : "Only an Ooga may pass. Double-tap one, then walk it through the field.");
+        break;
+      case "heimdall":
+        bifrostIsle.heimdall.poke();
         break;
       case "timechainboard":
         openTimechainBoard(o.boardIndex);
@@ -4861,6 +4907,37 @@
     pilot.controls.reset(); input.reset(); pilot.setActive(false); hud.tooltip.hide();
     go("factory");
   };
+  // ₿IFRÖST's field, in the chamber's blue.
+  const BIFROST_TINT = [0.3, 0.62, 1];
+  // ₿IFRÖST's field hums on its own as the factory's does, light runs along the bridge's deck and down the falls, and
+  // Heimdall watches whoever comes: the played Ooga, else the view. The played Ooga walking through the field crosses into the chamber,
+  // held where it crossed through the fade as at the factory.
+  const bifrostGate = (dt, elapsed) => {
+    const b = bifrostIsle, p = b.site.portal, o = p.opening, player = pilot.player;
+    b.phase.update(dt, elapsed);
+    b.phase.body.update(dt);
+    b.phase.body.time = b.phase.ripples.time;
+    b.hum -= dt;
+    if (b.hum <= 0) {
+      b.hum = 0.1 + Math.random() * 0.22;
+      b.phase.ripples.pulse(o.minX + Math.random() * (o.maxX - o.minX), o.floorY + Math.random() * (o.ceilingY - o.floorY), 0);
+    }
+    const at = player ? player.root.position : null, orbit = pilot.orbit;
+    // The bridge glows under the played Ooga's feet.
+    if (at) BL.bifrostIsle.update(b.site, dt, elapsed, at.x, at.y - player.baseY, at.z);
+    else BL.bifrostIsle.update(b.site, dt, elapsed, NaN, NaN, NaN);
+    b.heimdall.update(dt, elapsed, at ? at.x : orbit.tx, at ? at.y - player.baseY : orbit.ty, at ? at.z : orbit.tz, !!player);
+    if (!player || entering) return;
+    const sr = Math.sin(p.ry), cr = Math.cos(p.ry);
+    const along = (at.x - p.x) * sr + (at.z - p.z) * cr, across = (at.x - p.x) * cr - (at.z - p.z) * sr;
+    const feet = at.y - player.baseY - p.floorY;
+    if (along > p.fieldZ || along < p.fieldZ - 2 || Math.abs(across) > p.halfW || feet < o.floorY - 0.12 || feet >= o.ceilingY) return;
+    b.phase.ripples.pulse(across, feet + 1, 0);
+    entering = bifrostDeparting = true;
+    world.pilot = player.traits.name;
+    pilot.controls.reset(); input.reset(); pilot.setActive(false); hud.tooltip.hide();
+    go("bifrost");
+  };
   // The Lightning Factory looks back out through its own end of this tunnel, so on the way in the island is
   // photographed once from the shield, looking out, while the screen is dark: the mouth's own dressing is hidden,
   // since the factory builds the tunnel and its lamps itself, and so is the Ooga walking in. What the factory can
@@ -4987,7 +5064,7 @@
     return true;
   };
   const onTap = (hit, p) => {
-    if (pitArrival || factoryDeparting || pitGate?.isOpen) return;
+    if (pitArrival || factoryDeparting || bifrostDeparting || pitGate?.isOpen) return;
     if (debugMovementTap(hit, p)) return;
     if (!hit) return;
     const o = hit.owner;
@@ -5471,7 +5548,7 @@
   const navigationClearAt = (x, y, z, radius, height) => {
     if (!physicalClearAt(x, y, z, radius, height)) return false;
     for (const prop of props) {
-      if (!prop.active || prop.prop === "gate" || prop.prop === "timechainboard" || !prop.node.geometry) continue;
+      if (!prop.active || prop.prop === "gate" || prop.prop === "timechainboard" || prop.prop === "bifrostgate" || prop.prop === "bifrostbridge" || !prop.node.geometry) continue;
       const b = BL.scene.boundsOf(prop.node.geometry), m = prop.node.world;
       const cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, cz = (b.min[2] + b.max[2]) / 2;
       const hx = (b.max[0] - b.min[0]) / 2, hy = (b.max[1] - b.min[1]) / 2, hz = (b.max[2] - b.min[2]) / 2;
@@ -5517,6 +5594,15 @@
       setVec(target, site.x, site.y + 0.8, site.z);
       pitch = player ? 0.2 : 0.08;
       dist = player ? 6 : 10;
+    } else if (name === "bifrost" && bifrostIsle) {
+      // Down the stairs from ₿IFRÖST's gate: an Ooga walks on out toward the bridge and the island, seen from over the
+      // gate's flight behind it (far enough back that the view keeps its pitch and clears the terraces); a free view looks
+      // back at the gate.
+      const a = bifrostIsle.site.arrival, q = bifrostIsle.site.portal, out = player ? 10 : 0;
+      x = a.x; z = a.z; yaw = a.yaw;
+      setVec(target, (player ? a.x : q.x) + Math.sin(a.yaw) * out, player ? a.y + 1.4 : q.floorY + 2.2, (player ? a.z : q.z) + Math.cos(a.yaw) * out);
+      pitch = player ? 0.28 : 0.12;
+      dist = player ? 6 : 11;
     } else if (underground) {
       z = 6;
       setVec(target, 0, (basement ? island.headquarters.basement.floor : island.headquarters.floor) + 0.8, 0);
@@ -5527,8 +5613,8 @@
     let found = false;
     for (const offset of NAVIGATION_OFFSETS) {
       p.x = x + Math.cos(yaw) * offset; p.z = z - Math.sin(yaw) * offset;
-      p.y = name === "timechain" ? timechainIsland.place.y : underground ? (basement ? island.headquarters.basement.floor : island.headquarters.floor) : island.surfaceAt(p.x, p.z);
-      if (name !== "timechain" && !island.onLand(p.x, p.z) || !navigationClearAt(p.x, p.y + 1e-5, p.z, PLAYER_RADIUS, player ? player.bodyHeight : 1.6)) continue;
+      p.y = name === "timechain" ? timechainIsland.place.y : name === "bifrost" ? bifrostIsle.site.arrival.y : underground ? (basement ? island.headquarters.basement.floor : island.headquarters.floor) : island.surfaceAt(p.x, p.z);
+      if (name !== "timechain" && name !== "bifrost" && !island.onLand(p.x, p.z) || !navigationClearAt(p.x, p.y + 1e-5, p.z, PLAYER_RADIUS, player ? player.bodyHeight : 1.6)) continue;
       destination.yaw = Math.atan2(p.x - target.x, p.z - target.z);
       destination.pitch = close ? Math.atan2(p.y + (player ? player.headOffset * CLOSE_VIEW.eyeRatio : CLOSE_VIEW.eyeHeight) - target.y, Math.hypot(p.x - target.x, p.z - target.z)) : pitch;
       destination.dist = dist;
@@ -6215,6 +6301,7 @@
     if (pitArrival) {
       updatePitArrival(dt);
       if (factoryMouth && factoryMouth.hall) factoryMouth.hall.update(dt, camera, RENDER_OPTS);
+      if (bifrostIsle && bifrostIsle.window) bifrostIsle.window.update(dt, camera, RENDER_OPTS);
       return;
     }
     hour = clock.read();
@@ -6243,7 +6330,8 @@
     mirrorCave.ripples.update(dt, elapsed);
     entropyLab.phase.update(dt, elapsed);
     if (factoryMouth) factoryShield(dt, elapsed);
-    if (factoryDeparting) return; // The Ooga through the shield and its camera hold through the director fade.
+    if (bifrostIsle) bifrostGate(dt, elapsed);
+    if (factoryDeparting || bifrostDeparting) return; // The Ooga through a shield and its camera hold through the director fade.
     prepareClankerRiders(elapsed);
     prepareClankerStrike();
     clankers.update(dt);
@@ -6345,6 +6433,7 @@
     syncMatrixInside(player);
     // The factory's window follows the eye, so it moves once the camera is final for the frame.
     if (factoryMouth && factoryMouth.hall) factoryMouth.hall.update(dt, camera, RENDER_OPTS);
+    if (bifrostIsle && bifrostIsle.window) bifrostIsle.window.update(dt, camera, RENDER_OPTS);
     updateMatrixWorld(dt, elapsed);
     updateMatrixControl(dt, player);
     mirrorCave.body.update(dt);
@@ -6500,6 +6589,7 @@
         && along >= p.bridgeZ - radius && along <= p.bridgeZ + s.span + 0.5 + radius;
       admitted = bridge || Math.hypot(dx, dz) + radius < s.radius;
     }
+    if (!admitted && bifrostIsle) admitted = bifrostIsle.site.groundAt(x, z) > -Infinity;
     if (!admitted && launchCloudSpot) {
       const p = launchCloudSpot, s = rocketModels.SITE, dx = x - p.x, dz = z - p.z;
       const bridge = Math.abs(dx) + radius <= s.width / 2 + 1e-7
@@ -7745,7 +7835,7 @@
     location.reload();
   };
   const onKey = (e) => {
-    if (pitArrival || factoryDeparting) return;
+    if (pitArrival || factoryDeparting || bifrostDeparting) return;
     if (e.key === "Escape" && debugSelectedGorilla) { selectDebugGorilla(null); e.preventDefault(); return; }
     if (clankerPlay.active) {
       if (!e.repeat && (e.key === "x" || e.key === "X")) clankerPlay.action("mode-toggle");
@@ -7781,7 +7871,7 @@
   const enter = (ctx) => {
     ({ renderer, game, world, go, lootEnabled, testBananas } = ctx);
     glCanvas = ctx.canvas;
-    pitDeparting = factoryDeparting = false; pitArrival = null;
+    pitDeparting = factoryDeparting = bifrostDeparting = false; pitArrival = null;
     const travel = world.oogaPortalTravel;
     const pitReturn = ctx.from === "dsb" && travel?.from === "dsb" && travel.to === "hub" && travel.arrival === "pit" && travel.name === world.pilot;
     delete world.oogaPortalTravel; // Consume once; ordinary scene visits cannot inherit this route.
@@ -7914,6 +8004,7 @@
     buildLaunchSite();
     mempoolIsland = buildMempoolIsland();
     timechainIsland = buildTimechainIsland();
+    bifrostIsle = BL.scenes.bifrost ? buildBifrostIsle() : null;
     const firePos = buildFire();
     fire = lamps[lamps.length - 1];
     // The jumbotron stands on the rim crest just west of the gate, turned to face the meadow center.
@@ -7952,6 +8043,7 @@
     scatter();
     mempoolIsland.claimGround();
     timechainIsland.claimGround();
+    if (bifrostIsle) bifrostIsle.claimGround();
     buildLawn();
     reflowScenery();
     buildSpots();
@@ -8019,11 +8111,22 @@
       Object.assign(factoryMouth, { phase: BL.labPhase.create(factoryMouth.group, factoryMouth.mouth, factoryMouth.opening, BL.factoryModels.SHIELD_Z, BL.factoryWindow.TINT), hum: 0, node: BL.factoryFeed.node(world) });
       factoryMouth.hall = renderer.kind === "webgl2" ? BL.factoryWindow.create({ group: factoryMouth.group, mouth: factoryMouth.mouth, node: factoryMouth.node }) : null;
     }
+    // ₿IFRÖST's field crests in the chamber's blue, and on WebGL shows the chamber through it; Heimdall keeps the bridge.
+    if (bifrostIsle) {
+      const b = bifrostIsle, p = b.site.portal, h = b.site.heimdall;
+      b.phase = BL.labPhase.create(b.group, p, p.opening, p.fieldZ, BIFROST_TINT);
+      b.window = renderer.kind === "webgl2" ? BL.bifrostWindow.create({ group: b.group, portal: p }) : null;
+      b.heimdall = BL.bifrostHeimdall.create({ parent: root, x: h.x, y: h.y, z: h.z, heading: h.heading, fx });
+      placed.push(b.heimdall.root, b.heimdall.plinth);
+      solids.add(b.heimdall.plinth);
+      addProp("heimdall", b.heimdall.pick, h.x, h.z, 1.2).weaponType = "none";
+    }
     headquarters.entropyLab = entropyLab;
     entropyLab.updateEquipment = updateLabEquipment;
     shared.clipProjectileTarget = entropyLab.phase.clipTarget;
     shared.absorbProjectile = (ax, ay, az, point, dt, source, workShot) => entropyLab.phase.absorb(ax, ay, az, point, dt)
       || !!(factoryMouth && factoryMouth.phase.absorb(ax, ay, az, point, dt))
+      || !!(bifrostIsle && bifrostIsle.phase.absorb(ax, ay, az, point, dt))
       || !!(workShot && source && shared.workSites[source.work.site]?.mirrorRoom && !mirrorCave.damage.broken
         && mirrorCave.ripples.absorb(ax, ay, az, point));
     shared.onProjectileMove = (ax, ay, az, bx, by, bz, dt, source, workShot) => {
@@ -8169,6 +8272,8 @@
       Math.max(cave.headOpen.verts.length, cave.headClosed.verts.length));
     if (factoryMouth) for (const cave of crew.list) factoryMouth.phase.body.track(cave.root, cave.traits.height * 2,
       Math.max(cave.headOpen.verts.length, cave.headClosed.verts.length));
+    if (bifrostIsle) for (const cave of crew.list) bifrostIsle.phase.body.track(cave.root, cave.traits.height * 2,
+      Math.max(cave.headOpen.verts.length, cave.headClosed.verts.length));
     if (magazine) trackMirrorObject(magazine.node, 1);
     for (let caveIndex = 0; caveIndex < crew.list.length; caveIndex++) {
       const cave = crew.list[caveIndex];
@@ -8293,7 +8398,7 @@
         else pilot.hooks.onZoom(factor, gesture, px, py);
       },
       onDoubleTap: (hit, p) => {
-        if (pitArrival || factoryDeparting || pitGate?.isOpen) return;
+        if (pitArrival || factoryDeparting || bifrostDeparting || pitGate?.isOpen) return;
         if (hit && hit.owner.kind === "clanker") {
           if (clankerPlay.player === hit.owner.entry) clankerPlay.release();
           else if (clankerPlay.possess(hit.owner.entry)) selectDebugGorilla(null);
@@ -8308,10 +8413,10 @@
     entering = false;
     enteringTween = null;
     now = 0;
-    hud.onPreset(name => { if (!pitArrival && !factoryDeparting) navigate(name); });
+    hud.onPreset(name => { if (!pitArrival && !factoryDeparting && !bifrostDeparting) navigate(name); });
     hud.setDetachedView("pile");
     hud.onAction((action, value) => {
-      if (pitArrival || factoryDeparting || pitGate.isOpen) return;
+      if (pitArrival || factoryDeparting || bifrostDeparting || pitGate.isOpen) return;
       if (clankerPlay.active && clankerPlay.action(action)) return;
       if (action === "tip") demoTip(1200);
       else if (action === "tip-legendary") demoTip(120000);
@@ -8331,9 +8436,10 @@
     let initialCharacter = ctx.from === null && preloadedCharacter ? contributors.activeRoster.find((entry) => entry.name.toLowerCase() === preloadedCharacter) : null;
     if (ctx.from === null && (preloadedJetpackWear || preloadedEquipment) && !params.has("character") && !initialCharacter) initialCharacter = contributors.activeRoster.find((entry) => crew.stateOf(crew.cavemen.get(entry.name)) === "working") || contributors.activeRoster[0];
     const initialGorilla = initialCharacter && preloadedGorilla ? crew.cavemen.get(initialCharacter.name) : null;
-    // The Ooga that went into DSB or the Lightning Factory comes back out as the one played.
-    const returningCharacter = ctx.from === "dsb" || ctx.from === "factory" ? world.pilot : null;
-    if (ctx.from === "dsb" || ctx.from === "factory") world.pilot = null;
+    // The Ooga that went into DSB, the Lightning Factory or ₿IFRÖST comes back out as the one played.
+    const handsBack = ctx.from === "dsb" || ctx.from === "factory" || ctx.from === "bifrost";
+    const returningCharacter = handsBack ? world.pilot : null;
+    if (handsBack) world.pilot = null;
     if (initialGorilla) {
       // A sleeping contributor has no active companion. Wake only the named
       // owner so the normal sync builds its gorilla at a supported home.
@@ -8352,7 +8458,8 @@
     }
     const initialFirstPerson = ctx.from === null && preloadedFirstPerson && !initialGorilla;
     if (initialFirstPerson) pilot.enterClose(true);
-    if (returningCharacter && !pitReturn) navigate(ctx.from === "factory" ? "factory" : "pile");
+    if (returningCharacter && !pitReturn) navigate(ctx.from === "factory" || ctx.from === "bifrost" ? ctx.from : "pile");
+    else if (ctx.from === "bifrost" && !ctx.place) navigate("bifrost");
     else if (!crew.sleeping && !initialGorilla && (ctx.place || preloadedView || initialCharacter || initialFirstPerson)) navigate(ctx.place || preloadedView || "pile");
     if (initialCharacter && !initialGorilla && preloadedJetpack) {
       grantJetpack(pilot.player, preloadedJetpackWear);
@@ -8398,6 +8505,7 @@
       debug: {
         get timechainIsland() { return timechainIsland; },
         get factory() { return factoryMouth && factoryMouth.hall ? factoryMouth.hall.debug : null; },
+        get bifrost() { return bifrostIsle; },
         slots: pile.slots, drops: pile.drops, core: pile.core, shell: pile.shell, delivery: pile.delivery, spillEffect: pile.spillEffect, cavemen: crew.cavemen, crates: crates.list, lab: null, hud, applyAllSwag: crew.applyAllSwag, renderLocker: crew.renderLocker, demoTip, setPileLevel: pile.setLevel, refreshStates: crew.refreshStates, trimPool: fx.trimPool,
         get shown() {
           return pile.shown;
@@ -8722,6 +8830,12 @@
       factoryMouth.phase.dispose();
     }
     factoryMouth = null;
+    if (bifrostIsle) {
+      if (bifrostIsle.window) bifrostIsle.window.dispose();
+      bifrostIsle.phase.dispose();
+      bifrostIsle.heimdall.dispose();
+    }
+    bifrostIsle = null;
     mirrorCave.body.dispose();
     pilot.dispose();
     if (oogatronUnsub) {
@@ -8781,6 +8895,7 @@
     clankers.liveGeometry(set);
     entropyLab.phase.liveGeometry(set);
     if (factoryMouth) factoryMouth.phase.liveGeometry(set);
+    if (bifrostIsle) bifrostIsle.phase.liveGeometry(set);
     for (const item of clankerEquipment) set.add(item.node.geometry);
     for (const cave of crew.cavemen.values()) set.add(cave.headOpen).add(cave.headClosed);
   };

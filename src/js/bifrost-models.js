@@ -841,10 +841,390 @@
     return true;
   };
 
+  // ---- the chamber through the island's gate -------------------------------------------------------------
+
+  // The chamber as the island sees it through the field in the gatehouse's portal, as the Lightning Factory's hall is
+  // seen through its shield (`FM.hubWindow`): the island's window (`bifrost-window.js`) pulls every point of this
+  // stand-in along its own sight line into a band just behind the field, so it is built at full size in the chamber's
+  // frame from the chamber's own tables, and kept light. Every face glows with the chamber's light at rest baked into
+  // its colour, so the island's sun and clock never touch it, and stone stays dark, so the island's bloom picks out
+  // only the lights. Every sight line through the field runs down the tunnel between its walls, so past the tunnel
+  // only the fan they reach is built: the floor there, the far arc of the wall with its four windows, the pilasters and
+  // the dome over it, the court and the mechanism. Floor, wall and dome share one grid of bearings, so no seam opens
+  // between them; inlays are cut into what they lie in rather than laid over it, and lit details stand a tenth of a
+  // metre proud, so the window's squeeze never folds them together.
+  //
+  // `front` is the tunnel's last half metre before the field at true size, where an Ooga walks through, with the
+  // field's emitters; `hall` is everything else that stands still, cut off where `front` begins (`GATE_CUT`). The window
+  // turns the `glyph` and the three `rings` (each already tipped as the scene tips it) about the mechanism's axis at
+  // their own heights, runs bands up the `beam`'s drums (its `rows`, stopped at the crown) and breathes the open world's
+  // `rim`, which is null while no world is open.
+  const GATE_CUT = ENTRY.field - 0.5;
+  // The chamber's light at rest, as `scene-bifrost.js` sets it: the moon's cool light through the open dome over an
+  // ambient floor, and no fog. Stone is dimmed by `dim` for the bloom it feeds, then eased from `knee` to under `cap`.
+  const BIFROST_MOOD = {
+    sky: [0.3, 0.3, 0.38], ground: [0.13, 0.11, 0.1], floor: 0.3, sun: [-0.45, 0.72, 0.53], direct: [0.42, 0.5, 0.68], strength: 0.32, fill: [0.05, 0.04, 0.11],
+    fog: [0, 0, 0], near: 1e6, far: 2e6, eye: [0, 1.6, ENTRY.field + 10], dim: 0.7, knee: 0.08, cap: 0.22
+  };
+  // How the scene tips the mechanism's three rings, about x then z.
+  const RING_TILT = [[Math.PI / 2, 0], [1.1, 0.5], [0.4, -0.9]];
+  // The ₿ as `FM.smoothBitcoin` cuts it, coarser, in its unit metrics (-1 to 1 with the ticks): the stem, the three
+  // bars, the four ticks, and each bowl in three pieces.
+  const BTC_PLATES = (() => {
+    const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    const out = [
+      rect(-0.55, -0.75, -0.3, 0.75), rect(-0.3, 0.5, 0.05, 0.75), rect(-0.3, -0.12, 0.1, 0.12), rect(-0.3, -0.75, 0.1, -0.5),
+      rect(-0.45, 0.75, -0.3, 1), rect(-0.12, 0.75, 0.03, 1), rect(-0.45, -1, -0.3, -0.75), rect(-0.12, -1, 0.03, -0.75)
+    ];
+    for (const [cx, cy] of [[0.05, 0.315], [0.1, -0.315]]) for (let k = 0; k < 3; k++) {
+      const a0 = -Math.PI / 2 + Math.PI * k / 3, a1 = a0 + Math.PI / 3;
+      out.push([[cx + Math.cos(a0) * 0.185, cy + Math.sin(a0) * 0.185], [cx + Math.cos(a0) * 0.435, cy + Math.sin(a0) * 0.435], [cx + Math.cos(a1) * 0.435, cy + Math.sin(a1) * 0.435], [cx + Math.cos(a1) * 0.185, cy + Math.sin(a1) * 0.185]]);
+    }
+    return out;
+  })();
+  // The ₿ as flat plates facing +z at z, `height` tall with its ticks, centred on (cx, cy) and leant as the logo leans.
+  const btcPlates = (geo, height, cx, cy, z, color, emissive) => {
+    const k = height / 2, c = Math.cos(0.24), s = Math.sin(0.24);
+    for (const piece of BTC_PLATES) facing(geo, piece.map(([x, y]) => [cx + (x * c + y * s) * k, cy + (-x * s + y * c) * k, z]), color, emissive, cx, cy, z + 1);
+  };
+  const gateWindow = cached(() => {
+    const { halfW, spring, field: F } = ENTRY, R = HALL.r, T0 = R - 0.4, END = F - 0.02, Y = 0.02, VR = halfW + 0.3, FAN = 2 * halfW / (F - T0);
+    const still = geometry(), frontGeo = geometry(), parts = [], fronts = [], rims = [];
+    // Whether anything at (x, z), `pad` metres across, can be seen through the field: in the tunnel, or in the fan past
+    // its inner end that sight lines between its walls reach.
+    const seen = (x, z, pad) => z >= T0 || Math.abs(x) <= halfW + (T0 - z) * FAN + pad;
+
+    // The chamber's lights at rest, as `lightUp` sets them: the mechanism, the crown, the field at the way out, each
+    // window in its open world's colour or else the field's, then each lantern's pool at the nine tenths of its glow its
+    // flicker hovers about. The lanterns stand as `lighting` hangs them, [kind, x, y, z, turn].
+    const open = WINDOWS.map((row) => row.kind === "travel" && !!BL.scenes[row.scene]);
+    const lights = [[0, CORE.glyphY, 0, 13, 0.85, 0.55, 0.22], [0, HALL.apex - 2.5, 0, 12, 1, 0.85, 0.55], [0, 2.2, F - 1.2, 8, 0.35, 0.6, 1]];
+    WINDOWS.forEach((row, i) => {
+      const f = frameOf(i);
+      lights.push([f.x - Math.sin(f.bearing) * 1.6, 2.4, f.z - Math.cos(f.bearing) * 1.6, 7, ...(open[i] ? hexToRgb(row.tint).map((k) => k / 255 * 0.7) : [0.2, 0.325, 0.5])]);
+    });
+    const plaque = name().letters.width / 2 + 1.1, lamps = [], POOL = [1.17, 0.72, 0.32], IRON = "#2c2e33", LANTERN = "#ffc860";
+    for (const b of PILLARS) lamps.push(["post", Math.sin(b) * POST_R, 0, Math.cos(b) * POST_R, b + Math.PI / 2]);
+    for (const a of COURT) lamps.push(["rail", Math.sin(a) * COURT_R, 0, Math.cos(a) * COURT_R, 0]);
+    for (const z of [R + 2.55, R + 4.85]) for (const x of [-1.25, 1.25]) lamps.push(["hang", x, spring + 1.55, z, 0]);
+    for (const x of [-plaque, plaque]) lamps.push(["hang", x, NAME.y + NAME.height + 0.9, R - NAME.out, 0]);
+    // A lantern `s` times the size of one 0.84 m tall with its foot at (x, y, z): its lit glass on an iron foot, under an
+    // iron cap.
+    const lantern = (s, x, y, z) => parts.push(
+      box({ w: 0.42 * s, h: 0.07 * s, d: 0.42 * s, color: IRON, offset: { x, y: y + 0.035 * s, z } }),
+      box({ w: 0.34 * s, h: 0.44 * s, d: 0.34 * s, color: LANTERN, emissive: 1, offset: { x, y: y + 0.3 * s, z } }),
+      moved(turnedY(lathe({ profile: [[0.3 * s, 0.52 * s], [0.14 * s, 0.72 * s], [0, 0.77 * s]], segments: 4, color: IRON }), Math.PI / 4), x, y, z)
+    );
+    for (const [kind, x, y, z, turn] of lamps) {
+      if (kind === "post") {
+        const ax = Math.cos(turn), az = -Math.sin(turn), tx = x + ax * 0.8, tz = z + az * 0.8;
+        lights.push([tx, y + 1.8, tz, 7.5, ...POOL]);
+        if (!seen(x, z, 1.5)) continue;
+        parts.push(
+          box({ w: 0.22, h: 2.95, d: 0.22, color: TIMBER_DK, offset: { x, y: y + 1.475, z } }),
+          FM.beam(x - ax * 0.1, y + 2.82, z - az * 0.1, x + ax * 0.95, y + 2.82, z + az * 0.95, 0.14, TIMBER_DK),
+          FM.beam(x, y + 2.25, z, x + ax * 0.55, y + 2.78, z + az * 0.55, 0.09, TIMBER), FM.beam(tx, y + 2.78, tz, tx, y + 2.44, tz, 0.05, IRON)
+        );
+        lantern(1.3, tx, y + 1.36, tz);
+      } else if (kind === "rail") {
+        lights.push([x, y + 1.4, z, 7.5, ...POOL]);
+        if (!seen(x, z, 1)) continue;
+        parts.push(box({ w: 0.36, h: 0.14, d: 0.36, color: STONE_DK, offset: { x, y: 0.07, z } }), box({ w: 0.2, h: 0.92, d: 0.2, color: TIMBER_DK, offset: { x, y: 0.58, z } }), box({ w: 0.3, h: 0.08, d: 0.3, color: BRONZE_DK, offset: { x, y: 1.02, z } }));
+        lantern(0.85, x, y + 1.06, z);
+      } else {
+        lights.push([x, y - 0.75, z, 7.5, ...POOL]);
+        // Only the tunnel's hang where a sight line reaches; the pair beside the name face the hall.
+        if (z < T0) continue;
+        parts.push(FM.beam(x, y - 0.32, z, x, spring + Math.sqrt(VR * VR - x * x) + 0.05, z, 0.05, IRON));
+        lantern(1.05, x, y - 0.3 - 0.84 * 1.05, z);
+      }
+    }
+
+    // A banner as `banner` hangs it, lighter, facing +z with its rod at the origin: the rod, the cloth's face in its two
+    // halves, and a tenth of a metre proud of it, the gold edging, the chevron and the ₿.
+    const flag = (() => {
+      const { w, h, tail } = BANNER, y0 = -0.1, i = 0.07, z = 0.1, geo = geometry();
+      for (const half of [[[-w / 2, y0], [0, y0], [0, y0 - h + tail], [-w / 2, y0 - h]], [[0, y0], [w / 2, y0], [w / 2, y0 - h], [0, y0 - h + tail]]]) facing(geo, half.map(([x, y]) => [x, y, 0]), CLOTH, 0, 0, -h / 2, 5);
+      const trim = (p, q) => {
+        const l = Math.hypot(q[0] - p[0], q[1] - p[1]), nx = -(q[1] - p[1]) / l * 0.025, ny = (q[0] - p[0]) / l * 0.025;
+        facing(geo, [[p[0] - nx, p[1] - ny, z], [q[0] - nx, q[1] - ny, z], [q[0] + nx, q[1] + ny, z], [p[0] + nx, p[1] + ny, z]], GOLD, 0.25, 0, -h / 2, 5);
+      };
+      const edge = [[-w / 2 + i, y0 - i], [w / 2 - i, y0 - i], [w / 2 - i, y0 - h + i * 1.6], [0, y0 - h + tail + i * 1.2], [-w / 2 + i, y0 - h + i * 1.6]];
+      edge.forEach((p, k) => trim(p, edge[(k + 1) % edge.length]));
+      trim([-0.26, y0 - 0.2], [0, y0 - 0.34]);
+      trim([0, y0 - 0.34], [0.26, y0 - 0.2]);
+      btcPlates(geo, BANNER.mark / 0.75, 0, y0 - 1.72 + BANNER.mark / 2, z, GOLD, 0.3);
+      return merge(geo, box({ w: w + 0.3, h: 0.09, d: 0.09, color: BRONZE_DK }));
+    })();
+
+    // The tunnel: its floor in flags with the field's two strips let in flush, its walls in courses up to the arch's
+    // spring and the shelf on them, and the vault in its long stones, all in the chamber's blocks 1.2 m along from the
+    // tunnel's inner end; the part from GATE_CUT on is `front`.
+    const XS = [-halfW, -1.26, -1.14, 0, 1.14, 1.26, halfW];
+    const run = (geo, z0, z1) => {
+      const n = Math.max(1, Math.round((z1 - z0) / 0.6));
+      for (let k = 0; k < n; k++) {
+        const za = z0 + (z1 - z0) * k / n, zb = z0 + (z1 - z0) * (k + 1) / n;
+        for (let c = 0; c < XS.length - 1; c++) {
+          const strip = c === 1 || c === 4;
+          facing(geo, [[XS[c], Y, za], [XS[c + 1], Y, za], [XS[c + 1], Y, zb], [XS[c], Y, zb]], strip ? FIELD : STONE[3], strip ? 0.9 : 0, 0, 9, (za + zb) / 2);
+        }
+      }
+      for (let za = z0; za < z1 - 1e-6;) {
+        const k = Math.floor((za - T0) / 1.2 + 1e-6), zb = Math.min(z1, T0 + 1.2 * (k + 1)), zm = (za + zb) / 2, course = Math.round((T0 + 1.2 * k) / 1.2);
+        for (const s of [-1, 1]) {
+          const x = s * halfW;
+          for (let row = 0; row < 4; row++) facing(geo, [[x, spring * row / 4, za], [x, spring * (row + 1) / 4, za], [x, spring * (row + 1) / 4, zb], [x, spring * row / 4, zb]], (row + course) % 2 ? STONE[0] : STONE[2], 0, 0, spring / 2, zm);
+          facing(geo, [[x, spring, za], [s * VR, spring, za], [s * VR, spring, zb], [x, spring, zb]], STONE[2], 0, x, spring + 5, zm);
+        }
+        const at = (a, z) => [Math.cos(a) * VR, spring + Math.sin(a) * VR, z];
+        for (let v = 0; v < 12; v++) {
+          const a0 = Math.max(0, (v - 0.5) * Math.PI / 11), a1 = Math.min(Math.PI, (v + 0.5) * Math.PI / 11);
+          facing(geo, [at(a0, za), at(a1, za), at(a1, zb), at(a0, zb)], v % 2 ? STONE[1] : STONE[3], 0, 0, spring, zm);
+        }
+        za = zb;
+      }
+    };
+    run(still, T0, GATE_CUT);
+    run(frontGeo, GATE_CUT, END);
+    // The three ribs, the part of each below the vault, with their blue studs; the banners between them, turned to face
+    // across the tunnel; and the field's emitters, bronze posts ringed in light, in `front`.
+    for (const z of [R + 1.4, R + 3.7, F - 1.6]) {
+      const r0 = halfW + 0.1, zf = z + 0.25, at = (r, a, zz) => [Math.cos(a) * r, spring + Math.sin(a) * r, zz];
+      for (let k = 0; k < 9; k++) {
+        const a0 = Math.PI * k / 9, a1 = Math.PI * (k + 1) / 9, tone = k % 2 ? STONE[3] : STONE[1];
+        facing(still, [at(r0, a0, zf), at(VR, a0, zf), at(VR, a1, zf), at(r0, a1, zf)], tone, 0, 0, spring, zf + 5);
+        facing(still, [at(r0, a0, z - 0.25), at(r0, a0, zf), at(r0, a1, zf), at(r0, a1, z - 0.25)], tone, 0, 0, spring, z);
+      }
+      for (let k = 1; k < 6; k++) {
+        const [x, y] = at(r0 + 0.1, Math.PI * k / 6, 0);
+        parts.push(box({ w: 0.12, h: 0.12, d: 0.16, color: FIELD, emissive: 1, offset: { x, y, z: zf + 0.02 } }));
+      }
+    }
+    for (const z of [R + 2.55, R + 4.55]) for (const s of [-1, 1]) parts.push(moved(turnedY(merge(flag), -s * Math.PI / 2), s * (halfW - 0.12), 3.75, z));
+    for (const s of [-1, 1]) {
+      fronts.push(box({ w: 0.36, h: spring + 0.6, d: 0.33, color: BRONZE_DK, offset: { x: s * (halfW - 0.05), y: (spring + 0.6) / 2, z: GATE_CUT + 0.165 } }));
+      for (let y = 0.5; y < spring + 0.3; y += 0.45) fronts.push(box({ w: 0.44, h: 0.1, d: 0.37, color: FIELD_LT, emissive: 0.95, offset: { x: s * (halfW - 0.05), y, z: GATE_CUT + 0.185 } }));
+    }
+
+    // The floor as the concept lays it, in rings round the dais on a grid of bearings: each course's flags in its stone,
+    // the bronze and brass bands between courses, the bronze spokes across the middle courses as narrow columns of the
+    // grid, and at each spoke's bearing a gilt tile in the dark course, where the concept cuts its ₿. It runs on under
+    // the wall, so a window's sill has floor, and where the tunnel opens the rings stop at its mouth.
+    const SPOKE = 0.04 / 7.75, COLS = [], spoke = [];
+    for (let k = 0; k < 72; k++) {
+      const a = k / 72 * TAU;
+      if (k % 6 === 3) COLS.push(a - SPOKE, a + SPOKE);
+      else COLS.push(a);
+    }
+    COLS.push(TAU);
+    for (let j = 0; j < COLS.length - 1; j++) spoke.push(COLS[j + 1] - COLS[j] < 3 * SPOKE);
+    const gilt = (j) => spoke[j] || spoke[(j + 1) % spoke.length] || spoke[(j - 1 + spoke.length) % spoke.length];
+    const RINGS = [...COURSES.map(([r0, r1, , tones], c) => ({ r0: c ? r0 : r0 - 0.1, r1, c, tones })), ...BANDS.map(([r0, r1, color]) => ({ r0, r1, c: -1, color }))].sort((p, q) => p.r0 - q.r0);
+    const P = (a, r, y = Y) => [Math.sin(a) * r, y, Math.cos(a) * r];
+    const cell = (a0, a1, r0, r1, color, emissive) => {
+      const am = (a0 + a1) / 2, rm = (r0 + r1) / 2;
+      if (!seen(Math.sin(am) * rm, Math.cos(am) * rm, (r1 - r0) / 2 + (a1 - a0) * r1 / 2 + 0.3)) return;
+      const o0 = Math.cos(a0) > 0 ? Math.min(r1, T0 / Math.cos(a0)) : r1, o1 = Math.cos(a1) > 0 ? Math.min(r1, T0 / Math.cos(a1)) : r1;
+      facing(still, [P(a0, r0), P(a0, o0), P(a1, o1), P(a1, r0)], color, emissive, Math.sin(am) * rm, 9, Math.cos(am) * rm);
+    };
+    for (const rg of RINGS) for (let j = 0; j < COLS.length - 1; j++) {
+      const a0 = COLS[j], a1 = COLS[j + 1];
+      if (rg.c < 0) cell(a0, a1, rg.r0, rg.r1, rg.color, 0.12);
+      else if (spoke[j] && (rg.c === 2 || rg.c === 3)) cell(a0, a1, rg.r0, rg.r1, BRONZE, 0.12);
+      else {
+        const tone = rg.tones[(j * 7 + rg.c * 3 + (j * j) % 5) % rg.tones.length];
+        if (rg.c === 1 && gilt(j)) {
+          cell(a0, a1, rg.r0, 4.9, tone, 0);
+          cell(a0, a1, 4.9, 5.5, "#e0923a", 0.4);
+          cell(a0, a1, 5.5, rg.r1, tone, 0);
+        } else cell(a0, a1, rg.r0, rg.r1, tone, 0);
+      }
+    }
+    // The wall's face on the same grid, in courses of dressed stone with a darker plinth course at its foot and a pale
+    // string course at its head, cut round each window's arch a little wider than it, so the frame covers the cut; the
+    // dome over it closed in the night's colours, with a scatter of stars and its bronze ribs.
+    const ROWS = Math.round(HALL.wall / HALL.unit), shown = (a) => seen(Math.sin(a) * R, Math.cos(a) * R, 1.5);
+    const DOME = [[R, HALL.wall], [R * 0.82, HALL.wall + 2.7], [R * 0.5, HALL.apex - 1.1], [1.4, HALL.apex]], NIGHT = ["#15123a", "#0c0c2a", "#07081c"];
+    for (let j = 0; j < COLS.length - 1; j++) {
+      const a0 = COLS[j], a1 = COLS[j + 1], am = (a0 + a1) / 2, arc = Math.floor((am > Math.PI ? am - TAU : am) * R / 1.5);
+      if (!shown(am)) continue;
+      for (let row = 0; row < ROWS; row++) {
+        const y0 = HALL.wall * row / ROWS, y1 = HALL.wall * (row + 1) / ROWS, ym = (y0 + y1) / 2;
+        if (SLOTS.some((b) => Math.cos(am - b) > 0 && inArch(R * Math.sin(am - b), ym, WINDOW.halfW + 0.7, WINDOW.spring))) continue;
+        facing(still, [P(a0, R, y0), P(a1, R, y0), P(a1, R, y1), P(a0, R, y1)], row === 0 ? STONE_DK : row === ROWS - 1 ? STONE_LT : STONE[(arc + row * 3) & 3], 0, 0, ym, 0);
+      }
+      for (let k = 0; k < 3; k++) facing(still, [P(a0, ...DOME[k]), P(a1, ...DOME[k]), P(a1, ...DOME[k + 1]), P(a0, ...DOME[k + 1])], NIGHT[k], 1, 0, 3, 0);
+    }
+    const rand = mulberry32(2143);
+    for (let k = 0; k < 28; k++) {
+      const b = Math.PI + (rand() * 2 - 1) * 1.1, u = (0.1 + rand() * 0.8) * 3, s = Math.floor(u), t = u - s;
+      const r = DOME[s][0] + (DOME[s + 1][0] - DOME[s][0]) * t, y = DOME[s][1] + (DOME[s + 1][1] - DOME[s][1]) * t, l = Math.hypot(r, y), size = 0.12 + rand() * 0.16, tone = rand();
+      facingIn(still, [Math.sin(b) * r / l, y / l, Math.cos(b) * r / l], l - 0.15, size, size, rand() * TAU, tone < 0.6 ? "#f4f6ff" : tone < 0.85 ? "#bcd4ff" : "#ffe6b0", 1);
+    }
+    for (let s = 0; s < 12; s++) {
+      const a = (s + 0.5) / 12 * TAU;
+      if (!shown(a)) continue;
+      for (let k = 0; k < 3; k++) {
+        const [ra, ya] = DOME[k], [rb, yb] = DOME[k + 1];
+        parts.push(FM.beam(Math.sin(a) * (ra - 0.22), ya - 0.15, Math.cos(a) * (ra - 0.22), Math.sin(a) * (rb - 0.22), yb - 0.15, Math.cos(a) * (rb - 0.22), 0.2, k === 2 ? BRASS : BRONZE));
+      }
+    }
+
+    // The pilasters, each with its banner and a bush on its capital; the lanterns' posts before them are hung above.
+    // Then the benches, and the planters with their bushes.
+    const bush = (r) => lathe({ profile: [[r * 0.9, 0], [r, r * 0.4], [r * 0.7, r * 0.85], [0, r]], segments: 6, color: (t) => t < 0.5 ? "#35602a" : "#4a7d34" });
+    for (const b of PILLARS) {
+      if (!seen(Math.sin(b) * PILLAR_R, Math.cos(b) * PILLAR_R, 1.5)) continue;
+      const g = [
+        box({ w: 1.55, h: 0.5, d: 1.1, color: STONE_DK, offset: { y: 0.25 } }), box({ w: 1.62, h: 0.4, d: 1.15, color: STONE_LT, offset: { y: HALL.wall - 0.2 } }),
+        moved(merge(flag), 0, 7.35, 0.57), moved(bush(0.62), 0, HALL.wall, 0)
+      ];
+      for (const y of [0.58, HALL.wall - 0.5]) g.push(box({ w: 1.5, h: 0.16, d: 1.05, color: BRONZE, offset: { y } }));
+      for (let k = 0; k < 4; k++) g.push(box({ w: 1.3, h: (HALL.wall - 0.9) / 4, d: 0.9, color: STONE[2], offset: { y: 0.5 + (HALL.wall - 0.9) * (k + 0.5) / 4 } }));
+      parts.push(moved(turnedY(merge(...g), b + Math.PI), Math.sin(b) * PILLAR_R, 0, Math.cos(b) * PILLAR_R));
+    }
+    for (const a of BENCHES) {
+      const x = Math.sin(a) * BENCH_R, z = Math.cos(a) * BENCH_R;
+      if (!seen(x, z, 1.2)) continue;
+      parts.push(moved(turnedY(merge(
+        box({ w: 1.9, h: 0.1, d: 0.54, color: TIMBER, offset: { y: 0.5 } }),
+        box({ w: 0.13, h: 0.46, d: 0.5, color: TIMBER_DK, offset: { x: -0.72, y: 0.23 } }), box({ w: 0.13, h: 0.46, d: 0.5, color: TIMBER_DK, offset: { x: 0.72, y: 0.23 } })
+      ), a), x, 0, z));
+    }
+    for (const a of PLANTERS) {
+      const x = Math.sin(a) * PLANTER_R, z = Math.cos(a) * PLANTER_R;
+      if (!seen(x, z, 1)) continue;
+      parts.push(moved(turnedY(merge(
+        box({ w: 1.1, h: 0.56, d: 1.1, color: STONE[2], offset: { y: 0.28 } }), box({ w: 1.2, h: 0.09, d: 1.2, color: BRONZE, offset: { y: 0.57 } }),
+        moved(bush(0.5), 0, PLANTER_TOP - 0.02, 0)
+      ), a), x, 0, z));
+    }
+    // The mechanism's dais and plinth, turned lighter, with the blue lamps on the upper step and the gold ring on top.
+    {
+      const [[r0, y0], [r1, y1]] = CORE.steps, p = CORE.plinth;
+      parts.push(
+        lathe({ profile: [[r0, 0], [r0, y0], [r1, y0], [r1, y1], [p + 0.3, y1], [p + 0.3, y1 + 0.02], [p - 0.05, y1 + 0.02]], segments: 24, color: (t) => t < 0.4 ? STONE[2] : STONE[1] }),
+        lathe({ profile: [[p, y1], [p, y1 + 0.25], [p - 0.25, y1 + 0.35], [p - 0.45, y1 + 1.5], [p - 0.2, y1 + 1.65], [p - 0.2, y1 + 1.8], [0.6, y1 + 1.9], [0, y1 + 1.92]], segments: 16, color: (t) => t < 0.2 || t > 0.6 ? BRASS : BRONZE_DK }),
+        ring({ r: p - 0.35, thickness: 0.06, y: y1 + 1.99, segments: 16, color: GOLD, emissive: 1 })
+      );
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * TAU;
+        parts.push(box({ w: 0.22, h: 0.1, d: 0.22, color: FIELD, emissive: 1, offset: { x: Math.sin(a) * (r1 - 0.25), y: y1 + 0.05, z: Math.cos(a) * (r1 - 0.25) } }));
+      }
+    }
+
+    // The windows, each as `archStone` frames it, lighter, built in its own frame (+z into the hall) and stood at its
+    // bearing: the deep ring's face in voussoirs between brass edges and down both jambs, its soffit and its outer
+    // step; the stepped course behind with its brass edge, its side run back to the wall; the plinths, caps and
+    // imposts; the keystone's bronze medallion ringed in gold with its gilt ₿; and inside, set back in the soffit, the
+    // field's blue strip. An open world's window runs back down its passage, blue ribs and all, to the picture's
+    // stand-in, and is marked out by its rim in the world's colour (`rims`); a mirror is its glass, dark silver
+    // lightening upward.
+    const { halfW: wh, spring: ws } = WINDOW, out = wh + FRAME.band, fz = FRAME.front, cz = FRAME.courseFront, N = 9;
+    const on = (r, a, z) => [Math.cos(a) * r, ws + Math.sin(a) * r, z];
+    // The face of an arched band from r0 to r1 at z, facing +z, in N voussoirs of `tone(k)`, and down both legs from
+    // `foot` to the spring in `legs` courses of `tone(N + course)`.
+    const archFace = (geo, r0, r1, z, tone, emissive, foot, legs) => {
+      for (let k = 0; k < N; k++) facing(geo, [on(r0, Math.PI * k / N, z), on(r1, Math.PI * k / N, z), on(r1, Math.PI * (k + 1) / N, z), on(r0, Math.PI * (k + 1) / N, z)], tone(k), emissive, 0, ws, z + 5);
+      for (const s of [-1, 1]) for (let row = 0; row < legs; row++) {
+        const y0 = foot + (ws - foot) * row / legs, y1 = foot + (ws - foot) * (row + 1) / legs;
+        facing(geo, [[s * r0, y0, z], [s * r1, y0, z], [s * r1, y1, z], [s * r0, y1, z]], tone(N + row), emissive, 0, ws, z + 5);
+      }
+    };
+    // The curved side of an arched band at radius r from z0 to z1, facing into the opening or out, and down both legs
+    // from `foot`.
+    const archSide = (geo, r, z0, z1, color, emissive, foot, inward) => {
+      const zm = (z0 + z1) / 2, reach = inward ? 0 : 2 * r;
+      for (let k = 0; k < N; k++) {
+        const a0 = Math.PI * k / N, a1 = Math.PI * (k + 1) / N, am = (a0 + a1) / 2;
+        facing(geo, [on(r, a0, z0), on(r, a0, z1), on(r, a1, z1), on(r, a1, z0)], color, emissive, Math.cos(am) * reach, ws + Math.sin(am) * reach, zm);
+      }
+      for (const s of [-1, 1]) facing(geo, [[s * r, foot, z0], [s * r, foot, z1], [s * r, ws, z1], [s * r, ws, z0]], color, emissive, s * reach, (foot + ws) / 2, zm);
+    };
+    const brass = () => BRASS, stone = (k) => k === N >> 1 ? STONE_LT : k >= N ? STONE[k % 2 ? 0 : 2] : STONE[k % 2 ? 3 : 1], coursed = (k) => STONE[k % 2 ? 1 : 3];
+    const SILVER = ["#2a323b", "#38424d", "#48535f", "#5b6875", "#76848f"], key = ws + wh + FRAME.band / 2, jamb = wh + FRAME.band / 2;
+    const disc = (r, k) => [Math.cos(k / 8 * TAU) * r, key + Math.sin(k / 8 * TAU) * r];
+    WINDOWS.forEach((row, i) => {
+      const f = frameOf(i), place = (geo) => moved(turnedY(geo, f.ry), f.x, 0, f.z);
+      if (!seen(f.x, f.z, 3.5)) return;
+      const g = geometry(), bits = [];
+      archFace(g, wh, wh + 0.09, fz, brass, 0, 0.8, 1);
+      archFace(g, wh + 0.09, out - 0.09, fz, stone, 0, 0.8, 3);
+      archFace(g, out - 0.09, out, fz, brass, 0, 0.8, 1);
+      archSide(g, wh, FRAME.proud - FRAME.depth / 2, fz, STONE[1], 0, 0.7, true);
+      archSide(g, out, cz, fz, STONE[3], 0, 0.8, false);
+      archFace(g, out, out + FRAME.course - 0.08, cz, coursed, 0, 0, 3);
+      archFace(g, out + FRAME.course - 0.08, out + FRAME.course, cz, brass, 0, 0, 1);
+      archSide(g, out + FRAME.course, 0, cz, STONE[1], 0, 0, false);
+      archFace(g, wh - 0.2, wh, fz - 0.35, () => FIELD_LT, 0.5, 0.8, 1);
+      archSide(g, wh - 0.2, fz - 0.55, fz - 0.35, FIELD_LT, 0.5, 0.8, true);
+      for (const s of [-1, 1]) bits.push(
+        box({ w: FRAME.band + 0.3, h: 0.7, d: FRAME.depth + 0.3, color: STONE_DK, offset: { x: s * jamb, y: 0.35, z: FRAME.proud } }),
+        box({ w: FRAME.band + 0.2, h: 0.12, d: FRAME.depth + 0.2, color: BRASS, offset: { x: s * jamb, y: 0.74, z: FRAME.proud } }),
+        box({ w: FRAME.band + 0.26, h: 0.2, d: FRAME.depth + 0.22, color: BRASS, offset: { x: s * jamb, y: ws, z: FRAME.proud } })
+      );
+      facing(g, Array.from({ length: 8 }, (_, k) => [...disc(0.36, k), fz + 0.15]), BRONZE_DK, 0, 0, key, fz + 5);
+      for (let k = 0; k < 8; k++) {
+        const [x0, y0] = disc(0.36, k), [x1, y1] = disc(0.36, k + 1), [X0, Y0] = disc(0.44, k), [X1, Y1] = disc(0.44, k + 1), [xm, ym] = disc(0.9, k + 0.5);
+        facing(g, [[x0, y0, fz + 0.15], [X0, Y0, fz + 0.15], [X1, Y1, fz + 0.15], [x1, y1, fz + 0.15]], GOLD, 0.3, 0, key, fz + 5);
+        facing(g, [[X0, Y0, fz], [X1, Y1, fz], [X1, Y1, fz + 0.15], [X0, Y0, fz + 0.15]], BRONZE_DK, 0, xm, ym, fz + 0.075);
+      }
+      btcPlates(g, 0.56, 0, key, fz + 0.26, GOLD, 0.8);
+      if (open[i]) {
+        const { depth, flare, rise } = WINDOW, n0 = wh + 0.05, n1 = wh + flare, h0 = ws + wh + 0.05, h1 = h0 + rise, lo = Y - 0.1;
+        facing(g, [[-n0, lo, 0], [-n1, lo, -depth], [-n1, h1, -depth], [-n0, h0, 0]], PASSAGE, 0.3, 0, h0 / 2, -depth / 2);
+        facing(g, [[n0, lo, 0], [n1, lo, -depth], [n1, h1, -depth], [n0, h0, 0]], PASSAGE, 0.3, 0, h0 / 2, -depth / 2);
+        facing(g, [[-n0, h0, 0], [n0, h0, 0], [n1, h1, -depth], [-n1, h1, -depth]], PASSAGE, 0.3, 0, 0, -depth / 2);
+        facing(g, [[-n1, lo, -depth], [n1, lo, -depth], [n0, lo, 0], [-n0, lo, 0]], "#3c3e52", 0.15, 0, 1, -depth / 2);
+        for (const z of [-1.2, -2.4, -3.6]) {
+          const t = -z / depth, w = n0 + (n1 - n0) * t - 0.12, h = h0 + (h1 - h0) * t - 0.12;
+          bits.push(FM.beam(-w, lo, z, -w, h, z, 0.1, FIELD, 0.5), FM.beam(-w, h, z, w, h, z, 0.1, FIELD, 0.5), FM.beam(w, h, z, w, lo, z, 0.1, FIELD, 0.5));
+        }
+        // The picture's stand-in, its stars brought forward to stand proud of the night behind them.
+        const picture = merge(dsbStandIn()), pz = passage().picture.z, v = picture.verts;
+        for (let k = 2; k < v.length; k += 3) if (v[k] > pz + 0.03) v[k] = pz + 0.14;
+        bits.push(picture);
+        const rim = geometry(), tint = () => row.tint;
+        archFace(rim, out, out + 0.18, fz + 0.08, tint, 1, 0.8, 1);
+        archSide(rim, out + 0.18, cz + 0.05, fz + 0.08, row.tint, 1, 0.8, false);
+        archFace(rim, out + FRAME.course, out + FRAME.course + 0.08, cz + 0.04, tint, 1, 0, 1);
+        archSide(rim, out + FRAME.course + 0.08, 0.5, cz + 0.04, row.tint, 1, 0, false);
+        rims.push(place(rim));
+      } else {
+        for (let k = 0; k < SILVER.length; k++) {
+          const y0 = WINDOW_TOP * k / SILVER.length, y1 = WINDOW_TOP * (k + 1) / SILVER.length;
+          facing(g, [[-wh, y0, -MIRROR_Z], [wh, y0, -MIRROR_Z], [wh, y1, -MIRROR_Z], [-wh, y1, -MIRROR_Z]], SILVER[k], 0.3, 0, (y0 + y1) / 2, 5);
+        }
+      }
+      parts.push(place(merge(g, ...bits)));
+    });
+
+    // The mechanism's moving parts, built at the origin: the ₿ and the rings as the chamber's, the rings lighter and
+    // tipped, lit as standing at the ₿'s height; and the beam's drum.
+    const light = FM.windowLights(lights), unlit = FM.windowLights([]), bake = (geo, set, at = [0, 0, 0]) => FM.bakeWindow(geo, set, at, BIFROST_MOOD);
+    const rings = CORE.rings.map((r, i) => {
+      const pieces = [ring({ r, thickness: 0.055 + i * 0.01, segments: 32, color: i === 1 ? BRASS : BRONZE })];
+      for (let k = 0; k < 4; k++) {
+        const a = k / 4 * TAU + i * 0.4;
+        pieces.push(moved(lathe({ profile: [[0, -0.09], [0.09, 0], [0, 0.09]], segments: 6, color: GOLD, emissive: 0.6 }), Math.cos(a) * r, 0, Math.sin(a) * r));
+      }
+      return bake(turnedX(turnedZ(merge(...pieces), RING_TILT[i][1]), RING_TILT[i][0]), light, [0, CORE.glyphY, 0]);
+    });
+    const beam = coreBeam();
+    return {
+      front: bake(merge(frontGeo, ...fronts), light), hall: bake(merge(still, ...parts), light), glyph: bake(merge(coreGlyph()), unlit), rings,
+      beam: { geometry: bake(merge(beam.geometry), unlit), rows: beam.rows.filter((row) => row.y < HALL.apex).map(({ y, h, r }) => ({ y, h: Math.min(h, HALL.apex - y), r })) },
+      rim: rims.length ? bake(merge(...rims), light) : null
+    };
+  });
+
   BL.bifrostModels = {
     HALL, ENTRY, WINDOW, WINDOW_TOP, FRAME, CORE, WINDOWS, SLOTS, PILLARS, PILLAR_R, NAME, MIRROR_Z, COURT, BENCHES, BENCH_R, PLANTERS, PLANTER_R, PLANTER_TOP,
     frameOf, inArch, hall, pillars, tunnel, entryField, archStone, archGlow, RIM_STEPS, portalRim, hanger, passage, pictureQuad, dsbStandIn, mirror, name,
     SKY, sky, coreBase, coreGlyph, coreRings, coreBeam, shockwave, courtPosts, bench, planter, lighting, dressing, fieldSheet, swirl, archRing, banner,
-    supportAt, clearAt, walkable, word, GLYPHS
+    supportAt, clearAt, walkable, word, GLYPHS, gateWindow,
+    PALETTE: { STONE, STONE_DK, STONE_LT, BRONZE, BRONZE_DK, BRASS, GOLD, GOLD_DK, TIMBER, TIMBER_DK, FIELD, FIELD_LT, FIELD_DK, PASSAGE, CLOTH },
+    facing, archOutline, archEdge, archAt, archNeon, ball, disc, hoop, banners, blend
   };
 })();

@@ -2610,11 +2610,11 @@
     }
     return { P, cells };
   };
-  // Lights every face as the factory's shader would under WINDOW_MOOD and a `windowLights` set, and sets it glowing in
-  // that colour, so it draws the same wherever it stands. `at` is added to each face's middle before it is lit, for a
-  // part built at the origin. A face that glows fully takes no light.
-  const bakeWindow = (geo, { P, cells }, at = [0, 0, 0]) => {
-    const { sky, ground, floor, sun, direct, strength, fill, fog: haze, near: fogNear, far: fogFar, eye, dim, knee, cap } = WINDOW_MOOD;
+  // Lights every face as the factory's shader would under WINDOW_MOOD (or another place's `mood`) and a `windowLights`
+  // set, and sets it glowing in that colour, so it draws the same wherever it stands. `at` is added to each face's
+  // middle before it is lit, for a part built at the origin. A face that glows fully takes no light.
+  const bakeWindow = (geo, { P, cells }, at = [0, 0, 0], mood = WINDOW_MOOD) => {
+    const { sky, ground, floor, sun, direct, strength, fill, fog: haze, near: fogNear, far: fogFar, eye, dim, knee, cap } = mood;
     const v = geo.verts, faces = geo.faces, sl = Math.hypot(...sun), ux = sun[0] / sl, uy = sun[1] / sl, uz = sun[2] / sl, none = [];
     const ease = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     const light = [0, 0, 0], rgb = [0, 0, 0];
@@ -3174,7 +3174,7 @@
     forgeSign, forgeWave, forgeLines, forgeTrack, forgeShafts, mintCoin, COILS, teslaCoil, banner, statusLantern, peerPipes, peerMirrors, TUNNEL_SIGN, TUNNEL_POST, EXIT_Z, CONDUIT_SAMPLES, TUNNEL_THEMES, STEP, supportAt, stairCeilingAt, clearAt, walkable, resolveFall,
     hall, scaffold, coreBody, coreChamber, conduits, sat, satFailed, stationFrame, capacitor, forge, forgeFire, cart,
     switchboard, switchScreens, REB, TRE, rebalancerBase, rebalancerRing, rebalancerFlow, treasuryBody, goldPile, hopperFill, beltNugget, goldCrate, dataBoard, moveBoard,
-    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutOptics, lookoutBeam, LOOKOUT_BEAM, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, hubWindow, exitTunnel, outsideView,
+    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutOptics, lookoutBeam, LOOKOUT_BEAM, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, hubWindow, bakeWindow, windowLights, exitTunnel, outsideView,
     beam, moved, turnedY, smoothBolt, smoothBitcoin
   };
 })();
