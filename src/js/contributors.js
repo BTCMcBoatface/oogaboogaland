@@ -24,7 +24,7 @@
   const solo = params.has("debug") && (params.get("solo") === "1" || params.get("solo") === "");
   const requestedStatus = params.has("debug") ? params.get("status") : null;
   const debugState = requestedStatus === "clankin" ? "working" : requestedStatus === "chillin" ? "chilling" : requestedStatus === "sleepin" ? "sleeping" : null;
-  const character = params.get("character")?.trim().toLowerCase();
+  const character = params.get("character")?.trim().toLowerCase().replace(/^(?:gorilla|clanker)-/, "");
   const activeRoster = solo ? roster.filter((entry) => entry.name.toLowerCase() === character) : roster;
   const byName = new Map(roster.map((contributor) => [contributor.name.toLowerCase(), contributor]));
   characters.forEach((c, i) => { if (c.github) byName.set(c.github.toLowerCase(), roster[i]); });

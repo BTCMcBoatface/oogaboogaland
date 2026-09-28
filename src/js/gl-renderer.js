@@ -256,6 +256,7 @@ uniform vec4 uObjectClip;
 uniform vec4 uObjectSlab;
 ${CUTAWAY_GLSL}
 uniform float uMatrixGlyphOpacity;
+uniform float uGlassOpacity;
 uniform vec4 uVoxel;
 uniform float uWindTime;
 #ifdef MATRIX_SAMPLE_INTERPOLATION
@@ -738,6 +739,13 @@ void main() {
   vec3 normalColor = clamp(mix(col, uFog, fog), 0.0, 1.0);
   vec3 normalBright = clamp((col * (emissive * 0.9 + vParams.y * 0.5 + tip * 0.85) + surfaceBright) * (1.0 - fog), 0.0, 1.0);
   float glassAlpha = uGlass < 1.0 ? clamp(uGlass + pow(1.0 - abs(dot(n, normalize(uEye - vWorld))), 2.0) * 0.55, 0.0, 1.0) : 1.0;
+  if (uGlassOpacity > 0.0) {
+    vec3 view = normalize(viewTowardEye(vWorld));
+    float grazing = pow(1.0 - abs(dot(n, view)), 3.0);
+    float glint = pow(max(dot(reflect(-uLightDir, n), view), 0.0), 36.0);
+    normalColor = mix(normalColor, vec3(0.88, 1.0, 0.98), grazing * 0.7 + glint * 0.35);
+    glassAlpha = mix(uGlassOpacity, 0.72, grazing) + glint * 0.12;
+  }
   oColor = vec4(mix(normalColor, matrixColorResult, front), glassAlpha);
   oBright = vec4(mix(normalBright, matrixBrightResult, front), glassAlpha);
 }`;
@@ -1404,7 +1412,7 @@ void main() {
       const meshFragment = matrixSampling ? MESH_FS.replace("#version 300 es", "#version 300 es\n#extension GL_OES_shader_multisample_interpolation : require\n#define MATRIX_SAMPLE_INTERPOLATION") : MESH_FS;
       res.programs = {
         image: compile(IMAGE_VS, IMAGE_FS, ["uViewProj", "uRect", "uImage", "uReady", "uClipMaxY"]),
-        mesh: compile(MESH_VS, meshFragment, ["uViewProj", "uLightViewProj", "uEye", "uViewDirection", "uLightDir", "uSky", "uGround", "uSun", "uDirectStrength", "uAmbientFloor", "uDiffuseFloor", "uShadowStrength", "uShadowFloor", "uShadowBias", "uShadow", "uShadowTexel", "uLights", "uLightCount", "uFog", "uFogRange", "uMatrixParams", "uMatrixOrigin", "uMatrixGlyph", "uMatrixCave", "uMatrixCaves", "uMatrixCaveBounds", "uMatrixCaveNear", "uMatrixPermanentCave", "uMatrixPermanentPlane", "uMatrixPermanentAperture", "uMatrixLivingGlobal", "uMatrixGlyphTex", "uMatrixSamples", "uClipMinY", "uClipMaxY", "uObjectClip", "uObjectSlab", "uProjective", "uMatrixGlyphOpacity", "uVoxel", "uWindTime", "uSway", "uSwing", "uGlass"]),
+        mesh: compile(MESH_VS, meshFragment, ["uViewProj", "uLightViewProj", "uEye", "uViewDirection", "uLightDir", "uSky", "uGround", "uSun", "uDirectStrength", "uAmbientFloor", "uDiffuseFloor", "uShadowStrength", "uShadowFloor", "uShadowBias", "uShadow", "uShadowTexel", "uLights", "uLightCount", "uFog", "uFogRange", "uMatrixParams", "uMatrixOrigin", "uMatrixGlyph", "uMatrixCave", "uMatrixCaves", "uMatrixCaveBounds", "uMatrixCaveNear", "uMatrixPermanentCave", "uMatrixPermanentPlane", "uMatrixPermanentAperture", "uMatrixLivingGlobal", "uMatrixGlyphTex", "uMatrixSamples", "uClipMinY", "uClipMaxY", "uObjectClip", "uObjectSlab", "uProjective", "uMatrixGlyphOpacity", "uGlassOpacity", "uVoxel", "uWindTime", "uSway", "uSwing", "uGlass"]),
         shadow: compile(SHADOW_VS, SHADOW_FS, ["uLightViewProj", "uClipMinY", "uClipMaxY", "uObjectClip"]),
         line: compile(LINE_VS, LINE_FS, ["uViewProj", "uViewport", "uWidth", "uClipMaxY", "uObjectClip"]),
         sky: compile(QUAD_VS, SKY_FS, ["uInvViewProj", "uHorizon", "uZenith", "uSun", "uSunDir", "uMoonDir", "uStarMatrix", "uStars", "uTime", "uHazeDrop", "uClouds", "uSea", "uSeaEye"]),
@@ -2401,7 +2409,7 @@ void main() {
         }
         if (useProgram === "shadow") shadowDraws++;
         if (kind === "mesh" && useProgram === "mesh") {
-          const stage = rec.geometry.matrixRevealBacking ? 1 : rec.geometry.matrixGlyph ? 2 : 0;
+          const stage = rec.geometry.matrixRevealBacking ? 1 : rec.geometry.matrixGlyph ? 2 : rec.geometry.glassOpacity ? 3 : 0;
           if (stage !== matrixStage) continue;
           if (rec.geometry.imageSurface) { drawImageSurface(rec, n, cull); continue; }
           const mesh = res.programs.mesh, glyph = stage === 1 ? 3 : stage === 2 ? 1 : rec.geometry.matrixLocalGlyphSurface ? 2 : 0, cave = rec.geometry.matrixCave || 0;
@@ -2410,6 +2418,11 @@ void main() {
             mesh.matrixGlyph = glyph;
           }
           if (stage === 2) gl.uniform1f(mesh.u.uMatrixGlyphOpacity, rec.geometry.matrixGlyphOpacity ?? 1);
+          const glassOpacity = rec.geometry.glassOpacity || 0;
+          if (glassOpacity !== mesh.glassOpacity) {
+            gl.uniform1f(mesh.u.uGlassOpacity, glassOpacity);
+            mesh.glassOpacity = glassOpacity;
+          }
           if (cave !== mesh.matrixCave) {
             gl.uniform1f(mesh.u.uMatrixCave, cave);
             mesh.matrixCave = cave;
@@ -2556,6 +2569,9 @@ void main() {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       drawParts("mesh", "mesh", true, false, 1);
       drawParts("mesh", "mesh", true, false, 2);
+      gl.depthMask(false);
+      drawParts("mesh", "mesh", true, false, 3);
+      gl.depthMask(true);
       gl.disable(gl.BLEND);
       gl.useProgram(pg.line.prog);
       gl.uniformMatrix4fv(pg.line.u.uViewProj, false, mirrorViewProj);
@@ -3091,6 +3107,9 @@ void main() {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       drawParts("mesh", "mesh", true, true, 1);
       drawParts("mesh", "mesh", true, true, 2);
+      gl.depthMask(false);
+      drawParts("mesh", "mesh", true, true, 3);
+      gl.depthMask(true);
       gl.disable(gl.BLEND);
       drawRippleSurfaces();
       gl.useProgram(pg.line.prog);

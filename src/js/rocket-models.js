@@ -294,14 +294,15 @@
     geo.collisionGeometry = towerShell();
     return geo;
   });
-  // Built in its own frame: z = 0 to z = SITE.span at deck height 0, planks sagging to the middle.
-  const deckY = (z) => -SITE.sag * 4 * (z / SITE.span) * (1 - z / SITE.span);
+  // Decking overlaps the rim and the launch islet; the sag stays between the two old bridge heads.
+  const DECK_START = -0.8, DECK_END = SITE.span + 0.8;
+  const deckY = (z) => { const t = Math.max(0, Math.min(1, z / SITE.span)); return -SITE.sag * 4 * t * (1 - t); };
   // The first build, planks, posts and square ropes, kept as the drawn bridge's collision shell.
   const bridgeShell = () => {
-    const geos = [], w = SITE.width, count = Math.round(SITE.span / 0.47);
+    const geos = [], w = SITE.width, length = DECK_END - DECK_START, count = Math.ceil(length / 0.47), pitch = length / count;
     for (let i = 0; i < count; i++) {
-      const z = (i + 0.5) * SITE.span / count;
-      geos.push(bevelBox({ w: w + (i % 3 ? 0 : 0.14), h: 0.2, d: 0.42, color: i % 2 ? "#8f6538" : "#9c7040", bevel: 0.045, offset: { x: 0, y: deckY(z) - 0.1, z } }));
+      const z = DECK_START + (i + 0.5) * pitch;
+      geos.push(bevelBox({ w: w + (i % 3 ? 0 : 0.14), h: 0.2, d: pitch + 0.02, color: i % 2 ? "#8f6538" : "#9c7040", bevel: 0.045, offset: { x: 0, y: deckY(z) - 0.06, z } }));
     }
     const rail = 1.05;
     for (const z of [0, SITE.span]) for (const x of [-w / 2 - 0.12, w / 2 + 0.12]) geos.push(bevelBox({ w: 0.34, h: 1.9, d: 0.34, color: WOOD_DK, offset: { x, y: 0.45, z } }));
@@ -323,7 +324,8 @@
   // deck as smooth cords you could grip, rope collars lashing them round the post tops.
   const ROPE_RGB = hexToRgb(ROPE), ROPE_DK_RGB = hexToRgb("#9a7a48");
   const bridge = cached(() => {
-    const geo = { verts: [], faces: [], lines: [], smooth: true, normals: [] }, w = SITE.width, count = Math.round(SITE.span / 0.47), rand = mulberry32(913);
+    const geo = { verts: [], faces: [], lines: [], smooth: true, normals: [] }, w = SITE.width;
+    const length = DECK_END - DECK_START, count = Math.ceil(length / 0.47), pitch = length / count, rand = mulberry32(913);
     const rail = 1.05, steps = 16;
     for (const x of [-w / 2 - 0.05, w / 2 + 0.05]) {
       for (let i = 0; i < steps; i++) {
@@ -338,8 +340,8 @@
     }
     padNormals(geo);
     for (let i = 0; i < count; i++) {
-      const z = (i + 0.5) * SITE.span / count;
-      flatInto(geo, bevelBox({ w: w + (i % 3 ? 0 : 0.14), h: 0.2, d: 0.42, color: i % 2 ? "#8f6538" : "#9c7040", bevel: 0.045, offset: { x: 0, y: deckY(z) - 0.1, z } }));
+      const z = DECK_START + (i + 0.5) * pitch;
+      flatInto(geo, bevelBox({ w: w + (i % 3 ? 0 : 0.14), h: 0.2, d: pitch + 0.02, color: i % 2 ? "#8f6538" : "#9c7040", bevel: 0.045, offset: { x: 0, y: deckY(z) - 0.06, z } }));
     }
     for (const z of [0, SITE.span]) for (const x of [-w / 2 - 0.12, w / 2 + 0.12]) {
       flatInto(geo, bevelBox({ w: 0.36, h: 1.9, d: 0.36, color: WOOD_DK, offset: { x, y: 0.45, z } }));
@@ -357,7 +359,7 @@
     if (r < SITE.padR) return spot.padY;
     if (r < SITE.isletR * 0.92) return spot.y;
     const along = z - spot.bridgeZ;
-    if (Math.abs(x - spot.x) < SITE.width / 2 && along >= 0 && along <= SITE.span) return spot.y + deckY(along);
+    if (Math.abs(x - spot.x) < SITE.width / 2 && along >= DECK_START && along <= DECK_END) return spot.y + deckY(along) + 0.04;
     return -Infinity;
   };
 

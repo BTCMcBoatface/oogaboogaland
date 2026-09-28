@@ -87,10 +87,10 @@
   };
   // Draw the carried item's actual geometry, including likenesses and skins.
   // This owns only temporary icon nodes; the character's item is never reparented.
-  const renderPrimaryIcon = (canvas, geometry) => {
+  const renderPrimaryIcon = (canvas, geometry, tall = false) => {
     const renderer = canvasRenderer.createRenderer(canvas, { width: ICON_PX, height: ICON_PX, transparent: true });
     const root = createNode(), pivot = createNode(), item = createNode({ geometry });
-    const bounds = boundsOf(geometry), fit = 0.67 / Math.max(bounds.radius, 0.05);
+    const bounds = boundsOf(geometry), fit = (tall ? 0.52 : 0.67) / Math.max(bounds.radius, 0.05);
     item.scale.x = item.scale.y = item.scale.z = fit;
     item.position.x = -bounds.center[0] * fit;
     item.position.y = -bounds.center[1] * fit;
@@ -152,6 +152,7 @@
       boardDots: $("board-dots"), boardPrev: $("board-prev"), boardNext: $("board-next"), boardHelp: $("board-help"),
       act: $("act"),
       mode: $("mode-hud"),
+      modeDestination: $("destination-hud"),
       modeFree: $("freeroam-icon"),
       modeFace: $("mode-face-icon"),
       modeHealth: $("mode-health"),
@@ -164,7 +165,6 @@
       primaryStrength: $("primary-strength"),
       primaryStrengthFill: $("primary-strength-fill"),
       gorillaSmash: $("gorilla-smash-hud"),
-      gorillaDrag: $("gorilla-drag-hud"),
       weapon: $("weapon-hud"),
       weaponToggle: $("weapon-hud"),
       weaponReadout: $("weapon-readout"),
@@ -210,6 +210,24 @@
       recipe: $("recipe"),
       recipeText: $("recipe-text")
     };
+    const favicon = new Image();
+    favicon.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = favicon.width;
+      canvas.height = favicon.height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(favicon, 0, 0);
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < image.data.length; i += 4) {
+        const brightness = Math.max(image.data[i], image.data[i + 1], image.data[i + 2]);
+        const alpha = Math.max(0, Math.min(1, (brightness - 24) / 56));
+        image.data[i + 3] = Math.round(alpha * 255);
+        if (alpha > 0 && alpha < 1) for (let color = 0; color < 3; color++) image.data[i + color] = Math.min(255, image.data[i + color] / alpha);
+      }
+      ctx.putImageData(image, 0, 0);
+      el.modeFree.src = canvas.toDataURL("image/png");
+    };
+    favicon.src = document.querySelector('link[rel="icon"][sizes="64x64"]').href;
     el.lootTab.hidden = !lootEnabled;
     el.crateHelp.hidden = !lootEnabled;
     el.worldLootHint.hidden = !lootEnabled;
@@ -219,7 +237,7 @@
     for (const panel of el.panels) panel.hidden = panel.dataset.panel !== sheetTab;
     el.sheet.dataset.open = String(!!savedSheet?.open);
     el.primary.hidden = true;
-    el.gorillaSmash.hidden = el.gorillaDrag.hidden = true;
+    el.gorillaSmash.hidden = true;
     el.mode.hidden = true;
     el.weapon.hidden = true;
     el.magazine.hidden = true;
@@ -318,33 +336,41 @@
     let actionHandler = null;
     const DETACHED_PRESETS = ["pile", "lab", "mirror", "underground", "basement"];
     const DETACHED_NAMES = { pile: "Pile", lab: "Lab", mirror: "Mirror", underground: "HQ", basement: "Basement" };
-    let detachedPreset = "pile", detachedNameTimer = 0;
+    let detachedPreset = "pile", detachedNameShown = false, detachedSelectionShown = false;
+    const fadeDetachedName = () => {
+      if (!detachedNameShown && !detachedSelectionShown) return;
+      detachedNameShown = false;
+      detachedSelectionShown = false;
+      el.modeDestinationName.classList.remove("show");
+      for (const dot of el.modeDestinationDots) dot.dataset.current = "false";
+    };
     const setDetachedView = (name, announce = false) => {
       if (!DETACHED_NAMES[name]) return;
       detachedPreset = name;
+      detachedSelectionShown = true;
       for (const dot of el.modeDestinationDots) dot.dataset.current = String(dot.dataset.detachedPreset === name);
       if (!announce) return;
-      window.clearTimeout(detachedNameTimer);
       el.modeDestinationName.textContent = DETACHED_NAMES[name];
-      el.modeDestinationName.classList.remove("show");
-      void el.modeDestinationName.offsetWidth;
+      detachedNameShown = true;
       el.modeDestinationName.classList.add("show");
-      detachedNameTimer = window.setTimeout(() => el.modeDestinationName.classList.remove("show"), 1200);
     };
     const nextDetachedView = () => DETACHED_PRESETS[(DETACHED_PRESETS.indexOf(detachedPreset) + 1) % DETACHED_PRESETS.length];
     let gorillaEntry = null, gorillaView = "orbit", gorillaCombat = false;
-    let modeName = "", modeGeometry = null, modeSelected = false, modeCombat = false, modeView = "detached", modeHealth = -1, modeGorilla = false;
+    let modeName = "", modeGeometry = null, modeSelected = false, modeCombat = false, modeView = "detached", modeHealth = -1, modeHealthMax = 0, modeGorilla = false;
     const setMode = (cave, combat = false, view = cave ? "orbit" : "detached", visible = true) => {
       const gorilla = gorillaEntry ? gorillaEntry.gorilla : null;
       if (gorilla) { cave = gorillaEntry.owner; combat = gorillaCombat; view = gorillaView; visible = true; }
       const selected = !!cave, name = selected ? cave.traits.name : "", shown = selected ? cave.traits.display : "";
+      if (!visible) fadeDetachedName();
       const identityChanged = selected !== modeSelected || selected && name !== modeName || !!gorilla !== modeGorilla;
       const stateChanged = combat !== modeCombat || view !== modeView;
-      if (el.mode.hidden === visible) el.mode.hidden = !visible;
+      const showMode = visible && selected;
+      if (el.mode.hidden === showMode) el.mode.hidden = !showMode;
+      if (el.modeDestination.hidden === visible) el.modeDestination.hidden = !visible;
       const geometry = selected ? (gorilla ? gorilla.parts.head.geometry : cave.parts.head.geometry) : null;
       if (selected && (identityChanged || geometry !== modeGeometry)) {
         renderFaceIcon(el.modeFace, cave, gorilla);
-        el.mode.dataset.portrait = gorilla ? "gorilla" : "face-crop";
+        el.mode.dataset.portrait = "face-crop";
         modeName = name;
         modeGeometry = geometry;
       }
@@ -353,14 +379,17 @@
         modeSelected = selected;
         el.mode.dataset.selected = String(selected);
       }
-      if (el.modeFree.hidden !== selected) el.modeFree.hidden = selected;
       if (el.modeFace.hidden === selected) el.modeFace.hidden = !selected;
-      const showHealth = selected && !gorilla;
+      const showHealth = selected;
       if (el.modeHealth.hidden === showHealth) el.modeHealth.hidden = !showHealth;
-      const health = selected && cave.health ? Math.max(0, Math.min(25, cave.health.value)) : 25;
-      if (health !== modeHealth) {
+      const sourceHealth = gorilla ? gorillaEntry.health : cave && cave.health;
+      const healthMax = gorilla ? gorillaEntry.health.max : 25;
+      const health = sourceHealth ? Math.max(0, Math.min(healthMax, sourceHealth.value)) : healthMax;
+      if (health !== modeHealth || healthMax !== modeHealthMax) {
         modeHealth = health;
-        el.modeHealthFill.style.transform = `scaleY(${health / 25})`;
+        modeHealthMax = healthMax;
+        el.modeHealthFill.style.transform = `scaleY(${health / healthMax})`;
+        el.modeHealth.setAttribute("aria-valuemax", String(healthMax));
         el.modeHealth.setAttribute("aria-valuenow", String(Math.ceil(health)));
       }
       if (stateChanged) { modeCombat = combat; modeView = view; }
@@ -387,14 +416,14 @@
       if (pointer >= 0 && el.primary.hasPointerCapture(pointer)) el.primary.releasePointerCapture(pointer);
       if (actionHandler) actionHandler(cancel ? "weapon-primary-cancel" : "weapon-primary-up");
     };
-    const setPrimary = (available, selected, geometry, charge = 0, held = false, power = 0.5, aiming = false) => {
+    const setPrimary = (available, selected, geometry, charge = 0, held = false, power = 0.5, aiming = false, ownerName = "") => {
       if (!available || !selected && primarySelected || geometry !== primaryGeometry) finishPrimary(true);
       if (available !== primaryShown) {
         primaryShown = available;
       }
       if (el.primary.hidden !== (!available || !!gorillaEntry)) el.primary.hidden = !available || !!gorillaEntry;
       if (available && geometry !== primaryGeometry) {
-        renderPrimaryIcon(el.primaryIcon, geometry);
+        renderPrimaryIcon(el.primaryIcon, geometry, ownerName === "timechainb");
         primaryGeometry = geometry;
       }
       if (selected !== primarySelected || aiming !== primaryAiming) {
@@ -594,7 +623,7 @@
       gorillaEntry = entry;
       gorillaView = view;
       gorillaCombat = combat;
-      el.gorillaSmash.hidden = el.gorillaDrag.hidden = !entry;
+      el.gorillaSmash.hidden = !entry;
       el.primary.hidden = !primaryShown || !!entry;
       el.weapon.hidden = !weaponShown || !!entry;
       el.jetpack.hidden = !jetpackShown || !!entry;
@@ -774,7 +803,7 @@
     on(document, "visibilitychange", () => { if (document.hidden) finishPrimary(true); });
     on(el.primary, "contextmenu", (e) => e.preventDefault());
     const MODE_HOLD_MS = 650;
-    let modePointer = -1, modeHoldTimer = 0, modeLong = false, modePressPreset = "";
+    let modePointer = -1, modeHoldTimer = 0, modeLong = false;
     const clearModeHold = () => {
       window.clearTimeout(modeHoldTimer);
       modeHoldTimer = 0;
@@ -785,7 +814,6 @@
       e.preventDefault(); e.stopPropagation();
       modePointer = e.pointerId;
       modeLong = false;
-      modePressPreset = !modeSelected && e.target.closest ? e.target.closest("[data-detached-preset]")?.dataset.detachedPreset || "" : "";
       el.mode.dataset.holding = String(modeSelected);
       if (e.isTrusted) el.mode.setPointerCapture(e.pointerId);
       if (modeSelected) {
@@ -803,11 +831,7 @@
       modePointer = -1;
       if (el.mode.hasPointerCapture(e.pointerId)) el.mode.releasePointerCapture(e.pointerId);
       clearModeHold();
-      if (!cancel && !modeLong && actionHandler) {
-        if (modeSelected) actionHandler("mode-toggle");
-        else actionHandler("mode-preset", modePressPreset || nextDetachedView());
-      }
-      modePressPreset = "";
+      if (!cancel && !modeLong && modeSelected && actionHandler) actionHandler("mode-toggle");
       modeLong = false;
       el.mode.blur();
     };
@@ -829,7 +853,10 @@
       else if (b.dataset.action === "board-next") pageBoard(1);
       else if (b.dataset.action === "recipe-copy") copyRecipe(b);
       else if (b.dataset.action === "intro-go") b.closest("[data-intro]").hidden = true;
-      else if (b === el.mode && !modeSelected) actionHandler && actionHandler("mode-preset", nextDetachedView());
+      else if (b === el.modeDestination) {
+        const dot = e.target.closest("[data-detached-preset]");
+        actionHandler && actionHandler("mode-preset", dot ? dot.dataset.detachedPreset : nextDetachedView());
+      }
       else actionHandler && actionHandler(b.dataset.action);
     });
     // A game's side panels fold away and come back from a tab on the screen's edge: a `data-fold`
@@ -949,7 +976,6 @@
     const hint = (text, ms = 4200) => {
       window.clearTimeout(hintTimer);
       window.clearTimeout(hintHideTimer);
-      window.clearTimeout(detachedNameTimer);
       el.hint.textContent = text;
       el.hint.hidden = false;
       el.messageStack.append(el.hint);
@@ -1156,7 +1182,7 @@
       closeRecipe();
       closeBoard();
     };
-    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setDetachedView, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
+    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setDetachedView, fadeDetachedName, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
   };
   BL.hud = { create, renderIcon, signLettering, STATE_LABELS, statusFor };
 })();

@@ -1,6 +1,6 @@
 // The one set-dressing kit every scene draws from. `KIT` pieces are voxel functions on a 1/16 grid, each
 // writing through `box` and `put` into the three layers: general (`lanternPost`, `crate`, `coalCrate`,
-// `barrel`, `cart`, `rails`, `banner`, `gauge`, `rubble`, `sack`, `bracket`, `hanging`, `bulb`), garage
+// `barrel`, `cart`, `rails`, `banner`, `gauge`, `rubble`, `bracket`, `hanging`, `bulb`), garage
 // (`toolWall`, `workbench`, `tireRack`, `oilDrum`, `checkerMat`), lab (`die`, `flaskBench`, `terminal`,
 // `chalkboard`), rally (`tireStack`, `flag`, `cone`, `barrier`, `fuelPump`, `startLights`, the `pennant`
 // string), mine (`pickRack`, `dynamiteCrate`, `oreHeap`), the mirror (`monolith`, `runeStone`), lightning
@@ -25,6 +25,7 @@
   const BL = window.BL = window.BL || {};
   const { voxelFaces, noShadow, merge } = BL.models;
   const { mulberry32, hexToRgb } = BL.math;
+  const BANANA_ART = BL.hubModels.AMMO_BANANA;
   // Set dressing for every scene from one voxel kit. Pieces are authored once as integer voxel lists; a set places
   // them by quarter turns on the kit's grid and bakes every placed voxel into one mesh per layer, so a dressed
   // area of posts, crates, carts, cables and lanterns costs three draws however much stands in it, and faces
@@ -50,7 +51,8 @@
     "#9a7148", "#7a5634", "#4fae3a", "#6fcf4a", "#3a8a2c", "#6b4a26", // 50 palm trunk, 51 trunk dark, 52 frond, 53 frond light, 54 frond dark, 55 coconut
     "#f5d142", "#4f9a38", // 56 banana, 57 vine
     "#e9d7a0", "#d8c184", // 58 sand, 59 sand dark
-    "#d9a441", "#5a3a1a" // 60 leopard tan, 61 leopard spot
+    "#d9a441", "#5a3a1a", // 60 leopard tan, 61 leopard spot
+    BANANA_ART.ink.D, BANANA_ART.ink.Y, BANANA_ART.ink.G // 62-64 ammo banana outline, fruit, stem
   ];
   const EMISSIVE = { 9: 1, 10: 1, 11: 0.9, 30: 1, 31: 1, 32: 1, 33: 1, 40: 1, 44: 0.8, 45: 1 };
   // Lantern glass by variant (amber, teal, green, red) and the light each casts; the fifth is a bolt's yellow.
@@ -98,10 +100,6 @@
       if (d <= r) fn(cx + x, y, cz + z, d);
     }
   };
-  // Pip blocks on an eight-cell die face, by value.
-  const PIPS = [[], [[-1, -1]], [[-3, -3], [1, 1]], [[-3, -3], [-1, -1], [1, 1]], [[-3, -3], [1, -3], [-3, 1], [1, 1]],
-    [[-3, -3], [1, -3], [-3, 1], [1, 1], [-1, -1]], [[-3, -3], [1, -3], [-3, 1], [1, 1], [-3, -1], [1, -1]]];
-  const pipAt = (value, a, b) => PIPS[value].some(([p, q]) => a >= p && a <= p + 1 && b >= q && b <= q + 1);
   const plank = (x, y, z, lo, hi, axis) => {
     const t = axis === 0 ? x : axis === 1 ? y : z;
     return (t - lo) % 4 === 3 && t !== hi ? 3 : ((t - lo) >> 2) & 1 ? 1 : 0;
@@ -173,7 +171,7 @@
     // A cave's standard: 0 bolt, 1 die, 2 chequered, 3 pick, 4 glyph, 5 banana.
     banner: (v) => author((put, box) => {
       const CLOTH = [14, 48, 35, 49, 39, 49][v], EDGE = [15, 34, 34, 2, 40, 18][v];
-      const EMBLEM = [["bolt", 18], ["die", 34], null, ["pick", 21], ["glyph", 40], ["banana", 56]][v];
+      const EMBLEM = [["bolt", 18], ["die", 34], null, ["pick", 21], ["glyph", 40], null][v];
       box(SOLID, -3, 2, 0, 1, -3, 2, 2);
       box(SOLID, -1, 0, 2, 45, -1, 0, 2);
       box(SOLID, -1, 0, 46, 47, -1, 0, v === 4 ? 40 : 6);
@@ -183,6 +181,10 @@
         for (let y = bottom; y <= 42; y++) put(HANG, x, y, 1, x === -8 || x === 7 ? EDGE : v === 2 ? ((x + 8 >> 2) + (y >> 2) & 1 ? 34 : 35) : CLOTH);
       }
       if (EMBLEM) icon(put, v === 4 ? GLOW : HANG, ICONS[EMBLEM[0]], -5, 22, 2, 2, EMBLEM[1]);
+      if (v === 5) for (let row = 0; row < 15; row++) for (let col = 0; col < 15; col++) {
+        const ink = BANANA_ART.rows[Math.floor(row * 9 / 15)][Math.floor(col * 9 / 15)];
+        if (ink !== ".") put(HANG, col - 7, 36 - row, 2, ink === "D" ? 62 : ink === "Y" ? 63 : 64);
+      }
     }),
     // Ooga Rally: a stack of three tyres, the top ring of each striped.
     tireStack: (v) => author((put) => {
@@ -224,13 +226,11 @@
       for (const [y, c] of [[45, 32], [40, 33], [35, 31]]) box(GLOW, -2, 1, y, y + 2, 2, 2, c);
     }),
     // EntropyLab: a big die, a bench of glowing flasks, a terminal, a chalkboard of scribbles.
-    die: (v) => author((put) => {
+    die: () => author((put) => {
       for (let x = -4; x <= 3; x++) for (let y = 0; y <= 7; y++) for (let z = -4; z <= 3; z++) {
         const ex = x === -4 || x === 3, ey = y === 0 || y === 7, ez = z === -4 || z === 3;
         if (!(ex || ey || ez) || ex + ey + ez === 3) continue;
-        const face = ez ? (z > 0 ? v % 6 + 1 : 6 - v % 6) : ex ? (x > 0 ? (v + 1) % 6 + 1 : 6 - (v + 1) % 6) : (y > 0 ? (v + 2) % 6 + 1 : 6 - (v + 2) % 6);
-        const a = ex ? z : x, b = ey ? z : y - 4;
-        put(SOLID, x, y, z, ex + ey + ez === 1 && pipAt(face, a, b) ? 35 : 34);
+        put(SOLID, x, y, z, 34);
       }
     }),
     flaskBench: (v) => author((put, box) => {
@@ -239,7 +239,14 @@
       box(SOLID, -9, 8, 3, 3, -4, 3, 1);
       const COLORS = [30, 31, 45];
       [[-7, -1], [-2, 1], [3, -2]].forEach(([cx, cz], i) => {
-        for (let y = 13; y <= 17; y++) disc((x, yy, z) => put(GLOW, x, yy, z, COLORS[(i + v) % 3]), 2.6 - Math.abs(y - 15) * 0.5, y, cx, cz);
+        const fill = [14, 15, 13][i];
+        for (let y = 13; y <= fill; y++) disc((x, yy, z) => put(GLOW, x, yy, z, COLORS[(i + v) % 3]), y === 13 ? 1.6 : 2.1, y, cx, cz);
+        for (let y = 13; y <= 17; y++) {
+          const radius = 2.6 - Math.abs(y - 15) * 0.5;
+          disc((x, yy, z, d) => {
+            if (d > radius - 0.8 && (y === 17 || x === cx - 2 || z === cz + 2)) put(HANG, x, yy, z, x === cx - 2 ? 38 : 41);
+          }, radius, y, cx, cz);
+        }
         box(SOLID, cx - 1, cx, 18, 20, cz - 1, cz, 34);
         box(SOLID, cx - 1, cx, 21, 21, cz - 1, cz, 0);
       });
@@ -252,15 +259,20 @@
       for (let y = 14; y <= 21; y++) box(y & 1 ? GLOW : SOLID, -4, 3, y, y, 5, 5, y & 1 ? 31 : 39);
       box(SOLID, -5, 4, 12, 12, 6, 8, 5);
     }),
-    chalkboard: (v) => author((put, box) => {
-      for (const x of [-9, 8]) for (let y = 0; y <= 28; y++) put(SOLID, x, y, -(y >> 3), 2);
-      box(SOLID, -8, 7, 10, 25, -2, -2, (x, y) => x === -8 || x === 7 || y === 10 || y === 25 ? 2 : 37);
-      const rand = mulberry32(61 + v);
-      for (let y = 12; y <= 23; y += 3) for (let x = -6; x <= 5;) {
-        const run = 1 + Math.floor(rand() * 4);
-        if (rand() < 0.7) for (let k = 0; k < run && x + k <= 5; k++) put(SOLID, x + k, y, -1, 38);
-        x += run + 1;
+    chalkboard: () => author((put, box) => {
+      for (let y = 0; y <= 29; y++) {
+        const z = Math.round(-2 - y * 3 / 29);
+        box(SOLID, -1, 0, y, y, z, z + 1, 2);
       }
+      for (const side of [-1, 1]) for (let y = 0; y <= 17; y++) {
+        const x = side < 0 ? Math.round(-1 - 8 * (1 - y / 17)) : Math.round(8 * (1 - y / 17));
+        const z = Math.round(-10 + y * 6 / 17);
+        box(SOLID, x, x + 1, y, y, z, z + 1, 2);
+      }
+      box(SOLID, -13, 12, 10, 26, -2, -2, (x, y) => x === -13 || x === 12 || y === 10 || y === 26 ? 2 : 37);
+      box(SOLID, -14, 13, 9, 9, -2, 2, 1);
+      box(SOLID, -10, -6, 10, 11, 1, 2, 5);
+      box(SOLID, 6, 9, 10, 10, 1, 1, 38);
     }),
     // Ooga Mine: a rack of picks, a crate of dynamite, a heap of ore that glitters.
     pickRack: () => author((put, box) => {
@@ -404,13 +416,6 @@
         box(SOLID, x0, x0 + w, y0, y0 + h, z0, z0 + d, (x, y) => y === y0 + h && rand() < 0.55 ? (rand() < 0.5 ? 23 : 24) : rand() < 0.25 ? 21 : rand() < 0.2 ? 22 : 20);
       }
     }),
-    sack: (v) => author((put) => {
-      for (let x = -5; x <= 4; x++) for (let y = 0; y <= 10; y++) for (let z = -4; z <= 3; z++) {
-        const e = ((x + 0.5) / 5) ** 2 + ((y - 4.5) / 5.8) ** 2 + ((z + 0.5) / 4) ** 2;
-        if (e <= 1 && e > 0.55) put(SOLID, x, y, z, (x + y + v) % 5 === 0 ? 26 : 25);
-      }
-      for (let y = 10; y <= 12; y++) put(SOLID, -1, y, -1, y === 10 ? 7 : 26);
-    }),
     // A plain pole the cables start from on walls; it carries a small lantern of its own.
     bracket: () => author((put, box) => {
       box(HANG, -1, 0, 0, 1, -1, 6, 2);
@@ -449,14 +454,57 @@
   const filled = (layer, x, y, z) => layer !== SOLID || (y >= 8 && x > -6 && x < 5 && z > -6 && z < 5);
   const CRATE_SCALE = 0.75 / 0.9, OPEN_SCALE = 0.5625 / 0.9;
   const MESHES = {
+    die: { build: (variant) => {
+      const geo = BL.models.die({ size: 0.5, variant });
+      for (let i = 1; i < geo.verts.length; i += 3) geo.verts[i] += 0.25;
+      return geo;
+    }, variants: new Map(), scale: [1, 1, 1], keep: null },
     crate: { build: () => BL.hubModels.woodCrate(0), scale: [CRATE_SCALE, CRATE_SCALE, CRATE_SCALE], keep: null },
     coalCrate: { build: () => BL.hubModels.woodCrate(1), scale: [CRATE_SCALE, OPEN_SCALE, CRATE_SCALE], keep: filled },
     dynamiteCrate: { build: () => BL.hubModels.woodCrate(1), scale: [CRATE_SCALE, OPEN_SCALE, CRATE_SCALE], keep: filled },
     barrel: { build: () => BL.hubModels.barrel(), scale: [0.8, 1.04, 0.8], keep: null }
   };
+  const stepBounds = new Map();
+  const boundsForStep = (kind, variant) => {
+    const key = `${kind}:${variant}`;
+    if (stepBounds.has(key)) return stepBounds.get(key);
+    const piece = pieceOf(kind, variant), mesh = MESHES[kind];
+    const box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    const solid = piece[SOLID];
+    for (let i = 0; i < solid.length; i += 4) {
+      const x = solid[i], y = solid[i + 1], z = solid[i + 2];
+      if (mesh && (!mesh.keep || !mesh.keep(SOLID, x, y, z))) continue;
+      box[0] = Math.min(box[0], x * U); box[1] = Math.min(box[1], y * U); box[2] = Math.min(box[2], z * U);
+      box[3] = Math.max(box[3], (x + 1) * U); box[4] = Math.max(box[4], (y + 1) * U); box[5] = Math.max(box[5], (z + 1) * U);
+    }
+    if (mesh) {
+      let geometry = mesh.variants ? mesh.variants.get(variant) : mesh.geometry;
+      if (!geometry) {
+        geometry = mesh.build(variant);
+        if (mesh.variants) mesh.variants.set(variant, geometry);
+        else mesh.geometry = geometry;
+      }
+      const [sx, sy, sz] = mesh.scale;
+      for (let i = 0; i < geometry.verts.length; i += 3) {
+        const x = geometry.verts[i] * sx, y = geometry.verts[i + 1] * sy, z = geometry.verts[i + 2] * sz;
+        box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], y); box[2] = Math.min(box[2], z);
+        box[3] = Math.max(box[3], x); box[4] = Math.max(box[4], y); box[5] = Math.max(box[5], z);
+      }
+    }
+    const result = Number.isFinite(box[0]) && box[4] - box[1] <= 1.16 && box[1] >= -0.01 ? box : null;
+    stepBounds.set(key, result);
+    return result;
+  };
   // A mesh piece's geometry scaled, turned by quarter turns q and moved to (ox, oy, oz) in kit cells.
-  const meshAt = (kind, ox, oy, oz, q) => {
-    const m = MESHES[kind], src = m.geometry || (m.geometry = m.build()), [sx, sy, sz] = m.scale, v = src.verts, out = new Array(v.length);
+  const meshAt = (kind, ox, oy, oz, q, variant) => {
+    const m = MESHES[kind];
+    let src = m.variants ? m.variants.get(variant) : m.geometry;
+    if (!src) {
+      src = m.build(variant);
+      if (m.variants) m.variants.set(variant, src);
+      else m.geometry = src;
+    }
+    const [sx, sy, sz] = m.scale, v = src.verts, out = new Array(v.length);
     for (let i = 0; i < v.length; i += 3) {
       const x = v[i] * sx, z = v[i + 2] * sz;
       out[i] = ox * U + (q === 0 ? x : q === 1 ? z : q === 2 ? -x : -z);
@@ -473,6 +521,7 @@
     const layers = [new Map(), new Map(), new Map(), new Map(), new Map()], lights = [];
     // What was placed, for poking: kind, variant, then the pick sphere's centre x, y, z and radius in metres.
     const picks = [];
+    const steps = [];
     // Each light is x, y, z and its colour's index in LIGHT_RGB.
     const light = (kind, ox, oy, oz, q, variant) => {
       const p = LIGHTS[kind];
@@ -490,7 +539,16 @@
     const put = (kind, x, y, z, turns = 0, variant = 0) => {
       const piece = pieceOf(kind, variant), mesh = MESHES[kind];
       const ox = Math.round(x / U), oy = Math.round(y / U), oz = Math.round(z / U), q = ((turns % 4) + 4) % 4;
-      if (mesh) meshes.push(kind, ox, oy, oz, q);
+      const step = boundsForStep(kind, variant);
+      if (step) {
+        const x0 = q & 1 ? step[2] : step[0], x1 = q & 1 ? step[5] : step[3];
+        const z0 = q & 1 ? step[0] : step[2], z1 = q & 1 ? step[3] : step[5];
+        steps.push([(ox * U) + (q === 2 || q === 3 ? -x1 : x0), (oy * U) + step[1],
+          (oz * U) + (q === 1 || q === 2 ? -z1 : z0),
+          (ox * U) + (q === 2 || q === 3 ? -x0 : x1), (oy * U) + step[4],
+          (oz * U) + (q === 1 || q === 2 ? -z0 : z1)]);
+      }
+      if (mesh) meshes.push(kind, ox, oy, oz, q, variant);
       for (let layer = 0; layer < 3; layer++) {
         const list = piece[layer];
         for (let i = 0; i < list.length; i += 4) {
@@ -558,13 +616,29 @@
       let solid = bake(SOLID);
       if (meshes.length) {
         const parts = solid ? [solid] : [];
-        for (let i = 0; i < meshes.length; i += 5) parts.push(meshAt(meshes[i], meshes[i + 1], meshes[i + 2], meshes[i + 3], meshes[i + 4]));
+        for (let i = 0; i < meshes.length; i += 6) parts.push(meshAt(meshes[i], meshes[i + 1], meshes[i + 2], meshes[i + 3], meshes[i + 4], meshes[i + 5]));
         solid = merge(...parts);
         meshes.length = 0;
       }
+      if (solid && steps.length) {
+        solid.gorillaSteps = steps.slice();
+        for (const face of solid.faces) {
+          const vertices = solid.verts;
+          for (const step of steps) {
+            let within = true;
+            for (const index of face.i) {
+              const at = index * 3;
+              if (vertices[at] < step[0] - 1e-6 || vertices[at] > step[3] + 1e-6
+                || vertices[at + 1] < step[1] - 1e-6 || vertices[at + 1] > step[4] + 1e-6
+                || vertices[at + 2] < step[2] - 1e-6 || vertices[at + 2] > step[5] + 1e-6) { within = false; break; }
+            }
+            if (within) { face.gorillaStep = true; break; }
+          }
+        }
+      }
       const out = { solid, hang: bake(HANG), glow: bake(GLOW), swing: bake(3), swingGlow: bake(4), lights: Float32Array.from(lights), picks: picks.splice(0) };
       for (const layer of layers) layer.clear();
-      lights.length = 0;
+      lights.length = steps.length = 0;
       return out;
     };
     const set = { put, cable, build };
@@ -736,7 +810,7 @@
   // lower yard, 1 hangs three banana leaves from a trunk-ringed post under a crown with a bunch of bananas, 2 a
   // patched brown hide with a banana on it; 0 and 2 carry a pennant and bananas on deck.
   KIT.boat = (v) => author((put, box) => {
-    const BAND = v === 1 ? 57 : 25, BOW = [0, 1, 2, 1, 0], STERN = [1, 0, 2, 0, 1];
+    const BAND = v === 1 ? 57 : 25, BOW = [-2, 0, 3, 0, -2], STERN = [3, 1, 0, 1, 3];
     // Each log is a 3x3 section with its corners cut; cut ends show light end grain.
     for (let i = 0; i < 5; i++) {
       const cx = -6 + i * 3, z0 = -16 + STERN[i], z1 = 13 + BOW[i];
@@ -747,13 +821,13 @@
       }
     }
     // Rope bands follow the logs' tops and wrap down the outer sides.
-    for (const z of [-12, -11, -5, -4, 8, 9]) {
+    for (const z of [-10, -3, 7]) {
       for (let x = -7; x <= 7; x++) put(SOLID, x, (x + 7) % 3 === 1 ? 3 : 2, z, BAND);
       put(SOLID, -8, 1, z, BAND); put(SOLID, 8, 1, z, BAND);
     }
-    box(SOLID, -1, 1, 2, 45, -1, 1, (x, y) => v === 1 ? (y % 4 === 0 ? 51 : 50) : 2);
-    box(SOLID, -2, 2, 3, 4, -2, 2, BAND);
-    box(SOLID, -10, 9, 40, 41, 2, 3, v === 1 ? 51 : 2);
+    box(SOLID, -1, 0, 2, 45, -1, 0, (x, y) => v === 1 ? (y % 4 === 0 ? 51 : 50) : 2);
+    box(SOLID, -2, 1, 3, 3, -2, 1, BAND);
+    box(SOLID, -9, 8, 40, 40, 2, 2, v === 1 ? 51 : 2);
     if (v === 1) {
       // Three banana leaves hang from the yard, the middle one in front; the side ones splay outward as they fall.
       for (const [cx, bot, z] of [[-5, 16, 2], [5, 16, 2], [0, 13, 3]]) for (let y = bot; y <= 39; y++) {
@@ -766,11 +840,11 @@
         const y = 44 + Math.round(k * 0.6);
         for (const yy of [y, y + 1]) put(HANG, s * (2 + k), yy, 0, yy === y ? 52 : 53);
       }
-      box(SOLID, -1, 1, 31, 35, -4, -2, 56);
-      box(SOLID, 0, 0, 36, 38, -3, -2, 55);
+      box(SOLID, -1, 0, 31, 34, -3, -2, 56);
+      box(SOLID, 0, 0, 35, 36, -2, -2, 55);
       return;
     }
-    box(SOLID, -9, 8, 13, 14, 2, 3, 2);
+    box(SOLID, -9, 8, 13, 13, 2, 2, 2);
     // The hide between the yards: leopard in clean 2x2 spots on a staggered lattice, or patched brown with a banana.
     const BANANA = ["...........s", "..........s.", ".........##.", "#.......###.", "##.....###..", ".#########..", "..#######...", "....###....."];
     for (let y = 15; y <= 39; y++) for (let x = -8; x <= 7; x++) {
@@ -786,9 +860,9 @@
       }
       put(HANG, x, y, 2, c);
     }
-    for (let k = 0; k < 6; k++) for (let y = 42 + Math.floor(k / 3); y <= 45 - Math.floor(k / 3); y++) put(HANG, 0, y, 2 + k, 19);
-    box(SOLID, 2, 4, 2, 4, -9, -7, 56);
-    put(SOLID, 3, 5, -8, 55);
+    for (let k = 0; k < 5; k++) for (let y = 42 + Math.floor(k / 3); y <= 44 - Math.floor(k / 3); y++) put(HANG, 0, y, 2 + k, 19);
+    box(SOLID, 2, 3, 2, 3, -9, -8, 56);
+    put(SOLID, 3, 4, -8, 55);
   });
   // Seagulls wheeling round a centre on their own circles, heights and speeds; one instanced draw.
   const instanceField = (geometry, count) => BL.scene.createNode({ geometry, instanceData: new Float32Array(count * 20), instanceCount: count, instanceVersion: 0, fixedInstanceCapacity: true, sightHidden: true });
@@ -828,8 +902,23 @@
       boatGeometry[v] = [baked.solid, baked.hang, baked.glow].filter(Boolean).map(noShadow);
     }
     const boats = spots.map(([r, a, s], i) => {
-      const node = BL.scene.createNode({ scale: { x: s, y: s, z: s }, sightHidden: true });
+      const node = BL.scene.createNode({ scale: { x: s, y: s * 0.85, z: s }, sightHidden: true });
       for (const geometry of boatGeometry[i % 3]) BL.scene.addChild(node, BL.scene.createNode({ geometry, sightHidden: true }));
+      const seated = (i & 1) === 0;
+      const passenger = BL.models.caveman(BL.contributors.traitsFor(`boat-ooga-${i % 2}`));
+      const figure = passenger.root, size = 0.78, deck = 3 * U;
+      figure.scale.x = figure.scale.y = figure.scale.z = size;
+      figure.position.x = seated ? -0.3 : 0.3;
+      figure.position.y = deck + size * passenger.traits.height * 5 / 16 * (seated ? 0.4 : 1);
+      figure.position.z = -0.65;
+      figure.rotation.y = seated ? -0.12 : 0.12;
+      passenger.parts.club.visible = false;
+      if (seated) {
+        passenger.parts.legL.rotation.x = passenger.parts.legR.rotation.x = -1.15;
+        passenger.parts.armL.rotation.x = passenger.parts.armR.rotation.x = -0.65;
+      }
+      figure.sightHidden = true;
+      BL.scene.addChild(node, figure);
       return { node, r, a, w: (0.004 + rand() * 0.004) * (i & 1 ? 1 : -1), ph: rand() * 6.3 };
     });
     for (const b of boats) nodes.push(b.node);
