@@ -5078,6 +5078,39 @@ scene("hub", { label: "lab flask approach", query: "solo=1&character=portlandhod
   record("lab flask: the scientist completes its short bench approach and picks up the real flask without circling or stall recovery", state.held && state.station === state.expected
     && state.seconds < 4 && state.distance >= 0.69 && state.distance < 1 && !state.replans && !state.recoveries, JSON.stringify(state));
 } }] });
+scene("hub", { label: "gorilla roof descent", query: "status=chillin", steps: [{ name: "gorilla roof descent", why: "regression: an autonomous gorilla leaving the OBL cave roof remounted the roof instead of descending its front wall", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), m = B.mouths.find(m => m.id === "c1");
+    B.pilot.release(true); C.release(); C.cancelDebugMove(e);
+    for (const other of C.list) if (other !== e) { other.owner.override = other.owner.state = "away"; other.active = other.root.visible = false; }
+    for (const cave of B.cavemen.values()) cave.root.visible = false;
+    const sx = Math.sin(m.ry), sz = Math.cos(m.ry), x = m.x - sx * 0.15, z = m.z - sz * 0.15, roof = B.island.surfaceAt(x, z);
+    Object.assign(e.root.position, { x, y: roof, z });
+    Object.assign(e, { active: true, controlled: false, mode: "chilling", phase: "chill", route: "", lounge: "", loungeDepart: false,
+      parked: false, recover: 0, rest: 0, pound: 0, beat: 0, stand: 0, heading: m.ry, speed: 0, goalX: m.x + sx * 5, goalY: m.floorY, goalZ: m.z + sz * 5 });
+    e.owner.override = e.owner.state = "chilling"; e.root.visible = true;
+    Object.assign(e.roam, { count: 0, index: 0, wall: false, nextChoice: Infinity, departPending: false, propDeparture: false });
+    Object.assign(e.climb, { active: false, free: false, retry: 0, searchPending: false, claimPending: false, crestPending: false, debugStuck: false });
+    e.drive.airborne = e.drive.resume = e.jump.active = e.fire.burning = e.fire.rolling = false;
+    e.gorilla.poseManaged(2, x, roof, z, m.ry, 0, false, false, "", e.motion);
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
+    const trace = []; let mounted = false, reversals = 0, lastY = roof, minY = roof;
+    for (let frame = 0; frame < 1200; frame++) {
+      B.advance(1 / 60, 1 / 60); const p = e.root.position, c = e.climb;
+      if (c.active) mounted = true;
+      if (mounted && p.y > lastY + 0.005) reversals++;
+      minY = Math.min(minY, p.y); lastY = p.y;
+      if (frame % 30 === 0) trace.push({ t: frame / 60, x: p.x, y: p.y, z: p.z, active: c.active, free: c.free, descending: c.descending, mount: c.mountPending, handoff: c.handoffDirection, blocked: c.blocked,
+        goal: [e.goalX, e.goalY, e.goalZ], phase: e.phase, owner: e.owner.state, failure: c.failure, search: c.searchPending, lounge: e.lounge, resume: e.drive.resume });
+      if (mounted && !c.active && p.y <= m.floorY + 0.15) break;
+    }
+    const p = e.root.position;
+    return { roof, mounted, reversals, minY, y: p.y, floor: B.island.supportAt(p.x, p.z, p.y + 0.1, 0, -Infinity),
+      active: e.climb.active, recoveries: e.stuck.recoveries, trace };
+  })()`);
+  record("gorilla roof descent: the autonomous OBL roof departure reaches the main floor without climbing back onto the roof or relocation",
+    state.mounted && state.y < 0.15 && Math.abs(state.y - state.floor) < 0.1 && !state.active && !state.reversals && !state.recoveries, JSON.stringify(state));
+} }] });
 scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1", steps: [{ name: "gorilla traversal", why: "regression: low props interrupted the gallop, jump input delayed takeoff, and a stale motion envelope trapped gorillas beneath trees", run: async (b) => {
   const state = await b.evaluate(`(() => {
     const B = __ooga, S = BL.scene, root = BL.scenes.hub.root, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), solids = B.headquarters.solids.props;

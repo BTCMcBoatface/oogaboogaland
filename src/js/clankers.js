@@ -2751,7 +2751,7 @@
       e.footprintMode = "walk"; e.compact = false;
       e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
     };
-    const openingLanding = (e, x, y, z, heading, platform = null) => {
+    const openingLanding = (e, x, y, z, heading, platform = null, descending = false) => {
       if (!ctx.climbOpeningClear) return false;
       const c = e.climb, sx = Math.sin(heading), sz = Math.cos(heading);
       // Balcony floors extend inward from a spherical overhang. Measure the
@@ -2764,6 +2764,9 @@
         const tx = x + sx * reach, tz = z + sz * reach;
         const floor = pointSupportAt(tx, tz, platform ? platform.y + 0.05 : y + 1.05);
         if (!Number.isFinite(floor) || floor > y + 1.05 || !platform && y - floor > 2.4
+          // A descent cannot enter a floor above its feet. Just below the
+          // rim, that floor is the roof we left, not a window landing.
+          || !platform && descending && floor > y + 0.1
           || platform && Math.abs(floor - platform.y) > 0.1
           || !actorLanding(e, tx, floor, tz)) continue;
         // Enter at the lowest height the actual opening permits. Crossing
@@ -2921,7 +2924,7 @@
       if (!c.handoffDirection && vertical < 0 && beginPlatformEntry(e)) return;
       if (!c.handoffDirection && vertical
         && !climbSolidAt(p.x + sx, p.y + 0.65, p.z + sz)
-        && openingLanding(e, p.x, p.y, p.z, heading)) return;
+        && openingLanding(e, p.x, p.y, p.z, heading, null, vertical < 0)) return;
       if (c.handoffDirection === 1 || vertical > 0 && wallVerticalShare(e, p.x, p.y, p.z, heading, true) >= WALL_ENTER_SHARE) {
         if (c.handoffDirection !== 1) {
           c.freeTargetY = NaN;
