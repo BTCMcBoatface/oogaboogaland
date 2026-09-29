@@ -1,5 +1,5 @@
 // ₿IFRÖST's islet off the north rim, as the island sees it, after the owner's concept art: a floating rock of chunky
-// voxel stone straight out past the old gate's pass, its thick mossy rim hung with moss, yellow-green vines, warm
+// voxel stone straight out past the island's north pass, its thick mossy rim hung with moss, yellow-green vines, warm
 // lanterns and glowing blue cubes, with electric-blue waterfalls pouring off its edge. Its top is terraced round the
 // stairs up to the massive stone gate (`BL.bifrostGate`), whose arch holds the field into the chamber. From the front
 // level where the bridge lands, between two navy "ᛕᛁ" banners on their gallows, three short steps climb between two
@@ -7,9 +7,10 @@
 // its cheeks to the portal, a short walk in all. Stone-retained beds planted with bushes, small trees and flowers close
 // in either side of the landing and the gate's flight, and the gate stands on a terrace of dressed stone reaching out
 // beside and behind it to the palms and the pink blossom trees, with lantern posts round the rim.
-// Bifröst leaves from the pass's end: a short paved stone head between two lantern pedestals, low walls along its open
-// sides and two navy "ᛕᛁ" banners on their posts, then a straight, level deck of vivid glowing crystal tiles between
-// low stone parapets, square pillars with a lantern each, and glass rails.
+// Bifröst leaves from the pass's end, just past ₿IFRÖST's arch on the island (`BL.bifrostGate.landmark`, which the hub
+// stands in the old gate's place and which carries the banners at the land end): a short paved stone head between two
+// lantern pedestals, with low walls along its open sides, then a straight, level deck of vivid glowing crystal tiles
+// between low stone parapets, square pillars with a lantern each, and glass rails.
 //
 // `spot(island)` finds where it all stands, once per island: the pass's end along the axis, its floor, where the ridge
 // walls either side have ended so the head may widen, and the islet's middle a head and a deck's length out past the
@@ -25,9 +26,9 @@
 // closed boxes for every tread, pedestal, cheek, bed and terrace, so a walker climbs from the court only by the stairs
 // (each wall stands more than a step over whatever walkable level meets it), and for the braziers, posts and trunks;
 // the bridge's a slab with continuous guards up to `BRIDGE.guard` along both sides, and its head's slab, tongue and
-// corbels, side walls, pedestals and banner posts, none of it reaching into the ridge walls or below the stone. The
-// dressing, the deck's tiles and sparkles, the falls and the foliage are `sightHidden`; `lamps` are the glow nodes the
-// hub ramps at dusk, and the falls, crystals, vine tips, tiles and sparkles glow on their own.
+// corbels, side walls and pedestals, none of it reaching into the ridge walls or below the stone. The dressing, the
+// deck's tiles and sparkles, the falls and the foliage are `sightHidden`; `lamps` are the glow nodes the hub ramps at
+// dusk, and the falls, crystals, vine tips, tiles and sparkles glow on their own.
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
@@ -124,11 +125,9 @@
   const VINES = 16;
   // The head's dressing, across the axis (mirrored either side) and out from the rim: the lantern pedestals, `side`
   // square and `h` tall; the low walls along its open sides, from `x` out `t` thick in courses `courses` from just under
-  // the slab's top; the banners' posts outside the walls, each banner hung `hang` in from its post at `y` and scaled by
-  // `scale`; and the candles on the walls' tops, in clusters [across, out] of three [across, out, height].
+  // the slab's top; and the candles on the walls' tops, in clusters [across, out] of three [across, out, height].
   const HEAD_LAMP = { x: 2.36, u: 0.5, side: 0.62, h: 1.1 };
   const HEAD_WALL = { x: 2.2, t: 0.5, courses: [0.47, 0.48] };
-  const HEAD_BANNER = { x: 2.8, u: 1.55, hang: 0.56, y: 3.05, scale: 0.8 };
   const HEAD_CANDLES = [[2.45, 1.05], [2.45, 2.08]], CLUSTER = [[0, 0, 0.26], [0.13, 0.1, 0.17], [-0.1, 0.14, 0.12]];
 
   // The owner's colours: the rock's grass, moss, dirt and grey-brown stone, the grout under the flags and the glowing
@@ -640,7 +639,7 @@
     for (const [x, z] of FRONT_BANNERS) {
       const out = Math.sign(x), y = ground(x - 0.72, z, "banner post", 0.12);
       if (ground(x + 0.72, z, "banner post", 0.12) !== y) throw new Error(`₿IFRÖST's banner at ${x}, ${z} straddles two levels`);
-      props.push(put(gallows(), x, y, z, out > 0 ? 0 : Math.PI), put(banner.cloth, x, y + 2.94, z + 0.1), put(banner.rod, x, y + 2.94, z + 0.1));
+      props.push(put(gallows(), x, y, z, out > 0 ? 0 : Math.PI), put(banner.cloth, x, y + 2.94, z + 0.1), put(banner.mark, x, y + 2.94, z + 0.1), put(banner.rod, x, y + 2.94, z + 0.1));
       lantern(x + out * GALLOWS_HANG.x, y + GALLOWS_HANG.y, z);
       for (const s of [-1, 1]) shell.push(block(x + s * 0.72 - 0.12, x + s * 0.72 + 0.12, y - 0.2, y + 3.2, z - 0.12, z + 0.12));
     }
@@ -714,20 +713,12 @@
     facing(geo, [[0, 0, -l], [t, 0, 0], [0, 0, l], [-t, 0, 0]], "#ffffff", 1, 0, 1, 0);
     return noShadow(geo);
   });
-  // A banner's post on the head with its arm reaching in toward the way (-x) and a gold cap.
-  const armPost = cached(() => merge(
-    bevelBox({ w: 0.22, h: 3.35, d: 0.22, color: TIMBER_DK, bevel: 0.04, offset: { y: 1.675 } }),
-    bevelBox({ w: 0.28, h: 0.12, d: 0.28, color: GOLD, emissive: 0.2, bevel: 0.03, offset: { y: 3.41 } }),
-    bevelBox({ w: 1.25, h: 0.15, d: 0.15, color: TIMBER, bevel: 0.035, offset: { x: -0.52, y: 3.18 } })
-  ));
-
   // Everything that depends on the spot, built once a spot in the islet's frame. The bridge, from the islet's front edge
   // (`zEnd`) to the head's outer face (`zHead`): a stone slab and keel with sills at both ends and a dark bed for the
   // tiles; pillars every `BRIDGE.every` or so, each with a lantern, and parapet walls of dressed blocks between them
   // carrying glass panes in steel rails. Its head, from there back onto the pass: a slab of dressed blocks, flagged,
   // over corbels stepping in course by course back into the cliff, with low walls along its open sides, its lantern
-  // pedestals, its banners on their posts and its candles. And the tiles' and sparkles' places, each tile with its place
-  // in the light's wave.
+  // pedestals and its candles. And the tiles' and sparkles' places, each tile with its place in the light's wave.
   const BRIDGES = new WeakMap();
   const bridgeOf = (s) => {
     let b = BRIDGES.get(s);
@@ -791,20 +782,18 @@
     }
     // Either side of the way: a low wall of dressed blocks along the head's open side, from the deck's last pillar to
     // where the ridge wall stands, its shell a guard as high as the deck's, so nobody walks off the head; a lantern
-    // pedestal set in it where the head leaves the rim; the banner on its post outside it, facing the island; and two
-    // clusters of candles on its top. The walls, pedestals and posts stand in the shell.
-    const banner = BG.runeBanner(HEAD_BANNER.scale, "post"), out = (u) => h.zRim - u, foot = HEAD_LAMP.side / 2 + 0.07;
+    // pedestal set in it where the head leaves the rim; and two clusters of candles on its top. The walls and pedestals
+    // stand in the shell.
+    const out = (u) => h.zRim - u, foot = HEAD_LAMP.side / 2 + 0.07;
     const HW = HEAD_WALL, wallTop = HW.courses.reduce((a, b) => a + b, -0.1);
     for (const sx of [-1, 1]) {
-      const x = sx * HEAD_LAMP.x, z = out(HEAD_LAMP.u), px = sx * HEAD_BANNER.x, pz = out(HEAD_BANNER.u), bx = px - sx * HEAD_BANNER.hang;
+      const x = sx * HEAD_LAMP.x, z = out(HEAD_LAMP.u);
       wall(stone, "z", zHead, h.zWing, ...span(sx, HW.x, HW.x + HW.t), -0.1, HW.courses, 56 + sx);
       shell.push(block(...span(sx, HW.x, HW.x + HW.t), -0.1, BRIDGE.guard, zHead, h.zWing));
       pillar(stone, x, z, 0, HEAD_LAMP.h, HEAD_LAMP.side);
       trims.push(put(lamp.body, x, HEAD_LAMP.h, z));
       lights.push(put(lamp.glass, x, HEAD_LAMP.h, z));
       shell.push(block(x - foot, x + foot, -0.1, HEAD_LAMP.h, z - foot, z + foot));
-      trims.push(put(armPost(), px, 0, pz, sx > 0 ? 0 : Math.PI), put(banner.cloth, bx, HEAD_BANNER.y, pz), put(banner.rod, bx, HEAD_BANNER.y, pz));
-      shell.push(block(px - 0.12, px + 0.12, -0.1, 3.35, pz - 0.12, pz + 0.12));
       for (const [cx, u] of HEAD_CANDLES) for (const [dx, du, ch] of CLUSTER) candle(trims, lights, sx * (cx + dx), wallTop, out(u + du), ch);
     }
     const geo = merge(...stone);

@@ -438,8 +438,8 @@
 
   // The arch round the way in, turned to face the hall, and the tunnel out to the field: coursed walls under a
   // barrel vault, three ribs of stone with blue studs, banners between the ribs, the field's strips down the floor,
-  // and the field itself at the far end, set in an arch of its own between bronze emitters. Past the field the tunnel
-  // is closed.
+  // and the field itself at the far end, set in an arch of its own between bronze emitters. Past the field the rock
+  // closes the tunnel (`closer`), unless the scene hangs the island's picture there instead.
   const tunnel = cached(() => {
     const { halfW, spring, field } = ENTRY, R = HALL.r, z0 = R - 0.4, z1 = field + ENTRY.beyond + 0.2, len = z1 - z0, mid = (z0 + z1) / 2;
     const geos = [], lit = [], wall = halfW + 0.35, rows = Math.round(spring / 0.6);
@@ -465,32 +465,48 @@
     const cloth = [];
     for (const z of [R + 2.55, R + 4.55]) for (const s of [-1, 1]) cloth.push(moved(turnedY(merge(banner()), -s * Math.PI / 2), s * (halfW - 0.05), 3.75, z));
     for (const x of [-1.2, 1.2]) lit.push(box({ w: 0.12, h: 0.02, d: field - z0, color: FIELD, emissive: 0.9, offset: { x, y: 0.01, z: (z0 + field) / 2 } }));
-    // The field's arch and emitters, and the rock that closes the tunnel past it.
+    // The field's arch and emitters.
     geos.push(moved(turnedY(archRing(halfW, spring, 0.7), Math.PI), 0, 0, field + 0.2));
     for (const s of [-1, 1]) {
       geos.push(bevelBox({ w: 0.36, h: spring + 0.6, d: 0.36, color: BRONZE_DK, bevel: 0.05, offset: { x: s * (halfW - 0.05), y: (spring + 0.6) / 2, z: field - 0.35 } }));
       for (let y = 0.5; y < spring + 0.3; y += 0.45) lit.push(box({ w: 0.44, h: 0.1, d: 0.44, color: FIELD_LT, emissive: 0.95, offset: { x: s * (halfW - 0.05), y, z: field - 0.35 } }));
     }
-    geos.push(box({ w: 2 * wall + 1.4, h: spring + halfW + 1.6, d: 0.6, color: STONE_DK, offset: { y: (spring + halfW + 1.6) / 2, z: z1 + 0.3 } }));
-    return { stone: merge(...geos), banners: banners(...cloth), glow: noShadow(merge(...lit)), mouth: turnedY(archRing(halfW + 0.2, spring, 1.3), Math.PI) };
+    const closer = box({ w: 2 * wall + 1.4, h: spring + halfW + 1.6, d: 0.6, color: STONE_DK, offset: { y: (spring + halfW + 1.6) / 2, z: z1 + 0.3 } });
+    return { stone: merge(...geos), closer, banners: banners(...cloth), glow: noShadow(merge(...lit)), mouth: turnedY(archRing(halfW + 0.2, spring, 1.3), Math.PI) };
   });
 
-  // The field, facing +z about z 0: a deep blue sheet filling an arched opening, a bright rim round its edge, and the
-  // swirl, three arms of light that the scene turns about the sheet's middle (`swirlY`) so the field churns.
+  // The field, facing +z about z 0: a deep blue sheet filling an arched opening and a bright rim round its edge.
   const fieldSheet = (halfW, spring) => {
     const fill = facing(geometry(), archOutline(halfW, spring, 0), FIELD_DK, 0.9, 0, spring, 1);
     return noShadow(merge(fill, archNeon(halfW - 0.06, spring, 0.03, FIELD_LT, 0.06)));
   };
-  const swirl = (radius) => {
-    const arms = [];
-    for (let k = 0; k < 3; k++) {
-      const a0 = k / 3 * TAU;
-      arms.push(tube({ path: (t) => { const a = a0 + t * Math.PI * 1.7, r = 0.18 + t * radius; return { x: Math.cos(a) * r, y: Math.sin(a) * r, z: 0.05 }; }, radius: (t) => 0.035 + t * 0.05, rings: 28, segments: 5, colorFn: (t) => t < 0.5 ? FIELD_LT : FIELD, emissive: 1 }));
+  // The field's sparkles at z, facing +z, as both sides of the way in show them: white and pale blue specks and a few
+  // four-pointed glints, each glint two flat bars 0.03 wide run on past their ends.
+  const fieldSparkles = (z) => {
+    const geo = geometry(), rand = mulberry32(2150), S = ENTRY.spring, w = 0.015, zh = z + 0.002, zv = z + 0.004;
+    for (let k = 0; k < 44;) {
+      const x = (rand() * 2 - 1) * 1.8, y = 0.15 + rand() * 4.05, s = 0.03 + rand() * 0.045, color = rand() < 0.7 ? "#ffffff" : "#bde6ff";
+      if (!inArch(x, y, 1.75, S)) continue;
+      facing(geo, [[x - s, y - s, z], [x + s, y - s, z], [x + s, y + s, z], [x - s, y + s, z]], color, 1, x, y, z + 1);
+      k++;
     }
-    arms.push(moved(forward(lathe({ profile: [[0.3, 0], [0, 0.04]], segments: 12, color: "#e8f6ff", emissive: 1 })), 0, 0, 0.06));
-    return noShadow(merge(...arms));
+    for (let k = 0; k < 7;) {
+      const x = (rand() * 2 - 1) * 1.5, y = 0.5 + rand() * 3.5, l = 0.1 + rand() * 0.06;
+      if (!inArch(x, y, 1.5, S)) continue;
+      facing(geo, [[x - l - w, y - w, zh], [x + l + w, y - w, zh], [x + l + w, y + w, zh], [x - l - w, y + w, zh]], "#ffffff", 1, x - l, y, zh + 1);
+      facing(geo, [[x + w, y - l - w, zv], [x + w, y + l + w, zv], [x - w, y + l + w, zv], [x - w, y - l - w, zv]], "#ffffff", 1, x, y - l, zv + 1);
+      k++;
+    }
+    return geo;
   };
-  const entryField = cached(() => ({ sheet: fieldSheet(ENTRY.halfW, ENTRY.spring), swirl: swirl(1.55), swirlY: ENTRY.spring - 0.1 }));
+  // The way in's field: the deep blue sheet, or, with the island's picture hung past it, a veil of the field's blue that
+  // the picture shows through, with the same bright rim; the island's sparkles on either.
+  const entryField = cached(() => {
+    const veil = facing(geometry(), archOutline(ENTRY.halfW, ENTRY.spring, 0), FIELD, 0.85, 0, ENTRY.spring, 1);
+    veil.glass = 0.28;
+    veil.castShadow = false;
+    return { sheet: fieldSheet(ENTRY.halfW, ENTRY.spring), veil, rim: noShadow(archNeon(ENTRY.halfW - 0.06, ENTRY.spring, 0.03, FIELD_LT, 0.06)), sparkles: noShadow(fieldSparkles(0.05)) };
+  });
 
   // A window, in its frame. The frame stands proud of the wall as the concept draws it: a deep ring of dressed stone
   // edged in brass inside and out, a second course stepped back behind it, plinths under the jambs, brass imposts
@@ -1222,7 +1238,7 @@
   BL.bifrostModels = {
     HALL, ENTRY, WINDOW, WINDOW_TOP, FRAME, CORE, WINDOWS, SLOTS, PILLARS, PILLAR_R, NAME, MIRROR_Z, COURT, BENCHES, BENCH_R, PLANTERS, PLANTER_R, PLANTER_TOP,
     frameOf, inArch, hall, pillars, tunnel, entryField, archStone, archGlow, RIM_STEPS, portalRim, hanger, passage, pictureQuad, dsbStandIn, mirror, name,
-    SKY, sky, coreBase, coreGlyph, coreRings, coreBeam, shockwave, courtPosts, bench, planter, lighting, dressing, fieldSheet, swirl, archRing, banner,
+    SKY, sky, coreBase, coreGlyph, coreRings, coreBeam, shockwave, courtPosts, bench, planter, lighting, dressing, fieldSheet, fieldSparkles, archRing, banner,
     supportAt, clearAt, walkable, word, GLYPHS, gateWindow,
     PALETTE: { STONE, STONE_DK, STONE_LT, BRONZE, BRONZE_DK, BRASS, GOLD, GOLD_DK, TIMBER, TIMBER_DK, FIELD, FIELD_LT, FIELD_DK, PASSAGE, CLOTH },
     facing, archOutline, archEdge, archAt, archNeon, ball, disc, hoop, banners, blend

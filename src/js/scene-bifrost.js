@@ -74,6 +74,9 @@
   const SETBACK = 4.5, FLASH = 0.45;
   // How many times, half a second apart, a page that opens here tries to photograph DSB Land.
   const PICTURE_TRIES = 10;
+  // How far past the way in's field the island's picture of the islet hangs, square to the tunnel, as the Lightning
+  // Factory hangs its own: far enough that it lines up with the islet seen through the field from anywhere in the hall.
+  const OUTSIDE_DISTANCE = 34;
   // The open world's window brightens as someone comes near, so visitors know where to go: fully by `NEAR` metres from
   // its face, from nothing at `FAR`, how fast it follows, and how much brighter its frame gets (its glow's emissive is
   // 0.35, so 1.9 brings it to full) while it climbs its rim's steps.
@@ -191,11 +194,16 @@
   const build = () => {
     const s = { windows: [], kinds: [], rings: [] };
     const hall = BM.hall(), pillars = BM.pillars(), tunnel = BM.tunnel(), field = BM.entryField(), name = BM.name(), base = BM.coreBase(), lit = BM.lighting();
+    const outside = world.bifrostView;
     s.core = createNode({ geometry: base.stone });
     addChild(root,
       createNode({ geometry: hall.walls }), createNode({ geometry: hall.dome }), createNode({ geometry: hall.floor, depthBias: 1.2 }), createNode({ geometry: hall.inlay, depthBias: 0.4, sightHidden: true }),
       createNode({ geometry: pillars.stone }), createNode({ geometry: pillars.banners }),
       createNode({ geometry: tunnel.stone }), createNode({ geometry: tunnel.banners }), createNode({ geometry: tunnel.glow, sightHidden: true }),
+      // Past the field: the picture of the islet the island took on the way in, or with no visit from the island, the
+      // rock that closes the tunnel.
+      outside ? createNode({ geometry: BL.factoryModels.outsideView(outside, OUTSIDE_DISTANCE), position: { x: 0, y: 0, z: ENTRY.field + OUTSIDE_DISTANCE }, rotation: { x: 0, y: Math.PI, z: 0 }, sightHidden: true })
+        : createNode({ geometry: tunnel.closer }),
       s.core, createNode({ geometry: base.glow, sightHidden: true }),
       createNode({ geometry: lit.frame }), createNode({ geometry: lit.glass, sightHidden: true }),
       ...BL.dressing.nodes(BM.dressing(), { glow: 1 })
@@ -244,10 +252,12 @@
     });
     s.meteorWait = METEOR_GAP[0];
     addChild(root, s.sky);
-    // The field at the tunnel's far end, facing back in: the sheet, the swirl that turns on it, and the ripples.
+    // The field at the tunnel's far end, facing back in: the sheet (a veil the islet shows through, with its picture
+    // past it), its sparkles, and the ripples.
     const fieldGroup = createNode({ position: { x: 0, y: 0, z: ENTRY.field }, rotation: { x: 0, y: Math.PI, z: 0 } });
-    s.swirl = createNode({ position: { x: 0, y: field.swirlY, z: 0 }, geometry: field.swirl, sightHidden: true });
-    addChild(fieldGroup, createNode({ geometry: field.sheet, sightHidden: true }), s.swirl);
+    const sparkles = createNode({ geometry: field.sparkles, sightHidden: true });
+    if (outside) addChild(fieldGroup, createNode({ geometry: field.veil, sightHidden: true }), createNode({ geometry: field.rim, sightHidden: true }), sparkles);
+    else addChild(fieldGroup, createNode({ geometry: field.sheet, sightHidden: true }), sparkles);
     addChild(root, fieldGroup);
     const opening = { minX: -ENTRY.halfW, maxX: ENTRY.halfW, floorY: 0, ceilingY: ENTRY.spring + ENTRY.halfW };
     s.gate = { hum: 0, opening, phase: BL.labPhase.create(fieldGroup, { x: 0, z: ENTRY.field, ry: Math.PI, floorY: 0, room: { w: 2 * ENTRY.halfW, h: opening.ceilingY, from: 0, to: 2 } }, opening, 0.08, TINT) };
@@ -560,7 +570,6 @@
     pilot.update(dt);
     mechanism(s, dt, elapsed);
     heavens(s, dt);
-    s.swirl.rotation.z -= dt * 0.9;
     // The way out's field hums and shows the outline of whoever walks through it.
     const g = s.gate;
     g.phase.update(dt, elapsed);

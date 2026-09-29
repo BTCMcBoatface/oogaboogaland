@@ -135,7 +135,7 @@
   };
   const PHASE_TOASTS = { dawn: "Dawn breaks over the island", morning: "Morning on the island", noon: "High noon", dusk: "Dusk settles over the island", night: "Night. The torches are lit.", midnight: "Midnight. The island sleeps." };
   // Lamp colours and reach; a lamp's flame reads through node.glow.
-  const LAMP = { torch: { r: 1.0, g: 0.62, b: 0.25, radius: 6, glow: 0.85, hide: false }, fire: { r: 1.0, g: 0.55, b: 0.2, radius: 9, glow: 0.9, hide: true }, lantern: { r: 1.0, g: 0.8, b: 0.45, radius: 4, glow: 0.9, hide: false } };
+  const LAMP = { torch: { r: 1.0, g: 0.62, b: 0.25, radius: 6, glow: 0.85, hide: false }, fire: { r: 1.0, g: 0.55, b: 0.2, radius: 9, glow: 0.9, hide: true }, lantern: { r: 1.0, g: 0.8, b: 0.45, radius: 4, glow: 0.9, hide: false }, arch: { r: 1.0, g: 0.62, b: 0.3, radius: 8, glow: 0.9, hide: false } };
   const LIGHT_CAPACITY = BL.glRenderer.POINT_LIGHT_CAPACITY;
   const LIGHTING_DEBUG = {
     registeredLampCount: 0, activeFullLightCount: 0, approximatedLightCount: 0,
@@ -709,12 +709,13 @@
     return { streams, nodes, perGlyphCapacity, capacity: perGlyphCapacity * MATRIX_TYPES, bufferBytes: perGlyphCapacity * MATRIX_TYPES * 80,
       spacing: MATRIX_RAIN_GAP, activeGlyphCount: 0, brightTipCount: 0, updates: 0, densityRankLimit: 0 };
   };
-  const buildGateRain = (gate) => {
+  // The Matrix curtain in the gate's opening, `half` either side of its middle and up to just under `top`.
+  const buildGateRain = (gate, half, top) => {
     const canvas = renderer.kind === "canvas2d", columns = canvas ? 8 : 14, depths = canvas ? 1 : 2, trainLength = canvas ? 9 : 14;
     const rand = mulberry32(fnv1a("old-gate:rain")), streams = [], nodes = [];
-    const minY = gate.position.y + 0.09, maxY = gate.position.y + 3.91;
+    const minY = gate.position.y + 0.09, maxY = gate.position.y + top - 0.09;
     for (let depth = 0; depth < depths; depth++) for (let column = 0; column < columns; column++) {
-      const x = gate.position.x + lerp(-0.84, 0.84, (column + 0.5) / columns);
+      const x = gate.position.x + lerp(-half, half, (column + 0.5) / columns);
       const z = gate.position.z + (depths === 1 ? 0 : depth ? 0.18 : -0.18);
       const seed = fnv1a(`old-gate:rain:${streams.length}`), period = maxY - minY + (trainLength - 1) * MATRIX_RAIN_GAP;
       streams.push({ x, z, minY, maxY, yaw: 0, cr: 1, sr: 0, period, trainLength, seed,
@@ -728,7 +729,7 @@
     }
     return { streams, nodes, perGlyphCapacity, capacity: perGlyphCapacity * MATRIX_TYPES, bufferBytes: perGlyphCapacity * MATRIX_TYPES * 80,
       spacing: MATRIX_RAIN_GAP, activeGlyphCount: 0, brightTipCount: 0, updates: 0, densityRankLimit: 0,
-      minX: gate.position.x - 0.84, maxX: gate.position.x + 0.84, minY, maxY, minZ: gate.position.z - 0.18, maxZ: gate.position.z + 0.18 };
+      minX: gate.position.x - half, maxX: gate.position.x + half, minY, maxY, minZ: gate.position.z - 0.18, maxZ: gate.position.z + 0.18 };
   };
   const updateCaveRain = (rain, elapsed, visible, densityRankLimit, permanent = false) => {
     rain.activeGlyphCount = rain.brightTipCount = 0;
@@ -2486,12 +2487,24 @@
     addProp("timechainbeer", beer.mug, site.chair.position.x - 0.95, site.chair.position.z, 0.3);
     return { site, place: p, cos, sin, boards: null, seat, beer, claimGround, hangout, residentPlaced: false, show: T.show(site) };
   };
+  // ₿IFRÖST's arch dressed where its stone stands as the gate, off the outlines: its gold, vines and banners' rods and
+  // marks, the banners' cloth, its lit name, runes and crystals, and its lanterns' glass, which comes back with the
+  // world's points its dusk sparks fly from and its warm light pools from, for the lamps. The name, the gold and the
+  // banners' marks stand a hand proud of faces metres wide, so on Canvas 2D they sort forward to stay in front of them.
+  const dressArch = (gate, arch) => {
+    const nodes = [arch.trims, arch.banners, arch.light, arch.glow].map((geometry) => createNode({ geometry, position: { x: gate.position.x, y: gate.position.y, z: gate.position.z }, rotation: { x: 0, y: gate.rotation.y, z: 0 }, sightHidden: true, depthBias: geometry === arch.light ? -0.6 : geometry === arch.trims ? -0.3 : 0 }));
+    addChild(root, ...nodes);
+    placed.push(...nodes);
+    const P = gate.position, cos = Math.cos(gate.rotation.y), sin = Math.sin(gate.rotation.y);
+    const world = ([x, y, z]) => ({ x: P.x + x * cos + z * sin, y: P.y + y, z: P.z + z * cos - x * sin });
+    return { node: nodes[3], spark: world(arch.spark), pool: world(arch.pool) };
+  };
   // ₿IFRÖST's islet off the north rim, while its chamber is open (a `wip` scene is unregistered unless the page opts in):
-  // the crystal bridge out from the old gate at the top of the north pass, the islet and its gate, whose field takes a
-  // played Ooga into the chamber, and their lamps. The bridge and its head, the rock and the gate are solid; the field,
-  // the deck's light and the dressing are not. The field and its window hang in their own group straight under the root, in
-  // the portal's frame, as the factory's do.
-  const buildBifrostIsle = () => {
+  // the crystal bridge out from ₿IFRÖST's arch at the top of the north pass, the islet and its gate, whose field takes a
+  // played Ooga into the chamber, and their lamps with the arch's. The bridge and its head, the rock and the gate are
+  // solid; the field, the deck's light and the dressing are not. The field and its window hang in their own group straight
+  // under the root, in the portal's frame, as the factory's do.
+  const buildBifrostIsle = (archLamp) => {
     const I = BL.bifrostIsle, site = I.site(I.spot(island)), p = site.portal;
     for (const node of site.roots) addChild(root, node);
     placed.push(...site.roots);
@@ -2505,9 +2518,14 @@
     addProp("bifrostgate", site.gatehouse, p.x, p.z, p.halfW + 1);
     // Early in the dusk ramp, as the mouths' lanterns are, or registered this late they would never come on; each where its
     // lights come on, for the sparks: the gate, the court's lanterns and fires, the bridge's lanterns and the landing's.
+    // The arch at the head of Bifröst comes on right after the gate, its sparks at a tower's lantern; its light is its own
+    // lamp, ranked after the fire's.
     const c = site.cloud, court = site.arrival, at = [[p.x, p.floorY + 2, p.z], [court.x, court.y + 1.5, court.z], [court.x, court.y + 1.5, court.z],
       [(c.head.x + c.end.x) / 2, c.y + 1.6, (c.head.z + c.end.z) / 2], [c.head.x, c.y + 1.6, c.head.z]];
-    site.lamps.forEach((node, i) => addLamp(node, LAMP.lantern, at[i][0], at[i][1], at[i][2], false, i));
+    site.lamps.forEach((node, i) => {
+      addLamp(node, LAMP.lantern, at[i][0], at[i][1], at[i][2], false, i);
+      if (!i) addLamp(archLamp.node, LAMP.lantern, archLamp.spark.x, archLamp.spark.y, archLamp.spark.z, false, 1);
+    });
     const group = createNode({ position: { x: p.x, y: p.floorY, z: p.z }, rotation: { x: 0, y: p.ry, z: 0 } });
     addChild(root, group);
     placed.push(group);
@@ -4546,7 +4564,7 @@
       case "cave":
         return o.slot.status === "open" ? o.slot.scene === "lab" ? `${o.slot.name} · island workshop` : `${o.slot.name} · tap to enter` : o.slot.status === "headquarters" ? "Headquarters · walk down the ramp" : o.slot.status === "mirror" ? `${o.slot.name} · mirror` : o.slot.status === "sleeping" ? "A project sleeps here · zzz" : o.slot.soon ? `${o.slot.name} · coming soon` : "An empty cave";
       case "gate":
-        return bifrostIsle ? `${caves.gate.name} · the way to ₿IFRÖST` : `${caves.gate.name} · leads nowhere yet`;
+        return bifrostIsle ? "₿IFRÖST · Bifröst starts here" : `${caves.gate.name} · leads nowhere yet`;
       case "matrix-button":
         return matrixCave.unlocked ? "Matrix gate lever · pull down" : "Matrix gate lever · push up";
       case "matrix-gate":
@@ -4676,7 +4694,7 @@
         hud.toast(pilot.player ? "Walk into it to collect it." : "Double-tap an Ooga, then walk into it.");
         break;
       case "gate":
-        hud.toast(bifrostIsle ? `${caves.gate.name} · the way to ₿IFRÖST` : `${caves.gate.name} · leads nowhere yet`);
+        hud.toast(bifrostIsle ? "₿IFRÖST · Bifröst starts here" : `${caves.gate.name} · leads nowhere yet`);
         break;
       case "plane":
       case "sign":
@@ -4907,8 +4925,9 @@
     pilot.controls.reset(); input.reset(); pilot.setActive(false); hud.tooltip.hide();
     go("factory");
   };
-  // ₿IFRÖST's field, in the chamber's blue.
-  const BIFROST_TINT = [0.3, 0.62, 1];
+  // ₿IFRÖST's field, in the chamber's blue; and how near the view comes before the window into the chamber is built (it
+  // shows within 60 m of the field).
+  const BIFROST_TINT = [0.3, 0.62, 1], BIFROST_WINDOW_NEAR = 75;
   // ₿IFRÖST's field hums on its own as the factory's does, light runs along the bridge's deck and down the falls, and
   // Heimdall watches whoever comes: the played Ooga, else the view. The played Ooga walking through the field crosses into the chamber,
   // held where it crossed through the fade as at the factory.
@@ -4921,6 +4940,12 @@
     if (b.hum <= 0) {
       b.hum = 0.1 + Math.random() * 0.22;
       b.phase.ripples.pulse(o.minX + Math.random() * (o.maxX - o.minX), o.floorY + Math.random() * (o.ceilingY - o.floorY), 0);
+    }
+    // The window into the chamber is built once the view comes within BIFROST_WINDOW_NEAR of the portal, a little
+    // past the window's own range, so it is always there before it can show.
+    if (!b.window && renderer.kind === "webgl2") {
+      const c = camera.position, dx = c.x - p.x, dy = c.y - p.floorY, dz = c.z - p.z;
+      if (dx * dx + dy * dy + dz * dz < BIFROST_WINDOW_NEAR * BIFROST_WINDOW_NEAR) b.window = BL.bifrostWindow.create({ group: b.group, portal: p });
     }
     const at = player ? player.root.position : null, orbit = pilot.orbit;
     // The bridge glows under the played Ooga's feet.
@@ -4935,6 +4960,7 @@
     b.phase.ripples.pulse(across, feet + 1, 0);
     entering = bifrostDeparting = true;
     world.pilot = player.traits.name;
+    b.snap = true;
     pilot.controls.reset(); input.reset(); pilot.setActive(false); hud.tooltip.hide();
     go("bifrost");
   };
@@ -4944,19 +4970,32 @@
   // see through its rim is cropped out, halved down to a small copy that its display blurs as it enlarges it, given
   // back the saturation the page's grade will add again, and misted a little, as seen through the shield.
   const FACTORY_VIEW = { width: 320, eye: 1.7, across: 0.82, up: 0.46, down: 0.5, colour: 0.83, mist: 0.12, haze: [206, 228, 238] };
+  // ₿IFRÖST's chamber looks back out through its own field the same way, at a picture taken from the portal as the
+  // Ooga walks in: the landing, Heimdall, the bridge and the island past it, misted in the field's blue.
+  const BIFROST_VIEW = { ...FACTORY_VIEW, haze: [188, 208, 255] };
   const snapFactoryView = () => {
-    const f = factoryMouth, m = f.mouth, V = FACTORY_VIEW, sr = Math.sin(m.ry), cr = Math.cos(m.ry), from = BL.factoryModels.SHIELD_Z;
+    const view = snapFromShield(factoryMouth.group, factoryMouth.mouth, BL.factoryModels.SHIELD_Z, FACTORY_VIEW);
+    if (view) world.factoryView = view;
+  };
+  const snapBifrostView = () => {
+    const view = snapFromShield(bifrostIsle.group, bifrostIsle.site.portal, bifrostIsle.site.portal.fieldZ, BIFROST_VIEW);
+    if (view) world.bifrostView = view;
+  };
+  // A picture from a shield in `group` at `from` along its mouth's axis `m`, looking out, with the group and the Ooga
+  // walking in hidden, cropped to `V` and graded: the record a scene hangs past its own end of the tunnel.
+  const snapFromShield = (group, m, from, V) => {
+    const sr = Math.sin(m.ry), cr = Math.cos(m.ry);
     const W = glCanvas.width, H = glCanvas.height, aspect = W / H, t = Math.max(V.up, V.down, V.across / aspect);
     const view = createCamera({ fov: 2 * Math.atan(t) * 180 / Math.PI, near: 0.2, far: camera.far });
     Object.assign(view.position, { x: m.x + sr * from, y: m.floorY + V.eye, z: m.z + cr * from });
     Object.assign(view.target, { x: view.position.x + sr, y: view.position.y, z: view.position.z + cr });
     const me = world.pilot ? crew.cavemen.get(world.pilot) : null, shown = !!me && me.root.visible;
-    f.group.visible = false;
+    group.visible = false;
     if (me) me.root.visible = false;
     const drawn = renderer.render(root, view, { ...RENDER_OPTS, birdsEyeCutaway: false, cutawayFade: 0, cutawayMaxY: 1e6, cutawayRegionCount: 0 });
-    f.group.visible = true;
+    group.visible = true;
     if (me) me.root.visible = shown;
-    if (!drawn) return;
+    if (!drawn) return null;
     let src = glCanvas, sx = W / 2 * (1 - V.across / (t * aspect)), sy = H / 2 * (1 - V.up / t), sw = W - 2 * sx, sh = H / 2 * (V.up + V.down) / t;
     const w = V.width, h = Math.round(w * (V.up + V.down) / (2 * V.across));
     while (sw > w * 2) {
@@ -4977,7 +5016,7 @@
     g.putImageData(pixels, 0, 0);
     const image = new Image();
     image.src = out.toDataURL("image/jpeg", 0.9);
-    world.factoryView = { width: w, height: h, load: () => image, eye: V.eye, from, across: V.across, up: V.up, down: V.down };
+    return { width: w, height: h, load: () => image, eye: V.eye, from, across: V.across, up: V.up, down: V.down };
   };
   // Whoever the visitor is playing goes in with them, as world.pilot; a scene that has a use for it
   // takes it on the way in.
@@ -5573,7 +5612,7 @@
       // Eye-level arrivals view the arch from the foot of the steps; a trailing camera pulls back from the landing.
       // Neither arrival puts a standing body across the narrow stair treads.
       x = island.gate.x; z = island.gate.z + (close ? 6.75 : 0.75);
-      setVec(target, island.gate.x, island.surfaceAt(island.gate.x, island.gate.z) + 2.5, island.gate.z);
+      setVec(target, island.gate.x, GATE_VIEW.target.y, island.gate.z);
       pitch = player ? 0 : 0.2;
       dist = player ? 10 : 12;
     } else if (name === "lab" || name === "mirror" || name === "factory") {
@@ -7969,14 +8008,31 @@
       if (changed) reflowScenery();
     };
     layoutPile(pileMod.visualFootprintFor(world.level, PILE_SCALE));
-    const gate = place(hubModels.gate(), island.gate.x, island.gate.z, island.gate.ry);
+    // While ₿IFRÖST is open its arch stands over the pass in the old gate's place, at the head of Bifröst; its stone is
+    // the gate, and its gold, banners, lanterns and lit name dress it off the outlines.
+    const arch = BL.scenes.bifrost ? BL.bifrostGate.landmark() : null;
+    const gate = place(arch ? arch.stone : hubModels.gate(), island.gate.x, island.gate.z, island.gate.ry);
     solids.add(gate);
-    gateRain = buildGateRain(gate);
-    addTarget(gate, { kind: "gate" }, { radius: 3 });
+    gateRain = arch ? buildGateRain(gate, arch.opening.half - 0.16, arch.opening.spring) : buildGateRain(gate, 0.84, 4);
+    // The arch's pick sphere is its stone's own bounds (radius 0), which reach its crystals and lanterns too, and a ray
+    // counts only where it meets the arch's shell, so a tap through the opening reaches the bridge and the islet beyond.
+    // Where it does meet the stone the arch ranks with the cave mouths, above props' broad spheres (the jumbotron's
+    // takes in the whole middle of the arch), while an Ooga before it is still nearer.
+    const gateOwner = { kind: "gate" };
+    if (arch) {
+      const P = gate.position, cos = Math.cos(gate.rotation.y), sin = Math.sin(gate.rotation.y);
+      gateOwner.priority = 1;
+      gateOwner.pickRay = (ray) => {
+        const ox = ray.ox - P.x, oz = ray.oz - P.z;
+        return arch.pick(ox * cos - oz * sin, ray.oy - P.y, ox * sin + oz * cos, ray.dx * cos - ray.dz * sin, ray.dy, ray.dx * sin + ray.dz * cos);
+      };
+    }
+    addTarget(gate, gateOwner, { radius: arch ? 0 : 3 });
     props.push({ kind: "prop", prop: "gate", node: gate, x: gate.position.x, z: gate.position.z, ripe: 0, active: true });
-    claim(gate.position.x, gate.position.z, 3);
-    TICKER_AT.y = gate.position.y + 6;
-    GATE_VIEW.target.y = gate.position.y + 2.5;
+    claim(gate.position.x, gate.position.z, arch ? arch.reach : 3);
+    TICKER_AT.y = gate.position.y + (arch ? arch.top + 1 : 6);
+    GATE_VIEW.target.y = gate.position.y + (arch ? arch.middle : 2.5);
+    const archLamp = arch ? dressArch(gate, arch) : null;
     headquarters = buildHeadquarters();
     buildPitGate();
     const bedrolls = headquarters.mattresses;
@@ -8004,9 +8060,12 @@
     buildLaunchSite();
     mempoolIsland = buildMempoolIsland();
     timechainIsland = buildTimechainIsland();
-    bifrostIsle = BL.scenes.bifrost ? buildBifrostIsle() : null;
+    bifrostIsle = BL.scenes.bifrost ? buildBifrostIsle(archLamp) : null;
     const firePos = buildFire();
     fire = lamps[lamps.length - 1];
+    // The arch's lanterns pool warm light on its stone, ranked right after the fire so every tier keeps the fires first;
+    // its glass glows with the islet's lamps.
+    if (archLamp) addLamp({ glow: 0, flare: 0, visible: true }, LAMP.arch, archLamp.pool.x, archLamp.pool.y, archLamp.pool.z, true, 1, "bifrost:arch");
     // The jumbotron stands on the rim crest just west of the gate, turned to face the meadow center.
     {
       const jx = -7, jz = -27, jScale = 2.6;
@@ -8115,7 +8174,6 @@
     if (bifrostIsle) {
       const b = bifrostIsle, p = b.site.portal, h = b.site.heimdall;
       b.phase = BL.labPhase.create(b.group, p, p.opening, p.fieldZ, BIFROST_TINT);
-      b.window = renderer.kind === "webgl2" ? BL.bifrostWindow.create({ group: b.group, portal: p }) : null;
       b.heimdall = BL.bifrostHeimdall.create({ parent: root, x: h.x, y: h.y, z: h.z, heading: h.heading, fx });
       placed.push(b.heimdall.root, b.heimdall.plinth);
       solids.add(b.heimdall.plinth);
@@ -8744,6 +8802,7 @@
   };
   const leave = () => {
     if (factoryMouth && factoryMouth.snap) snapFactoryView();
+    if (bifrostIsle && bifrostIsle.snap) snapBifrostView();
     glCanvas = null;
     selectDebugGorilla(null);
     debugMovementTerrain = DEBUG_MOVE_HIT.node = DEBUG_MOVE_HIT.owner = null;
