@@ -5090,6 +5090,33 @@ const bifrostCanvas = { name: "bifrost canvas2d", why: "contract: the Canvas 2D 
   const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return { kind: B.renderer.kind, scene: B.scene, colours: seen.size }; })()`);
   record("bifrost canvas2d: with WebGL2 unavailable the island builds ₿IFRÖST's islet without its window into the chamber, and the chamber boots and paints", hub.kind === "canvas2d" && hub.islet && !hub.window && r.kind === "canvas2d" && r.scene === "bifrost" && r.colours >= 4, JSON.stringify({ hub, r }));
 } };
+// While ₿IFRÖST is open the HQ basement's Ooga Portal is retired, driven as the "Ooga Portal" sessions drive it: Space
+// at a lever, and Space where its screen is the nearest control.
+const bifrostRetiredPortal = { name: "bifrost retired portal", why: "rule: with ₿IFRÖST open the basement's Ooga Portal will not switch on or dial, and says DSB Land is through ₿IFRÖST", run: async (b) => {
+  const state = `(() => { const B = window.__ooga; B.advance(0.3); return { state: window.BL.scenes.hub.debug.oogaPortal.state, menu: document.getElementById("ooga-portal-menu").open, toast: document.getElementById("toast").textContent }; })()`;
+  const lever = await b.evaluate(`(() => { const B = window.__ooga, c = window.BL.scenes.hub.debug.oogaPortal.controls[0], a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); B.pilot.navigate({ position: c.approach, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); B.advance(1.5); return { act: document.getElementById("act").textContent, hint: document.getElementById("hint").textContent }; })()`);
+  await tapKey(b, " ");
+  const switched = await b.evaluate(state);
+  await b.evaluate(`(() => { const B = window.__ooga, c = window.BL.scenes.hub.debug.oogaPortal.controls[0], p = c.screenPoint; document.getElementById("toast").textContent = ""; B.pilot.navigate({ position: { x: p.x * 0.7 + c.x * 0.3 + Math.sin(c.root.rotation.y), y: c.approach.y, z: p.z * 0.7 + c.z * 0.3 + Math.cos(c.root.rotation.y) }, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); B.advance(0.2); })()`);
+  await tapKey(b, " ");
+  const dialled = await b.evaluate(state);
+  const says = (text) => text.includes("retired") && text.includes("DSB Land") && text.includes("₿IFRÖST");
+  record("bifrost retired portal: with ₿IFRÖST open the basement's Ooga Portal neither switches on from its lever nor dials from its screen, and its prompt and answers say DSB Land is through ₿IFRÖST", lever.act === "RETIRED" && says(lever.hint) && switched.state === "OFF" && !switched.menu && says(switched.toast) && dialled.state === "OFF" && !dialled.menu && says(dialled.toast), JSON.stringify({ lever, switched, dialled }));
+} };
+// DSB's way home while ₿IFRÖST is open: from the chamber through the DSB window, DSB Land's passage walked, and back
+// through DSB's own gate after its dialer, as the "Ooga Portal dsb return" session crosses it.
+const bifrostDsb = { name: "bifrost dsb round trip", why: "playthrough: the same Ooga walks through the DSB window into DSB Land, and DSB's gate home brings it back into the chamber before the DSB window", run: async (b) => {
+  await b.evaluate(`(() => { const B = window.__ooga, r = window.BL.bifrostModels.HALL.r - 2.8, w = B.bifrost.scene.windows.find((w) => w.row.scene === "dsb"), x = w.sn * r, z = w.c * r; B.pilot.navigate({ position: { x, y: 0, z }, target: { x: x + w.sn * 4, y: 1, z: z + w.c * 4 }, yaw: Math.atan2(w.sn, w.c) + Math.PI, pitch: 0.2, dist: 5 }); B.advance(0.5, 1 / 60); window.__dsbWindow = [w.sn, w.c]; })()`);
+  const outKey = await b.evaluate(`window.__dsbWindow`);
+  await walkToward(b, outKey[0], outKey[1], 1.5);
+  const there = await b.evaluate(`(() => { const B = window.__ooga; for (let i = 0; i < 240 && (B.transitioning || B.scene !== "dsb"); i++) B.advance(1 / 30, 1 / 30); return { scene: B.scene, ooga: B.dsb ? B.dsb.avatar.traits.name : null }; })()`);
+  if (there.scene === "dsb") {
+    await b.evaluate(`(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); document.querySelector('[data-action="dsb-skip"]').click(); })()`);
+    await dsbExit(b, "bifrost");
+  }
+  const back = await b.evaluate(`(() => { const B = window.__ooga, d = B.scene === "bifrost" && B.bifrost, a = d && d.avatar, w = d && d.scene.windows.find((w) => w.row.scene === "dsb"), p = a && a.root.position; return { scene: B.scene, ooga: a ? a.traits.name : null, along: p ? +(p.x * w.sn + p.z * w.c - window.BL.bifrostModels.HALL.r).toFixed(2) : null, across: p ? +(p.x * w.c - p.z * w.sn).toFixed(2) : null }; })()`);
+  record("bifrost dsb round trip: walking through the DSB window takes the same Ooga into DSB Land, and DSB's gate home brings it back into the chamber, standing before the DSB window", there.scene === "dsb" && there.ooga === "portlandhodl" && back.scene === "bifrost" && back.ooga === "portlandhodl" && back.along > -3.5 && back.along < -2 && Math.abs(back.across) < 0.5, JSON.stringify({ there, back }));
+} };
 const factoryCanvas = { name: "factory canvas2d", why: "contract: the Canvas 2D fallback boots and draws the factory", run: async (b) => {
   const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return { kind: B.renderer.kind, scene: B.scene, colours: seen.size }; })()`);
   record("factory canvas2d: with WebGL2 unavailable the factory still boots and paints", r.kind === "canvas2d" && r.scene === "factory" && r.colours >= 4, JSON.stringify(r));
@@ -6007,7 +6034,8 @@ scene("pool", { steps: [poolLeave, trip("pool")] });
 scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryLadders, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
 scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"), steps: [factoryFloor, factoryEntrance] });
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
-scene("bifrost", { url: hubPage(src, "scene=hub&wip=bifrost&solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
+scene("bifrost", { url: hubPage(src, "scene=hub&wip=bifrost&solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, bifrostRetiredPortal, trip("bifrost")] });
+scene("bifrost", { label: "retired portal dsb", query: "wip=bifrost&character=portlandhodl", steps: [bifrostDsb] });
 scene("bifrost", { label: "canvas2d", url: hubPage(src, "scene=hub&wip=bifrost&canvas2d=1"), steps: [bifrostCanvas] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
 scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
@@ -6041,11 +6069,11 @@ const dsbApproach = async (b, name) => b.evaluate(`(() => {
   const B = __ooga, landmark = B.dsb.land.landmarks[${JSON.stringify(name)}], p = landmark.point();
   B.pilot.navigate({ yaw: landmark.node.rotation.y, pitch: 0.2, dist: 7, position: p, target: { x: p.x, y: 1.7, z: p.z } }); B.advance(0.1);
 })()`);
-const dsbExit = async (b) => {
+const dsbExit = async (b, home = "hub") => {
   await b.evaluate(`__ooga.dsb.gate.activate(0); if (typeof __gateClock === "number") { __gateClock += 2000; __ooga.dsb.gate.update(); }`);
   await untilPage(b, 'B.dsb.gate.state === "ACTIVE"', 5000);
   await b.evaluate(`(() => { const B = __ooga; B.pilot.navigate({ position: { x: 0, y: 0, z: 27.9 }, yaw: Math.PI, pitch: 0.3, dist: 4 }); window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); for (let i = 0; i < 20 && !B.transitioning; i++) BL.scenes.dsb.update(0.05, 4 + i * 0.05); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); })()`);
-  await untilPage(b, 'B.scene === "hub" && !B.transitioning', 15000);
+  await untilPage(b, `B.scene === "${home}" && !B.transitioning`, 15000);
 };
 // Dialing and unused gates remain completely independent of destination construction.
 for (const mobile of [false, true]) scene("hub", { label: "Ooga Portal " + (mobile ? "canvas2d" : "webgl2"), query: "scene=hub&pos=0" + (mobile ? "&canvas2d=1" : ""), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal foundation " + (mobile ? "canvas2d" : "webgl2"), why: "rule: dialing must leave DSB dormant and preserve ordinary abyss falls", run: async b => {

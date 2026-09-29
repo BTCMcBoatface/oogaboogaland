@@ -2023,6 +2023,11 @@
     }
     return rim;
   };
+  // While ₿IFRÖST is open (`BL.scenes.bifrost` registered), DSB Land is reached through its chamber and the basement's
+  // Ooga Portal is retired: it stands as built, but its levers and screens never switch it on or dial, and say where DSB
+  // went, so a fall into the Pit stays an abyss fall. Its code goes when ₿IFRÖST opens for everyone, with the
+  // maintainer and DSB's authors.
+  const PORTAL_RETIRED = "Ooga Portal · retired · DSB Land is through ₿IFRÖST";
   const buildPitGate = () => {
     const basement = island.headquarters.basement, hole = basement.hole;
     const distance = (hole.mouthRadius + basement.room.radius) / 2;
@@ -2065,6 +2070,7 @@
     });
     pitGate.arrivalAnchor = { x, y: basement.floor, z, clearance: best };
     pitGate.controls = controls;
+    pitGate.retired = !!BL.scenes.bifrost;
     addChild(root, pitGate.root);
     // Centre each assembly on the stone between a side balcony and the southern bed corridors.
     for (const side of [1, -1]) {
@@ -4552,9 +4558,9 @@
     const o = hit.owner;
     switch (o.kind) {
       case "ooga-portal-lever":
-        return "Ooga Portal · switch " + (pitGate.on ? "off" : "on");
+        return pitGate.retired ? PORTAL_RETIRED : "Ooga Portal · switch " + (pitGate.on ? "off" : "on");
       case "ooga-portal-screen":
-        return pitGate.selected.label + " · tap to change destination";
+        return pitGate.retired ? PORTAL_RETIRED : pitGate.selected.label + " · tap to change destination";
       case "caveman":
         return o.cave.traits.name === "SaniExp" && timechainIsland?.seat.active ? "Sani · tap to spin his chair" : o.cave.traits.display;
       case "clanker":
@@ -4839,7 +4845,8 @@
     return null;
   };
   const useNearbyAction = (action) => {
-    if (action === OOGA_PORTAL_ACTION) pitGate.toggle();
+    if ((action === OOGA_PORTAL_ACTION || action === OOGA_PORTAL_MENU_ACTION) && pitGate.retired) hud.toast(PORTAL_RETIRED);
+    else if (action === OOGA_PORTAL_ACTION) pitGate.toggle();
     else if (action === OOGA_PORTAL_MENU_ACTION) pitGate.open();
     else if (action === WAKE_ACTION) crew.wakePlayer();
     else if (action === ROLL_ACTION) crew.dropRoll();
@@ -5113,11 +5120,13 @@
     const o = hit.owner;
     switch (o.kind) {
       case "ooga-portal-screen":
-        if (portalTapReachable(o.control, true)) pitGate.open();
+        if (pitGate.retired) hud.toast(PORTAL_RETIRED);
+        else if (portalTapReachable(o.control, true)) pitGate.open();
         else hud.toast("Move closer to an Ooga Portal screen.");
         break;
       case "ooga-portal-lever": {
-        if (portalTapReachable(o.control, false)) pitGate.toggle();
+        if (pitGate.retired) hud.toast(PORTAL_RETIRED);
+        else if (portalTapReachable(o.control, false)) pitGate.toggle();
         else hud.toast("Move closer to an Ooga Portal lever.");
         break;
       }
@@ -5406,7 +5415,10 @@
     matrixControl.promptPressed = matrixControl.pressed;
     matrixControl.promptGateOn = pitGate.on;
     if (action) {
-      if (action === OOGA_PORTAL_ACTION) {
+      if ((action === OOGA_PORTAL_ACTION || action === OOGA_PORTAL_MENU_ACTION) && pitGate.retired) {
+        hud.hint(PORTAL_RETIRED);
+        hud.setAct("RETIRED");
+      } else if (action === OOGA_PORTAL_ACTION) {
         hud.hint(COARSE ? "Tap to switch the Ooga Portal " + (pitGate.on ? "off" : "on") : "Press Space to switch the Ooga Portal " + (pitGate.on ? "off" : "on"));
         hud.setAct(pitGate.on ? "TURN OFF" : "TURN ON");
       } else if (action === OOGA_PORTAL_MENU_ACTION) {
