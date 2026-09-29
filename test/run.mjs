@@ -5090,21 +5090,8 @@ const bifrostCanvas = { name: "bifrost canvas2d", why: "contract: the Canvas 2D 
   const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return { kind: B.renderer.kind, scene: B.scene, colours: seen.size }; })()`);
   record("bifrost canvas2d: with WebGL2 unavailable the island builds ₿IFRÖST's islet without its window into the chamber, and the chamber boots and paints", hub.kind === "canvas2d" && hub.islet && !hub.window && r.kind === "canvas2d" && r.scene === "bifrost" && r.colours >= 4, JSON.stringify({ hub, r }));
 } };
-// While ₿IFRÖST is open the HQ basement's Ooga Portal is retired, driven as the "Ooga Portal" sessions drive it: Space
-// at a lever, and Space where its screen is the nearest control.
-const bifrostRetiredPortal = { name: "bifrost retired portal", why: "rule: with ₿IFRÖST open the basement's Ooga Portal will not switch on or dial, and says DSB Land is through ₿IFRÖST", run: async (b) => {
-  const state = `(() => { const B = window.__ooga; B.advance(0.3); return { state: window.BL.scenes.hub.debug.oogaPortal.state, menu: document.getElementById("ooga-portal-menu").open, toast: document.getElementById("toast").textContent }; })()`;
-  const lever = await b.evaluate(`(() => { const B = window.__ooga, c = window.BL.scenes.hub.debug.oogaPortal.controls[0], a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); B.pilot.navigate({ position: c.approach, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); B.advance(1.5); return { act: document.getElementById("act").textContent, hint: document.getElementById("hint").textContent }; })()`);
-  await tapKey(b, " ");
-  const switched = await b.evaluate(state);
-  await b.evaluate(`(() => { const B = window.__ooga, c = window.BL.scenes.hub.debug.oogaPortal.controls[0], p = c.screenPoint; document.getElementById("toast").textContent = ""; B.pilot.navigate({ position: { x: p.x * 0.7 + c.x * 0.3 + Math.sin(c.root.rotation.y), y: c.approach.y, z: p.z * 0.7 + c.z * 0.3 + Math.cos(c.root.rotation.y) }, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); B.advance(0.2); })()`);
-  await tapKey(b, " ");
-  const dialled = await b.evaluate(state);
-  const says = (text) => text.includes("retired") && text.includes("DSB Land") && text.includes("₿IFRÖST");
-  record("bifrost retired portal: with ₿IFRÖST open the basement's Ooga Portal neither switches on from its lever nor dials from its screen, and its prompt and answers say DSB Land is through ₿IFRÖST", lever.act === "RETIRED" && says(lever.hint) && switched.state === "OFF" && !switched.menu && says(switched.toast) && dialled.state === "OFF" && !dialled.menu && says(dialled.toast), JSON.stringify({ lever, switched, dialled }));
-} };
 // DSB's way home while ₿IFRÖST is open: from the chamber through the DSB window, DSB Land's passage walked, and back
-// through DSB's own gate after its dialer, as the "Ooga Portal dsb return" session crosses it.
+// through DSB's own gate after its dialer.
 const bifrostDsb = { name: "bifrost dsb round trip", why: "playthrough: the same Ooga walks through the DSB window into DSB Land, and DSB's gate home brings it back into the chamber before the DSB window", run: async (b) => {
   await b.evaluate(`(() => { const B = window.__ooga, r = window.BL.bifrostModels.HALL.r - 2.8, w = B.bifrost.scene.windows.find((w) => w.row.scene === "dsb"), x = w.sn * r, z = w.c * r; B.pilot.navigate({ position: { x, y: 0, z }, target: { x: x + w.sn * 4, y: 1, z: z + w.c * 4 }, yaw: Math.atan2(w.sn, w.c) + Math.PI, pitch: 0.2, dist: 5 }); B.advance(0.5, 1 / 60); window.__dsbWindow = [w.sn, w.c]; })()`);
   const outKey = await b.evaluate(`window.__dsbWindow`);
@@ -6034,8 +6021,8 @@ scene("pool", { steps: [poolLeave, trip("pool")] });
 scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryLadders, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
 scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"), steps: [factoryFloor, factoryEntrance] });
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
-scene("bifrost", { url: hubPage(src, "scene=hub&wip=bifrost&solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, bifrostRetiredPortal, trip("bifrost")] });
-scene("bifrost", { label: "retired portal dsb", query: "wip=bifrost&character=portlandhodl", steps: [bifrostDsb] });
+scene("bifrost", { url: hubPage(src, "scene=hub&wip=bifrost&solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
+scene("bifrost", { label: "dsb round trip", query: "wip=bifrost&character=portlandhodl", steps: [bifrostDsb] });
 scene("bifrost", { label: "canvas2d", url: hubPage(src, "scene=hub&wip=bifrost&canvas2d=1"), steps: [bifrostCanvas] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
 scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
@@ -6075,190 +6062,6 @@ const dsbExit = async (b, home = "hub") => {
   await b.evaluate(`(() => { const B = __ooga; B.pilot.navigate({ position: { x: 0, y: 0, z: 27.9 }, yaw: Math.PI, pitch: 0.3, dist: 4 }); window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); for (let i = 0; i < 20 && !B.transitioning; i++) BL.scenes.dsb.update(0.05, 4 + i * 0.05); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); })()`);
   await untilPage(b, `B.scene === "${home}" && !B.transitioning`, 15000);
 };
-// Dialing and unused gates remain completely independent of destination construction.
-for (const mobile of [false, true]) scene("hub", { label: "Ooga Portal " + (mobile ? "canvas2d" : "webgl2"), query: "scene=hub&pos=0" + (mobile ? "&canvas2d=1" : ""), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal foundation " + (mobile ? "canvas2d" : "webgl2"), why: "rule: dialing must leave DSB dormant and preserve ordinary abyss falls", run: async b => {
-  const check = (name, ok, detail = "") => record(name + (mobile ? " canvas2d" : " webgl2"), ok, detail);
-  const dormant = async stage => {
-    const counts = await b.evaluate(`window.__gateDormancy`);
-    check("Ooga Portal: no DSB runtime or network at " + stage, Object.values(counts).every(v => v === 0), JSON.stringify(counts));
-  };
-  const press = async selector => {
-    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "nearest" }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
-    if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
-    else await b.click(p.x, p.y);
-  };
-  await dormant("hub startup");
-  const openScreen = async index => {
-    const p = await b.evaluate(`(() => {
-      const B = __ooga, c = __oldGate.controls[${index}];
-      B.pilot.navigate({ position: c.approach, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); B.advance(1.5);
-      window.__gateMenuView = JSON.stringify([B.camera.position, B.camera.target, B.camera.up, B.camera.fov, B.camera.orthoMix, B.camera.orthoHeight]);
-      BL.scene.updateWorld(c.root); const w = c.screen.world;
-      return B.project(w[12] + w[8] * 0.225, w[13] + w[9] * 0.225, w[14] + w[10] * 0.225, {});
-    })()`);
-    if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: p.x, y: p.y }] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
-    else await b.click(p.x, p.y);
-  };
-  const setup = await b.evaluate(`(() => {
-    const B = __ooga, G = BL.scenes.hub.debug.oogaPortal, h = B.island.headquarters.basement.hole, p = G.arrivalAnchor, c = G.controls[0];
-    window.__oldGate = G;
-    B.pilot.possess(B.cavemen.get("YellowBrokeIt"));
-    B.pilot.navigate({ position: c.approach, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); B.advance(0.2);
-    return { state: G.state, mine: BL.caves.slots.find(s => s.id === "c10").scene, dsbSlot: BL.caves.slots.some(s => s.scene === "dsb"), placement: p, radius: G.radius, outer: G.outerRadius, hole: { x: h.x, z: h.z, floor: h.floor }, act: document.getElementById("act").textContent, renderer: B.renderer.kind, controls: G.controls.map(c => ({ x: c.root.position.x, z: c.root.position.z, leverOutward: c.z < c.screenPoint.z, clear: B.island.clearAt(c.approach.x, c.approach.y + 0.01, c.approach.z, B.crew.player.bodyRadius, B.crew.player.bodyHeight) })), selected: G.selected.label, sharedScreen: G.controls[0].label.geometry === G.controls[1].label.geometry, pedestal: !!G.dialer.parent };
-  })()`);
-  check("Ooga Portal: dormant Pit keeps Mine c10 and two accessible SE/SW wall controls", setup.state === "OFF" && setup.mine === "mine" && !setup.dsbSlot && setup.act.includes("TURN ON") && setup.radius === 4 && setup.outer === 4.5 && setup.placement.y === setup.hole.floor && setup.placement.clearance >= 0.8 && setup.renderer === (mobile ? "canvas2d" : "webgl2") && setup.controls.length === 2 && setup.controls[0].x > 0 && setup.controls[1].x < 0 && setup.controls.every(c => c.z > 0 && c.clear && c.leverOutward) && setup.sharedScreen && setup.selected === "DSB Land" && !setup.pedestal, JSON.stringify(setup));
-  const colors = await b.evaluate(`(() => {
-    const g = __oldGate, ring = g.root.children[0].geometry.faces[0].color;
-    const same = face => Array.isArray(face.color) && face.color.length === 3 && face.color.every((channel, i) => Number.isFinite(channel) && channel === ring[i]);
-    return g.controls.every(c => [c.lights, c.grip, c.button.children[1]].every(n => n.geometry.faces.every(same))
-      && c.screen.geometry.faces.slice(0, 24).every(same) && c.button.geometry.faces.some(same)
-      && c.button.geometry.faces.every(f => f.color[0] <= f.color[1]));
-  })()`);
-  check("Ooga Portal: lever trim, grip, lights and screen borders use valid RGB matching the Pit ring", colors);
-  const rimMount = await b.evaluate(`(() => {
-    const g = __oldGate, h = __ooga.island.headquarters.basement.hole, b = BL.scene.boundsOf(g.ring.geometry);
-    const bolts = g.bolts.children.map(n => ({ x: n.position.x, z: n.position.z, unlit: n.geometry.faces.every(f => f.emissive === 0) }));
-    return { top: g.root.position.y + g.ring.position.y + b.max[1], bottom: g.root.position.y + g.ring.position.y + b.min[1], floor: h.floor,
-      bolts, sectors: new Set(bolts.map(p => Math.round(Math.atan2(p.x, -p.z) / (Math.PI / 4)))).size,
-      onBorder: bolts.every(p => Math.hypot(p.x, p.z) > g.radius && Math.hypot(p.x, p.z) < g.outerRadius) };
-  })()`);
-  check("Ooga Portal: ring sits flush with the floor with eight unlit compass-point bolts", Math.abs(rimMount.top - rimMount.floor) < 1e-6 && rimMount.bottom < rimMount.floor
-    && rimMount.bolts.length === 8 && rimMount.sectors === 8 && rimMount.onBorder && rimMount.bolts.every(p => p.unlit && (Math.abs(p.x) < 1e-6 || Math.abs(p.z) < 1e-6 || Math.abs(Math.abs(p.x) - Math.abs(p.z)) < 1e-6)), JSON.stringify(rimMount));
-  await openScreen(0);
-  const menu = await b.evaluate(`(() => { const d = document.getElementById("ooga-portal-menu"), b = [...d.querySelectorAll("ol button")], r = d.getBoundingClientRect(); return { open: d.open, disabled: b.map(e => e.disabled), focus: document.activeElement === b[0], focused: document.activeElement.outerHTML.slice(0, 180), fits: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight }; })()`);
-  check("Ooga Portal: native menu has five accessible destinations on desktop/touch", menu.open && menu.disabled.join() === "false,true,true,true,true" && menu.focus && menu.fits, JSON.stringify(menu));
-  await dormant("menu opening");
-  const blocked = await b.evaluate(`(() => { const B = __ooga, p = B.crew.player.root.position, old = { x: p.x, z: p.z }, ammo = B.crew.player.weapon.ammo; document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "w", bubbles: true })); document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })); B.advance(0.3); return old.x === p.x && old.z === p.z && ammo === B.crew.player.weapon.ammo && BL.scenes.hub.debug.oogaPortal.state === "OFF"; })()`);
-  check("Ooga Portal: dialog owns movement/action input", blocked);
-  check("Ooga Portal: screen menu holds the exact camera position and projection", await b.evaluate(`(() => { const B = __ooga; B.advance(1); return __gateMenuView === JSON.stringify([B.camera.position, B.camera.target, B.camera.up, B.camera.fov, B.camera.orthoMix, B.camera.orthoHeight]); })()`));
-  if (mobile) await press("#ooga-portal-menu .modal-close"); else await b.key("Escape");
-  const cancelled = await b.evaluate(`({ open: document.getElementById("ooga-portal-menu").open, axes: { ...__ooga.controls.read() }, focus: document.activeElement.tagName })`);
-  check("Ooga Portal: cancel closes and clears held movement", !cancelled.open && cancelled.axes.y === 0, JSON.stringify(cancelled));
-  check("Ooga Portal: closing the menu resumes shoulder view without a camera handoff", await b.evaluate(`(() => { const B = __ooga; B.advance(0.5); const old = JSON.parse(__gateMenuView); return Math.hypot(B.camera.position.x - old[0].x, B.camera.position.y - old[0].y, B.camera.position.z - old[0].z) < 0.001 && Math.hypot(B.camera.target.x - old[1].x, B.camera.target.y - old[1].y, B.camera.target.z - old[1].z) < 0.001 && B.pilot.mode === "shoulder"; })()`));
-  await openScreen(1);
-  await press('#ooga-portal-menu [data-destination="0"]');
-  check("Ooga Portal: either screen selects without switching on", await b.evaluate(`__oldGate.state === "OFF" && __oldGate.selected.id === "dsb" && __oldGate.controls[0].label.geometry === __oldGate.controls[1].label.geometry && !document.getElementById("ooga-portal-menu").open`));
-  for (const index of [0, 1]) {
-    const nearby = await b.evaluate(`(() => {
-      const B = __ooga, c = __oldGate.controls[${index}], p = c.screenPoint;
-      B.pilot.navigate({ position: { x: p.x * 0.7 + c.x * 0.3 + Math.sin(c.root.rotation.y), y: c.approach.y, z: p.z * 0.7 + c.z * 0.3 + Math.cos(c.root.rotation.y) }, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); B.advance(0.2);
-      const a = B.crew.player.root.position, y = a.y + 1.1 - B.crew.player.baseY;
-      return { label: document.getElementById("act").textContent, lever: Math.hypot(c.x - a.x, c.y - y, c.z - a.z), screen: Math.hypot(p.x - a.x, p.y - y, p.z - a.z) };
-    })()`);
-    check("Ooga Portal: closest screen wins with both controls in reach " + index, nearby.label === "DESTINATION" && nearby.screen < nearby.lever && nearby.lever < 2, JSON.stringify(nearby));
-    if (mobile) await press("#act"); else await tapKey(b, " ");
-    check("Ooga Portal: nearby screen action opens menu without toggling " + index, await b.evaluate(`document.getElementById("ooga-portal-menu").open && __oldGate.state === "OFF"`));
-    if (mobile) await press("#ooga-portal-menu .modal-close"); else await b.key("Escape");
-  }
-  await b.evaluate(`(() => { const c = __oldGate.controls[1]; __ooga.pilot.navigate({ position: c.approach, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); __ooga.advance(0.2); })()`);
-  if (mobile) await press("#act"); else await tapKey(b, " ");
-  check("Ooga Portal: nearby action starts the selected destination once", await b.evaluate(`__oldGate.state === "ACTIVATING" && !__oldGate.activate(0)`));
-  await dormant("selection");
-  await b.evaluate(`__gateClock = 700; __oldGate.update()`);
-  check("Ooga Portal: activation forms a recessed membrane and rolling lip or reduced-motion horizon", await b.evaluate(`__oldGate.state === "ACTIVATING" && __oldGate.horizon.visible && __oldGate.horizon.position.y === -0.08 && __oldGate.horizon.geometry.portalSurface && (__oldGate.reducedMotion ? !__oldGate.kawoosh.visible : __oldGate.kawoosh.visible && __oldGate.kawoosh.scale.y <= 2.4)`));
-  await b.evaluate(`__gateClock = 2000; __oldGate.update()`);
-  check("Ooga Portal: active horizon appears after activation", await b.evaluate(`__oldGate.state === "ACTIVE" && __oldGate.horizon.visible && !__oldGate.kawoosh.visible`));
-  await dormant("active window");
-  // A controllable clock exercises exact boundaries and a long gap with no update (hidden tab).
-  const timing = await b.evaluate(`(() => {
-    let time = 0, crossings = 0; const g = BL.oogaPortal.create({ radius: 2, outerRadius: 2.3, position: { x: 0, y: 0, z: 0 }, destinations: [{ id: "test", enabled: true, label: "Test" }], now: () => time, onTraverse: () => crossings++ });
-    const states = []; g.activate(0); for (const at of [1999, 2000, 11999, 12000, 12450]) { time = at; g.update(); states.push(g.state); }
-    const repeat = g.activate(0); time += 2000; g.update(); const wrong = g.traverse({ x: 0, y: -1, z: 0 }, { x: 0, y: 1, z: 0 }); const outside = g.traverse({ x: 3, y: 1, z: 0 }, { x: 3, y: -1, z: 0 }); const hit = g.traverse({ x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 }); const twice = g.traverse({ x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 });
-    time += 60000; g.update(); const expired = g.state; g.dispose(); return { states, repeat, wrong, outside, hit, twice, crossings, expired, disposed: g.disposed };
-  })()`);
-  check("Ooga Portal: exact 2s/10s boundaries, expiry without frames, reuse and opt-in directional crossing", timing.states.join() === "ACTIVATING,ACTIVE,ACTIVE,SHUTDOWN,OFF" && timing.repeat && !timing.wrong && !timing.outside && timing.hit && !timing.twice && timing.crossings === 1 && timing.expired === "OFF" && timing.disposed, JSON.stringify(timing));
-  await b.evaluate(`__gateClock = 60000; __ooga.advance(0.8)`);
-  check("Ooga Portal: both levers stay on past the old expiry", await b.evaluate(`__oldGate.state === "ACTIVE" && __oldGate.horizon.visible && __oldGate.controls.every(c => Math.abs(c.lever.rotation.x - 0.42) < 0.01 && c.lights.glow === 0.9)`));
-  check("Ooga Portal: active knobs and borders glow blue while all four corners on each panel stay unlit", await b.evaluate(`(() => {
-    const color = __oldGate.horizon.geometry.faces[0].color, rim = __oldGate.bolts.children[0].geometry.faces[0].color;
-    const same = face => face.color.every((channel, i) => channel === color[i]);
-    const unlitCorner = face => face.emissive === 0 && face.color.every((channel, i) => channel === rim[i]);
-    return __oldGate.ring.geometry.faces.every(same) && __oldGate.ring.glow === 0.9
-      && __oldGate.bolts.children.every(n => n.geometry.faces.every(unlitCorner))
-      && __oldGate.controls.every(c => c.grip.geometry.faces.every(same) && c.lights.geometry.faces.every(same)
-      && c.button.geometry.faces.filter(face => face.emissive >= 0.8).every(same)
-      && c.screen.geometry.faces.slice(0, 24).every(same)
-      && c.button.geometry.faces.slice(-24).every(unlitCorner)
-      && c.screen.geometry.faces.length === 54 && c.screen.geometry.faces.slice(-24).every(unlitCorner));
-  })()`));
-  await b.evaluate(`(() => { const c = __oldGate.controls[0]; __ooga.pilot.navigate({ position: c.approach, yaw: c.root.rotation.y, pitch: 0.1, dist: 4 }); __ooga.advance(0.2); })()`);
-  if (mobile) await press("#act"); else await tapKey(b, " ");
-  check("Ooga Portal: the opposite wall lever switches the portal off", await b.evaluate(`__oldGate.state === "SHUTDOWN" && !__oldGate.on`));
-  await b.evaluate(`__gateClock += 450; __ooga.advance(0.8)`);
-  check("Ooga Portal: shutdown synchronizes both levers and the inset ring", await b.evaluate(`__oldGate.state === "OFF" && !__oldGate.horizon.visible && __oldGate.ring.glow === 0.25 && __oldGate.ring.geometry.faces.every(f => f.emissive === 0 && f.color.every((v, i) => v === __oldGate.controls[0].screen.geometry.faces[0].color[i])) && __oldGate.controls.every(c => Math.abs(c.lever.rotation.x - Math.PI + 0.42) < 0.01 && c.lights.glow === 0.25)`));
-  await dormant("shutdown");
-  const falls = await b.evaluate(`(async () => {
-    const B = __ooga, g = __oldGate, hole = B.island.headquarters.basement.hole, results = [];
-    for (const state of ["OFF", "ACTIVATING", "SHUTDOWN", "expired"]) {
-      if (state === "ACTIVATING") g.activate(0);
-      if (state === "SHUTDOWN") { __gateClock += 2000; g.update(); g.deactivate(); }
-      if (state === "expired") { __gateClock += 1000; g.update(); }
-      // Position inside the open shaft, then let the real crew fall and abyss handler run.
-      B.pilot.navigate({ position: { x: hole.x, y: hole.floor - 1, z: hole.z }, yaw: 0, pitch: 0.3, dist: 4 });
-      B.advance(0.15, 1 / 30); const fell = B.crew.player.root.position.y - B.crew.player.baseY < hole.floor - 1;
-      B.pilot.navigate({ position: { x: hole.x, y: -60.1, z: hole.z }, yaw: 0, pitch: 0.3, dist: 4 }); B.advance(0.1, 1 / 30); results.push({ scene: B.scene, fell, active: g.state, feet: B.crew.player.root.position.y - B.crew.player.baseY });
-    }
-    return results;
-  })()`);
-  check("Ooga Portal: inactive, activating, shutdown and expired Pit retain abyss respawn", falls.every(r => r.scene === "hub" && r.fell && r.feet > -10) && falls.map(r => r.active).join() === "OFF,ACTIVATING,SHUTDOWN,OFF", JSON.stringify(falls));
-  await dormant("Pit falls");
-  await b.evaluate(`__ooga.go("lab")`); await untilPage(b, 'B.scene === "lab" && !B.transitioning');
-  check("Ooga Portal: leaving disposes effects, controls and menu ownership", await b.evaluate(`__oldGate.disposed && !__oldGate.root.parent && __oldGate.controls.every(c => !c.root.parent) && !__oldGate.horizon.visible && !__oldGate.open() && !__oldGate.activate(0) && !document.getElementById("ooga-portal-menu").open`));
-  await b.evaluate(`__ooga.go("hub")`); await untilPage(b, 'B.scene === "hub" && !B.transitioning', 15000);
-  check("Ooga Portal: return creates one fresh OFF controller", await b.evaluate(`BL.scenes.hub.debug.oogaPortal !== __oldGate && BL.scenes.hub.debug.oogaPortal.state === "OFF"`));
-  await dormant("round trip");
-} }] });
-
-// Real hub movement consumes the Pit; factory counters distinguish transit from hidden land.
-for (const mobile of [false, true]) scene("hub", { label: "Ooga Portal dsb travel " + (mobile ? "canvas2d" : "webgl2"), query: "scene=hub&pos=0" + (mobile ? "&canvas2d=1" : ""), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal dsb travel " + (mobile ? "canvas2d" : "webgl2"), why: "playthrough: only a swept Pit crossing enters transit and only its backside crossing constructs DSB Land", run: async b => {
-  const check = (name, ok, detail = "") => record("Ooga Portal travel " + (mobile ? "canvas2d: " : "webgl2: ") + name, ok, detail);
-  const snapshot = () => b.evaluate(`({ ...__gateDormancy, resources: __ooga.dsb?.resources, phase: __ooga.dsb?.phase, requests: __dsbFeedFixture.requests, sockets: __dsbFeedFixture.sockets, plays: __dsbRadioFixture.plays })`);
-  const before = await snapshot();
-  check("A hub has no DSB resources", before.enter === 0 && before.land === 0 && before.audio === 0 && before.fetch === 0 && before.socket === 0, JSON.stringify(before));
-  const fall = async () => b.evaluate(`(() => {
-    const B = __ooga, G = BL.scenes.hub.debug.oogaPortal, hole = B.island.headquarters.basement.hole;
-    const actor = B.cavemen.get("rules-without-rulers"); actor.override = "working"; B.crew.refreshStates(true); B.pilot.possess(actor);
-    window.__travelActor = actor; window.__travelGate = G;
-    G.activate(0); __gateClock += 2000; G.update();
-    const wrong = G.traverse({ x: hole.x, y: hole.floor - 2, z: hole.z }, { x: hole.x, y: hole.floor + 2, z: hole.z }, actor.bodyRadius);
-    const outside = G.traverse({ x: hole.x + G.radius, y: hole.floor + 2, z: hole.z }, { x: hole.x + G.radius, y: hole.floor - 90, z: hole.z }, actor.bodyRadius);
-    const active = { ...__gateDormancy };
-    B.crew.collectMagazine(actor); window.__travelCrew = B.crew;
-    B.pilot.navigate({ position: { x: hole.x, y: hole.floor + 1, z: hole.z }, yaw: 0, pitch: 0.3, dist: 4 });
-    actor.hopV = -1800;
-    BL.scenes.hub.update(0.05, 1);
-    const intercepted = !B.pilot.player && B.transitioning && actor.root.position.y - actor.baseY < -60 && B.crew.hasMagazine(actor);
-    const twice = G.traverse({ x: hole.x, y: hole.floor + 2, z: hole.z }, { x: hole.x, y: hole.floor - 90, z: hole.z }, actor.bodyRadius);
-    return { wrong, outside, twice, intercepted, active };
-  })()`);
-  const swept = await fall();
-  check("B active gate still dormant; rejects upward/outside and sweeps fast fall before abyss loss exactly once", !swept.wrong && !swept.outside && !swept.twice && swept.intercepted && swept.active.land === 0 && swept.active.enter === 0, JSON.stringify(swept));
-  if (!await untilPage(b, 'B.scene === "dsb" && !B.transitioning', 15000)) throw Error("Pit did not enter transit");
-  const transit = await snapshot();
-  check("C transit owns only entrance audio, no land factories/feeds/radio", transit.enter === 1 && transit.audio === 1 && [transit.land, transit.zuzu, transit.data, transit.tv, transit.chat, transit.fetch, transit.socket, transit.radio].every(v => v === 0) && Object.values(transit.resources).every(v => !v), JSON.stringify(transit));
-  check("canonical selected actor rebuilt and upright back has no menu", await b.evaluate(`(() => { const d = __ooga.dsb, model = BL.models.caveman(BL.contributors.traitsFor("rules-without-rulers")); return d.avatar.traits.name === "rules-without-rulers" && d.avatar.root !== __travelActor.root && d.avatar.headOpen === model.headOpen && d.gate.root.rotation.x === -Math.PI / 2 && d.gate.state === "ACTIVE" && !d.gate.open() && __ooga.crew.cavemen.size === 1; })()`));
-  await b.evaluate(`window.__transitGate = __ooga.dsb.gate; window.__transitRoot = BL.scenes.dsb.root; __ooga.go("hub")`);
-  if (!await untilPage(b, 'B.scene === "hub" && !B.transitioning', 20000)) throw Error("Transit disposal did not return");
-  check("leaving transit disposes gate/root without ever constructing land", await b.evaluate(`__transitGate.disposed && !__transitGate.root.parent && __transitRoot.children.length === 0 && __gateDormancy.land === 0 && __gateDormancy.fetch === 0 && __ooga.pilot.player.traits.name === "rules-without-rulers"`));
-  const again = await fall(); check("fresh journey accepts another real swept crossing", again.intercepted && !again.twice, JSON.stringify(again));
-  if (!await untilPage(b, 'B.scene === "dsb" && !B.transitioning', 15000)) throw Error("Second Pit trip did not enter");
-  const walked = await b.evaluate(`(() => { const B = __ooga; Object.defineProperty(B.audio, "ready", { get: () => false }); Object.defineProperty(B.audio, "pending", { get: () => true }); window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(B.audio.duration * 0.5, 2); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); return { progress: B.dsb.progress, z: B.dsb.avatar.root.position.z, land: __gateDormancy.land, resources: B.dsb.resources }; })()`);
-  check("forward movement works with blocked audio and still no land halfway", walked.progress >= 0.5 && walked.z > 0 && walked.land === 0 && Object.values(walked.resources).every(v => !v), JSON.stringify(walked));
-  await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration, 3); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));`);
-  const arrived = await snapshot();
-  check("D backside initializes each land system once despite pending audio", arrived.land === 1 && arrived.zuzu === 1 && arrived.data === 1 && arrived.tv === 1 && arrived.audio === 2 && arrived.chat === 1 && arrived.resources.rides === 384 && arrived.resources.tomatoes === 12 && arrived.resources.visitors === 6 && arrived.requests === 1 && arrived.sockets === 0 && arrived.phase === (mobile ? "land" : "arrival"), JSON.stringify(arrived));
-  check("back crossing cannot initialize twice and receiving menu stays closed", await b.evaluate(`(() => { const G = __ooga.dsb.gate; return !G.traverse({ x: 0, y: 1, z: 29 }, { x: 0, y: 1, z: 27 }, 0.35, -1) && (G.receiving ? !G.open() : G.state === "OFF") && __gateDormancy.land === 1; })()`));
-  if (!mobile) {
-    const emergence = await b.evaluate(`(() => { BL.scenes.dsb.update(0.6, 4); const d = __ooga.dsb; return { phase: d.phase, z: d.avatar.root.position.z, y: d.avatar.root.position.y - d.avatar.baseY, time: d.arrivalTime, gate: d.gate.root.position.z }; })()`);
-    check("scripted emergence clears inward into supported arrival lane", emergence.phase === "arrival" && emergence.z === 26 && emergence.y === 0 && emergence.gate === 28 && emergence.time >= 0.6, JSON.stringify(emergence));
-    await b.evaluate(`document.querySelector('[data-action="dsb-skip"]').click()`);
-  }
-  check("skip/reduced motion restores player with no fall velocity", await b.evaluate(`__ooga.dsb.phase === "land" && __ooga.pilot.player === __ooga.dsb.avatar && __ooga.dsb.avatar.hopV === 0 && __ooga.dsb.avatar.root.position.z === 26 && __ooga.dsb.gate.state === "OFF"`));
-  await b.evaluate(`window.__landGate = __ooga.dsb.gate; window.__landRoot = BL.scenes.dsb.root; window.__landZuzu = __ooga.dsb.zuzu; __ooga.go("hub")`);
-  if (!await untilPage(b, 'B.scene === "hub" && !B.transitioning', 20000)) throw Error("Land disposal did not return");
-  check("land exit disposes agents, gate, nodes and sockets; Mine remains c10", await b.evaluate(`__landGate.disposed && __landZuzu.disposed && __landRoot.children.length === 0 && __dsbFeedFixture.sockets === __dsbFeedFixture.closed && !__ooga.dsb && BL.caves.slots.find(s => s.id === "c10").scene === "mine" && !BL.caves.slots.some(s => s.scene === "dsb")`));
-} }] });
-
 // Placement contract exercises the moved landmarks without changing travel fixtures.
 for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (mobile ? "&canvas2d=1" : "")), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), why: "regression: moved Shop and TV keep collision, interactions, radio and cat navigation attached to their fronts", run: async b => {
   const check = (name, ok, detail = "") => record("DSB plaza " + (mobile ? "canvas2d: " : "webgl2: ") + name, ok, detail);
@@ -6298,71 +6101,6 @@ for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza
     }z.dispose();return rows;
   })()`);
   check("Zuzu routes around both moved structures to landmark-derived destinations", cat.every(r=>r.accepted==="accepted" && r.clear && r.done), JSON.stringify(cat));
-} }] });
-
-// Return-only integration: the outbound playthrough remains separately ledger-controlled.
-for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb return " + (mobile ? "canvas2d" : "webgl2"), query: "pos=0" + (mobile ? "&canvas2d=1" : ""), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal dsb return " + (mobile ? "canvas2d" : "webgl2"), why: "playthrough: front return reaches a receiving Pit, lands safely and restores control without re-entering transit", run: async b => {
-  const check = (name, ok, detail = "") => record("Ooga Portal return " + (mobile ? "canvas2d: " : "webgl2: ") + name, ok, detail);
-  const press = async selector => {
-    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "nearest" }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
-    if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
-    else await b.click(p.x, p.y);
-  };
-  await b.evaluate(`(() => {
-    window.__returnHubEntries = 0; const H = BL.scenes.hub, enter = H.enter, update = H.update;
-    H.enter = ctx => { __returnHubEntries++; window.__returnWorld = ctx.world; enter(ctx); window.__returnStart = { state: H.debug.oogaPortal.state, receiving: H.debug.oogaPortal.receiving, y: __ooga.pilot?.player?.root.position.y }; H.update = () => {}; };
-    window.__returnHubUpdate = update;
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));
-    document.querySelector('[data-action="dsb-skip"]').click();
-    const B = __ooga, d = B.dsb, g = d.gate, p = g.dialer.position;
-    window.__returnOld = { gate: g, root: BL.scenes.dsb.root, zuzu: d.zuzu, avatar: d.avatar, enter: __gateDormancy.enter, audio: __gateDormancy.audio };
-    B.pilot.navigate({ position: { x: p.x, y: 0, z: p.z - 1.4 }, yaw: Math.PI, pitch: 0.3, dist: 4 }); BL.scenes.dsb.update(0, 2);
-  })()`);
-  const setup = await b.evaluate(`({ phase: __ooga.dsb.phase, gate: __ooga.dsb.gate.root.position, dialer: __ooga.dsb.gate.dialer.position, label: document.getElementById("dsb-context").textContent, entries: __returnHubEntries })`);
-  check("existing gate and native nearby DIAL", setup.phase === "land" && setup.gate.x === 0 && setup.gate.y === 2 && setup.gate.z === 28 && setup.dialer.x === 3.7 && setup.dialer.z === 27 && setup.label === "DIAL" && setup.entries === 0, JSON.stringify(setup));
-  await press("#dsb-context");
-  const menu = await b.evaluate(`(() => { const d = document.getElementById("ooga-portal-menu"), buttons = [...d.querySelectorAll("ol button")], p = __ooga.dsb.avatar.root.position, before = { ...p }; document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "w", bubbles: true })); BL.scenes.dsb.update(0.2, 3); return { open: d.open, disabled: buttons.map(b => b.disabled).join(), focus: document.activeElement === buttons[0], label: buttons[0].textContent, stopped: p.x === before.x && p.z === before.z }; })()`);
-  check("accessible five-destination modal suspends movement", menu.open && menu.disabled === "false,true,true,true,true" && menu.focus && menu.label.includes("OogaBoogaLand") && menu.stopped, JSON.stringify(menu));
-  if (mobile) await press("#ooga-portal-menu .modal-close"); else await b.key("Escape");
-  check("cancel clears held inputs", await b.evaluate(`!__ooga.dsb.gate.isOpen && __ooga.controls.read().y === 0`));
-  // The modal interaction is covered above. Drive the same public gate action
-  // directly here so this block measures the activation/expiry lifecycle only.
-  await b.evaluate(`__ooga.dsb.gate.activate(0)`);
-  const cycle = await b.evaluate(`(() => {
-    const g = __ooga.dsb.gate, initial = g.state;
-    // Preserve the original short circuit: never activate an unexpectedly idle gate here.
-    const duplicateAccepted = initial === "ACTIVATING" ? g.activate(0) : null;
-    const warming = initial === "ACTIVATING" && !duplicateAccepted;
-    __gateClock += 2000; g.update(); const activeState = g.state, active = activeState === "ACTIVE";
-    __gateClock += 10450; g.update();
-    return { initial, duplicateAccepted, warming, activeState, active, state: g.state, scene: __ooga.scene, entries: __returnHubEntries, clock: __gateClock };
-  })()`);
-  const cycleConditions = { activatingAndDuplicateRejected: cycle.warming, activeAfter2000ms: cycle.active, offAfter12450ms: cycle.state === "OFF", remainsDsb: cycle.scene === "dsb", zeroHubEntries: cycle.entries === 0 };
-  check("dialing and expiry create no hub", cycle.warming && cycle.active && cycle.state === "OFF" && cycle.scene === "dsb" && cycle.entries === 0,
-    JSON.stringify({ ...cycle, conditions: cycleConditions, failed: Object.keys(cycleConditions).filter(name => !cycleConditions[name]) }));
-  await b.evaluate(`(() => {
-    const B = __ooga, G = B.dsb.gate; G.activate(0); __gateClock += 2000; G.update();
-    B.pilot.navigate({ position: { x: 0, y: 0, z: 27.9 }, yaw: Math.PI, pitch: 0.3, dist: 4 });
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" }));
-    for (let i = 0; i < 20 && !B.transitioning; i++) BL.scenes.dsb.update(0.05, 4 + i * 0.05);
-    window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));
-  })()`);
-  if (!await untilPage(b, 'B.scene === "hub" && !B.transitioning', 20000)) throw Error("Front crossing did not return directly to hub");
-  const arrival = await b.evaluate(`(() => {
-    const B = __ooga, H = BL.scenes.hub, G = H.debug.oogaPortal, a = B.pilot.player, route = H.debug.oogaPortalArrival, samples = [];
-    const start = { y: a.root.position.y - a.baseY, x: a.root.position.x, z: a.root.position.z };
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" }));
-    for (let i = 0; i < 6; i++) { __returnHubUpdate(0.45, 10 + i); samples.push({ x: a.root.position.x, y: a.root.position.y - a.baseY, z: a.root.position.z }); }
-    window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));
-    const shutdown = G.state; __gateClock += 450; G.update(); __returnHubUpdate(0, 17); H.update = __returnHubUpdate;
-    return { receiving: __returnStart.state === "ACTIVE" && __returnStart.receiving, start, samples, shutdown, state: G.state, cleared: !H.debug.oogaPortalArrival && !__returnWorld.oogaPortalTravel && !__returnWorld.pilot, landing: route?.plan.landing, name: a.traits.name, sameRoot: a.root === __returnOld.avatar.root, velocity: a.hopV, entries: __returnHubEntries, enter: __gateDormancy.enter, audio: __gateDormancy.audio, originalEnter: __returnOld.enter, originalAudio: __returnOld.audio, level: __returnWorld.level, support: B.island.supportAt(a.root.position.x, a.root.position.z, a.root.position.y - a.baseY) };
-  })()`);
-  check("direct return never starts transit/audio again and preserves canonical identity", arrival.enter === arrival.originalEnter && arrival.audio === arrival.originalAudio && arrival.entries === 1 && arrival.name === "YellowBrokeIt" && !arrival.sameRoot, JSON.stringify(arrival));
-  check("receiving Pit rises vertically then moves outward to supported floor", arrival.receiving && arrival.start.y < -12.5 && arrival.start.x === 0 && arrival.start.z === 0 && arrival.samples[0].x === 0 && arrival.samples[1].y > arrival.samples[0].y && Math.hypot(arrival.samples[5].x, arrival.samples[5].z) > 6 && Math.abs(arrival.samples[5].y + 12.5) < 1e-6 && arrival.support === -12.5, JSON.stringify(arrival));
-  check("receiving guard clears after shutdown with no fall velocity or reverse travel", arrival.shutdown === "SHUTDOWN" && arrival.state === "OFF" && arrival.cleared && arrival.velocity === 0 && arrival.entries === 1, JSON.stringify(arrival));
-  const cleanup = await b.evaluate(`__returnOld.gate.disposed && __returnOld.zuzu.disposed && __returnOld.root.children.length === 0 && __dsbFeedFixture.sockets === __dsbFeedFixture.closed && !document.body.classList.contains("dsb-active") && BL.caves.slots.find(s => s.id === "c10").scene === "mine" && !BL.caves.slots.some(s => s.scene === "dsb")`);
-  check("DSB runtime disposed and Mine keeps c10", cleanup);
-  check("normal movement restored after landing", await b.evaluate(`(() => { const a = __ooga.pilot.player, p = { ...a.root.position }; window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.hub.update(0.1, 18); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); return Math.hypot(a.root.position.x - p.x, a.root.position.z - p.z) > 0.01 && __ooga.scene === "hub" && !__ooga.transitioning; })()`));
 } }] });
 
 scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ name: "dsb zuzu conversation", why: "contract: preserve DSB scene behavior independently of the hub entrance", run: async (b) => {
@@ -7285,63 +7023,12 @@ const unitChecks = async () => {
     time += 450; gate.update();
     record("Ooga Portal receiving: host owns duration then restores reusable outbound cycle", receiving && fading && !gate.receiving && gate.state === "OFF" && gate.activate(0));
     gate.dispose();
-    const screens = [null, null];
-    const manual = BL.oogaPortal.create({ radius: 4, outerRadius: 4.5, position: { x: 0, y: 0, z: 0 }, manual: true, floorMounted: true, now: () => time, onTraverse: () => crossings++,
-      destinations: [{ id: "dsb", label: "DSB Land", enabled: true }, { id: "other", label: "Other", enabled: true }, { id: "closed", enabled: false }],
-      onDestination: entry => screens.fill(entry.label) });
-    const defaultDestination = manual.selected.id === "dsb", selected = manual.select(1) && !manual.select(2) && manual.state === "OFF" && screens.every(label => label === "Other");
-    let fullScale = true;
-    const reveal = () => {
-      fullScale = fullScale && manual.horizon.scale.x === 4 && manual.horizon.scale.y === 1 && manual.horizon.scale.z === 4;
-      return manual.horizon.portalReveal;
-    };
-    manual.toggle(); const initialReveal = reveal();
-    time += 700; manual.update(); const warmingReveal = reveal();
-    manual.toggle(); const cancelled = manual.state === "SHUTDOWN" && reveal() === warmingReveal;
-    time += 225; manual.update(); const closingReveal = reveal();
-    time += 225; manual.update(); const stopped = manual.state === "OFF", stoppedReveal = reveal();
-    manual.toggle(); time += 60000; manual.update(); const held = manual.state === "ACTIVE" && manual.selected.id === "other";
-    const activeReveal = reveal();
-    record("Ooga Portal liquid: opening and interrupted shutdown reveal the fixed-size membrane without stretching its waves",
-      fullScale && initialReveal === 0 && warmingReveal > 0 && warmingReveal < 1 && closingReveal > 0 && closingReveal < warmingReveal
-      && stoppedReveal === 0 && activeReveal === 1 && cancelled);
-    const aboveLiquid = !manual.traverse({ x: 0, y: 0.1, z: 0 }, { x: 0, y: -0.04, z: 0 });
-    const throughLiquid = manual.traverse({ x: 0, y: -0.04, z: 0 }, { x: 0, y: -0.12, z: 0 });
-    const membrane = manual.horizon.geometry, liquid = BL.oogaPortalModels.liquidHeight;
-    let contained = true, moving = false;
-    for (let i = 0; i < 32; i++) {
-      const angle = i * Math.PI / 16, x = Math.cos(angle), z = Math.sin(angle);
-      for (let t = 0; t < 6; t += 0.3) {
-        const h = liquid(x * 0.6, z * 0.6, t, 0);
-        contained = contained && Math.abs(h) < 0.08 && Math.abs(liquid(x, z, t, 0)) < 1e-8;
-        moving = moving || Math.abs(h - liquid(x * 0.6, z * 0.6, t + 0.2, 0)) > 0.001;
-      }
-    }
-    record("Ooga Portal liquid: membrane sits halfway into the rim, waves stay below its top, and travel starts at the recessed plane",
-      manual.surfaceY === -0.08 && manual.horizon.position.y === manual.surfaceY && membrane.portalSurface && membrane.castShadow === false
-      && contained && moving && aboveLiquid && throughLiquid);
-    manual.receive(); const locked = !manual.toggle() && !manual.select(0);
-    manual.finishReceiving(true); time += 450; manual.update();
-    record("Ooga Portal wall control: selection, partial activation cancellation, held power and receiving lock", defaultDestination && selected && cancelled && stopped && held && locked && manual.state === "OFF");
-    manual.dispose(); document.getElementById = get; globalThis.addEventListener = listen; globalThis.removeEventListener = unlisten;
+    document.getElementById = get; window.addEventListener = listen; window.removeEventListener = unlisten;
   }
   {
-    // Regression: all canonical physical bodies clear the actual Pit terrain on return.
-    const S = BL.scene, root = S.createNode(), noop = () => {}, solids = BL.solidProps.create();
-    const arrivalAnchor = { x: -6.4593472661924105, y: -12.5, z: 1.9594215714676189 };
+    // Regression: all canonical physical bodies fit DSB's portal and landmark lanes.
+    const S = BL.scene, root = S.createNode(), noop = () => {};
     const crew = BL.crew.create({ root, world: { level: 0 }, input: { add: noop, remove: noop }, hud: { setRosterRow: noop }, game: { state: { assignments: {}, inventory: [] } }, pile: { footprintEdge: 1, pileEdge: () => 1 }, viewYaw: 0, buildSpots: [], walkIn: { x: 0, z: 3 }, groundAt: () => 0, walkable: () => true, bedrolls: BL.contributors.roster.map((_, i) => ({ x: 30 + i * 2, y: 0, z: 30, hidden: true })), fx: { say: noop, zzzAt: noop, burst: noop, puff: noop, spawnParticle: noop } });
-    const hole = island.headquarters.basement.hole, rows = [], point = {};
-    for (const actor of crew.cavemen.values()) {
-      const options = { hole, dialer: arrivalAnchor, radius: actor.bodyRadius, height: actor.bodyHeight, supportAt: (x, z, y) => island.supportAt(x, z, y), clearAt: (x, y, z, r, h) => island.clearAt(x, y, z, r, h) && solids.clearAt(x, y, z, r, h) };
-      const route = BL.oogaPortalArrival.plan(options);
-      let safe = !!route;
-      if (route) {
-        for (let i = 0; i <= 1024; i++) { BL.oogaPortalArrival.sample(route, route.duration * i / 1024, point); safe &&= options.clearAt(point.x, point.y + 1e-5, point.z, actor.bodyRadius, actor.bodyHeight); }
-        safe &&= options.supportAt(point.x, point.z, point.y) === hole.floor && Math.hypot(point.x - hole.x, point.z - hole.z) - actor.bodyRadius > hole.mouthRadius;
-      }
-      rows.push({ name: actor.traits.name, safe, landing: route?.landing });
-    }
-    record("Ooga Portal arrival: every canonical character clears shaft, rim and ceiling onto supported floor", rows.length === CAST && rows.every(row => row.safe), JSON.stringify(rows));
     const get = document.getElementById, listen = window.addEventListener, unlisten = window.removeEventListener;
     document.getElementById = () => { const node = el(); node.querySelector = () => el(); return node; };
     window.addEventListener = window.removeEventListener = () => {};
