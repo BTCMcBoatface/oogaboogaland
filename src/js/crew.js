@@ -551,7 +551,7 @@
         pileApproach: false,
         index: i,
         bedroll: null,
-        bedTravel: { mode: "", route: null, index: 0, toBed: false, bed: null, manual: false, pose: "left", roll: 1, phase: 0, blocked: 0, retry: 0, fromX: 0, fromY: 0, fromZ: 0, fromYaw: 0, fromHeadX: 0, fromHeadY: 0, fromHeadZ: 0, fromArmLX: 0, fromArmRX: 0, fromArmLZ: 0, fromArmRZ: 0, armLX: 0, armRX: 0, armLZ: 0, armRZ: 0, compression: SLEEP_COMPRESSION, fromCompression: SLEEP_COMPRESSION, restY: 0, restZ: 0, pitch: 0, headDrop: 0, headDropX: 0, headDropY: 0, headDropZ: 0 },
+        bedTravel: { mode: "", route: null, plan: null, index: 0, toBed: false, bed: null, manual: false, pose: "left", roll: 1, phase: 0, blocked: 0, retry: 0, fromX: 0, fromY: 0, fromZ: 0, fromYaw: 0, fromHeadX: 0, fromHeadY: 0, fromHeadZ: 0, fromArmLX: 0, fromArmRX: 0, fromArmLZ: 0, fromArmRZ: 0, armLX: 0, armRX: 0, armLZ: 0, armRZ: 0, compression: SLEEP_COMPRESSION, fromCompression: SLEEP_COMPRESSION, restY: 0, restZ: 0, pitch: 0, headDrop: 0, headDropX: 0, headDropY: 0, headDropZ: 0 },
         sleepHead: { x: 0, y: 0, z: 0 },
         sleepWeapons: createNode({ visible: false }),
         headLookRotation: math.quat.create(), headLookPosition: { x: 0, y: 0, z: 0 },
@@ -985,6 +985,29 @@
     };
     // World-space drive vector plus signed close-view intent. Reused every frame.
     const steer = { x: 0, z: 0, view: 0, forward: 0, strafe: 0, speed: 1, peek: 0 };
+    // Bed routes are planned a slice at a time (`stepPlans`, PLAN_MS of each frame, one Ooga after another), so a poll
+    // that wakes every sleeper at once never stalls a frame. A grounded Ooga waits where it stands until its route is
+    // ready; it is planned from that same spot, so it is the route an unbroken plan would have made.
+    const PLAN_MS = 4, planQueue = [];
+    const finishBedRoute = (cave, route) => {
+      const travel = cave.bedTravel;
+      travel.plan = null;
+      travel.route = route;
+      travel.mode = route ? "walk" : "waiting";
+      if (route) cave.cloudSupport = null;
+      travel.retry = 1;
+    };
+    const stepPlans = () => {
+      if (!planQueue.length) return;
+      const until = performance.now() + PLAN_MS;
+      while (planQueue.length && performance.now() < until) {
+        const cave = planQueue[0], travel = cave.bedTravel, planning = travel.plan;
+        // A trip changed or ended while it waited (it stood up, lay down, was taken over) drops its plan.
+        if (!planning || travel.mode !== "waiting") { travel.plan = null; planQueue.shift(); continue; }
+        const step = planning.next();
+        if (step.done) { planQueue.shift(); finishBedRoute(cave, step.value); }
+      }
+    };
     const startBedRoute = (cave, bed, toBed) => {
       const travel = cave.bedTravel;
       cave.avoidance.tx = NaN;
@@ -993,6 +1016,21 @@
         if (slot) cave.slot = slot;
       }
       const ground = groundY(cave), airborne = cave.hop > 0 || cave.hopV > 0 || cave.root.position.y - ground > 0.1;
+      travel.plan = null;
+      if (!airborne && ctx.bedPlan) {
+        cave.root.position.y = ground;
+        travel.plan = ctx.bedPlan(cave, bed, toBed);
+        if (!planQueue.includes(cave)) planQueue.push(cave);
+        travel.route = null;
+        travel.index = travel.phase = travel.blocked = 0;
+        travel.toBed = toBed;
+        travel.bed = bed;
+        travel.mode = "waiting";
+        travel.retry = 1;
+        cave.walk = null;
+        cave.act.kind = toBed ? "bed" : "return";
+        return;
+      }
       travel.route = airborne ? null : ctx.bedRoute(cave, bed, toBed);
       if (airborne) cave.hop = Math.max(cave.hop, cave.root.position.y - ground);
       else cave.root.position.y = ground;
@@ -1017,6 +1055,7 @@
       cave.cheer = cave.catchT = 0;
       travel.mode = "";
       travel.route = null;
+      travel.plan = null;
       travel.manual = false;
     };
     const startSleep = (cave, settle = false) => {
@@ -3713,6 +3752,7 @@
       }
       if (travel.mode === "waiting") {
         if (!grounded(cave)) { startBedRoute(cave, travel.toBed ? cave.bedroll : travel.bed, travel.toBed); return; }
+        if (travel.plan) return;
         travel.retry -= dt;
         if (travel.retry <= 0) {
           if (!travel.toBed || claimBedroll(cave)) startBedRoute(cave, travel.toBed ? cave.bedroll : travel.bed, travel.toBed);
@@ -5774,6 +5814,7 @@
     const update = (dt, now) => {
       elapsed = now;
       if (ctx.prepareNpcRoutes) ctx.prepareNpcRoutes();
+      stepPlans();
       updateBullets(dt);
       // Snapshot both sides before anyone moves, so a centred meeting gives both the same right-shoulder default.
       // Previous-frame motion distinguishes an overtaker from someone merely behind.
@@ -5805,6 +5846,7 @@
     const dispose = () => {
       window.clearTimeout(recipeTimer);
       recipeTimer = 0;
+      planQueue.length = 0;
       player = null;
       for (let caveIndex = 0; caveIndex < crewList.length; caveIndex++) {
         const cave = crewList[caveIndex];

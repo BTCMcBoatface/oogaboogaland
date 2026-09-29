@@ -300,6 +300,7 @@
       // A reflective face owns its contact atlas; the hidden ripple field
       // cannot sample contacts. Travel fields use their existing atlas.
       w.body = w.face ? BL.mirrorBody.create(w.face, new Map()) : w.phase.body;
+      w.tip = kind === "travel" ? `${row.name} · ${TIPS.travel[0]}` : TIPS.mirror[0];
       s.windows.push(w);
       s.kinds.push(kind);
       input.add(stone, { kind: "window", window: w }, { radius: 3 });
@@ -397,7 +398,7 @@
     });
     const tipFor = (hit) => {
       const o = hit.owner;
-      if (o.kind === "window") return o.window.kind === "travel" ? `${o.window.row.name} · ${TIPS.travel[0]}` : TIPS.mirror[0];
+      if (o.kind === "window") return o.window.tip;
       return TIPS[o.kind] ? TIPS[o.kind][0] : "";
     };
     Object.assign(hooks, {

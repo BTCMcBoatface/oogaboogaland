@@ -1,6 +1,6 @@
 # Ooga Booga Land
 
-A WebGL2 floating island whose cliff caves are games. Voxel cavemen stand in for the contributors of [OogaBoogaX](https://github.com/OogaBoogaX); donated bananas feed them, the live Bitcoin mempool makes the weather, and the rim Oogatron shows the org's live stats. Plain JavaScript, no dependencies, read-only network connections only. Payments are a simulator for now; visitor state stays in the visitor's browser.
+A WebGL2 floating island whose cliff caves hold projects and an arcade of games. Voxel cavemen stand in for the contributors of [OogaBoogaX](https://github.com/OogaBoogaX); donated bananas feed them, the live Bitcoin mempool makes the weather, and the rim Oogatron shows the org's live stats. Plain JavaScript, no dependencies, read-only network connections only. Payments are a simulator for now; visitor state stays in the visitor's browser.
 
 ## Run it
 
@@ -27,7 +27,7 @@ npm run watch   # the same, rebuilding on every change under src/
 
 Roster colours show activity across every OogaBoogaX repo: yellow worked in the last hour, orange in the last day, gray asleep. Working Oogas load bananas at the pile and shoot them into their project's cave, where their gorilla companions build. HQ's ramps lead down to a basement of beds.
 
-Around the rim: **EntropyLab** (11 o'clock), **Ooga Rally** (9), **Ooga Drop** (the plane on the rally roof), **Ooga Mine** (10), **Ooga Orbit** (the bridge off the south rim), the **Mempool island** (4) and the **Timechain Sphere** (southwest). Every game opens on a title card; **Enter** starts, **Escape** leaves.
+Around the rim: **EntropyLab** (11 o'clock), the **Lightning Factory** (2), **Ooga Arcade** (3), where a cabinet opens each game, the **Mempool island** (4) and the **Timechain Sphere** (southwest). Every game opens on a title card; **Enter** starts, **Escape** leaves.
 
 ## Timechain Sphere
 

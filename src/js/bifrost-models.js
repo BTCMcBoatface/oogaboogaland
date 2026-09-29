@@ -810,9 +810,10 @@
 
   // The floor is flat but for the dais's two steps; past the wall's line there is floor only in the tunnel and in a
   // window's opening.
+  const [[STEP_R0, STEP_Y0], [STEP_R1, STEP_Y1]] = CORE.steps;
   const supportAt = (x, z) => {
-    const r = Math.hypot(x, z), [[r0, y0], [r1, y1]] = CORE.steps;
-    return r < r1 ? y1 : r < r0 ? y0 : 0;
+    const r = Math.hypot(x, z);
+    return r < STEP_R1 ? STEP_Y1 : r < STEP_R0 ? STEP_Y0 : 0;
   };
   // Obstacles as circles [x, z, radius]: the lantern posts, the court's posts, the benches (two circles each), the
   // planters, the fronts of the windows' frames either side, and the dressing.
@@ -831,6 +832,8 @@
   // while the scene fades; a linked mirror allows the body's centre across the
   // glass before the scene carries that step out of its destination mirror.
   const reachOf = (kind) => (kind === "travel" ? WINDOW.plane : MIRROR_Z) + WINDOW.recess;
+  // Each window's bearing turned once, for the walk checks.
+  const SLOT_SIN = SLOTS.map((b) => Math.sin(b)), SLOT_COS = SLOTS.map((b) => Math.cos(b));
   const clearAt = (x, z, radius, kinds) => {
     const r = Math.hypot(x, z);
     if (r < CORE.plinth + radius) return false;
@@ -843,7 +846,7 @@
     if (z > 0 && Math.abs(x) <= ENTRY.halfW - 0.1 - radius) return z <= ENTRY.field + ENTRY.beyond;
     // Into a window's opening, as far as its kind allows, from wherever the hall's ring leaves off for this walker.
     for (let i = 0; i < SLOTS.length; i++) {
-      const b = SLOTS[i], sr = Math.sin(b), cr = Math.cos(b), along = x * sr + z * cr - HALL.r, across = x * cr - z * sr;
+      const sr = SLOT_SIN[i], cr = SLOT_COS[i], along = x * sr + z * cr - HALL.r, across = x * cr - z * sr;
       if (Math.abs(across) <= WINDOW.halfW - 0.1 - radius && along > -1.5 - radius && along <= reachOf(kinds[i]) - radius) return true;
     }
     return false;
@@ -858,16 +861,15 @@
 
   // ---- the chamber through the island's gate -------------------------------------------------------------
 
-  // The chamber as the island sees it through the field in the gatehouse's portal, as the Lightning Factory's hall is
-  // seen through its shield (`FM.hubWindow`): the island's window (`bifrost-window.js`) pulls every point of this
-  // stand-in along its own sight line into a band just behind the field, so it is built at full size in the chamber's
-  // frame from the chamber's own tables, and kept light. Every face glows with the chamber's light at rest baked into
-  // its colour, so the island's sun and clock never touch it, and stone stays dark, so the island's bloom picks out
-  // only the lights. Every sight line through the field runs down the tunnel between its walls, so past the tunnel
-  // only the fan they reach is built: the floor there, the far arc of the wall with its four windows, the pilasters and
-  // the dome over it, the court and the mechanism. Floor, wall and dome share one grid of bearings, so no seam opens
-  // between them; inlays are cut into what they lie in rather than laid over it, and lit details stand a tenth of a
-  // metre proud, so the window's squeeze never folds them together.
+  // The chamber as the island sees it through the field in the gatehouse's portal: the island's window
+  // (`bifrost-window.js`) pulls every point of this stand-in along its own sight line into a band just behind the
+  // field, so it is built at full size in the chamber's frame from the chamber's own tables, and kept light. Every face
+  // glows with the chamber's light at rest baked into its colour, so the island's sun and clock never touch it, and
+  // stone stays dark, so the island's bloom picks out only the lights. Every sight line through the field runs down the
+  // tunnel between its walls, so past the tunnel only the fan they reach is built: the floor there, the far arc of the
+  // wall with its four windows, the pilasters and the dome over it, the court and the mechanism. Floor, wall and dome
+  // share one grid of bearings, so no seam opens between them; inlays are cut into what they lie in rather than laid
+  // over it, and lit details stand a tenth of a metre proud, so the window's squeeze never folds them together.
   //
   // `front` is the tunnel's last half metre before the field at true size, where an Ooga walks through, with the
   // field's emitters; `hall` is everything else that stands still, cut off where `front` begins (`GATE_CUT`). The window
