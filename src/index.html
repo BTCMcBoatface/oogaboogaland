@@ -364,7 +364,7 @@
         <span class="weapon-toggle"><canvas class="primary-icon" id="primary-icon" width="48" height="48" aria-hidden="true"></canvas></span>
         <span class="equipment-compact primary-readout">
           <span class="primary-strength" id="primary-strength" role="meter" aria-label="Melee hit strength"
-            aria-valuemin="50" aria-valuemax="200" aria-valuenow="50" aria-valuetext="50% of normal swing damage">
+            aria-valuemin="25" aria-valuemax="200" aria-valuenow="100" aria-valuetext="100% of normal swing damage">
             <span class="primary-strength-fill" id="primary-strength-fill"></span>
           </span>
         </span>
@@ -979,19 +979,32 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
       </div>
     </dialog>
     <dialog class="modal board-modal" id="board-modal" aria-labelledby="board-title">
-      <div class="panel-head">
+      <div class="panel-head" id="board-head">
+        <button type="button" class="modal-close board-filter" id="board-filter" data-action="board-filter" aria-label="Filter repos and users" aria-expanded="false" aria-controls="board-filter-menu" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4H21L14 12V19L10 21V12Z"/></svg></button>
         <h2><span data-sign id="board-title">Board</span></h2>
         <button type="button" class="modal-close" data-action="board-close" aria-label="Close">&times;</button>
       </div>
+      <section class="board-filter-menu" id="board-filter-menu" aria-label="Oogatron filters" hidden>
+        <div class="board-filter-tabs" role="tablist" aria-label="Filter by">
+          <button type="button" id="board-filter-repos" role="tab" aria-selected="true" aria-controls="board-filter-list" data-filter-tab="repos">Repos</button>
+          <button type="button" id="board-filter-users" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="users" tabindex="-1">Users</button>
+        </div>
+        <div class="board-filter-list" id="board-filter-list" role="tabpanel" aria-labelledby="board-filter-repos"></div>
+        <button type="button" class="board-filter-done" data-action="board-filter-done">Done</button>
+      </section>
       <canvas class="board-screen" id="board-screen" width="192" height="108" aria-label="The board"></canvas>
       <div class="board-nav">
-        <button type="button" class="board-page" id="board-prev" data-action="board-prev" aria-label="Previous page">&lsaquo;</button>
-        <b class="board-caption" id="board-caption">&nbsp;</b>
-        <button type="button" class="board-page" id="board-next" data-action="board-next" aria-label="Next page">&rsaquo;</button>
+        <button type="button" class="board-page" id="board-prev" data-action="board-prev" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3"><path d="M15 6L9 12L15 18"/></svg></button>
+        <div class="board-center">
+          <b class="board-caption" id="board-caption">&nbsp;</b>
+          <button type="button" class="board-page board-pause" id="board-pause" data-action="board-pause" aria-label="Pause screen cycling" aria-pressed="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><g class="board-pause-bars"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></g><path class="board-play" d="M8 5L20 12L8 19Z"/></svg></button>
+        </div>
+        <button type="button" class="board-page" id="board-next" data-action="board-next" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3"><path d="M9 6L15 12L9 18"/></svg></button>
       </div>
       <div class="board-dots" id="board-dots" aria-label="Pages"></div>
       <p class="board-note" id="board-note" hidden></p>
       <p class="help" id="board-help"></p>
+      <button type="button" class="board-resize" id="board-resize" aria-label="Resize Oogatron window; arrow keys adjust size" hidden></button>
     </dialog>
     <dialog class="modal" id="ooga-portal-menu" aria-labelledby="ooga-portal-title" aria-describedby="ooga-portal-status">
       <div class="panel-head">
@@ -1100,8 +1113,8 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
   <script src="js/agent.js"></script>
   <script src="js/ooga-portal-models.js"></script>
   <script src="js/ooga-portal.js"></script>
-  <script src="js/ooga-portal-arrival.js"></script>
   <script src="js/lab-phase.js"></script>
+  <script src="js/wall-panels.js"></script>
   <script src="js/clankers.js"></script>
   <script src="js/clanker-play.js"></script>
   <script src="js/scene-hub.js"></script>

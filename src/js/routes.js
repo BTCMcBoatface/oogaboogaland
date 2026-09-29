@@ -28,7 +28,7 @@
       { path: "mempool", scene: "pool", image: "mempool", title: "Mempool cave",
         description: "The live Bitcoin mempool read out in stone: the fee ladder, the fee torches, the chain tablet and the epoch wall." },
       { path: "dsb", scene: "dsb", title: "DSB Land",
-        description: "Drop through the Ooga Portal to DSB Land: a river boat, the Bitcoin coaster riding the live price, the Meme Shop and NodeRunner TV." },
+        description: "Walk through ₿IFRÖST to DSB Land: a river boat, the Bitcoin coaster riding the live price, the Meme Shop and NodeRunner TV." },
       { path: "entropylab", scene: "hub", place: "lab", image: "entropylab", title: "EntropyLab",
         description: "The EntropyLab cave, where donated bananas feed the voxel cavemen who stand for its contributors." },
       { path: "lightning", scene: "factory", image: "lightning", title: "Lightning Factory",

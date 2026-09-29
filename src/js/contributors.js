@@ -15,7 +15,7 @@
   const characters = BL.characters.all();
   // `look.maintainer` marks someone who keeps every project on the island: until
   // the backend reports their commits they are busy in all of them, whatever the
-  // clock or the debug fixture says. Delete the flag from the character file once
+  // clock says (explicit debug roster modes take precedence). Delete the flag once
   // real activity arrives and the dates take over again.
   const roster = characters.map(({ handle, display, lastCommit, look }) => ({ name: handle, display: display || handle, lastCommitAt: lastCommit * 1e3, activity: new Map([[ENTROPY, lastCommit * 1e3]]), maintainer: !!(look && look.maintainer) }));
   // Filter construction, not visibility: solo worlds do no work for absent Oogas.
@@ -35,14 +35,43 @@
     if (key === "w-s-bitcoin/entropylab") return ENTROPY;
     return /^oogaboogax\/[a-z0-9_.-]{1,100}$/.test(key) ? key : null;
   };
+  // Repeatable debug-only fixture: ooga=handle:clank:lab,obl,lf (or chill/sleep).
+  // Unlisted owners sleep; explicit caves replace both activity and maintainer defaults.
+  // Resolve handles and cave aliases once, keeping state/site reads allocation-free.
+  const debugRoster = params.has("debug") && params.has("ooga"), debugModes = new Map();
+  if (debugRoster) {
+    const repos = new Map();
+    for (const slot of BL.caves.slots) {
+      if (!slot.repo || slot.status !== "open" && slot.status !== "mirror") continue;
+      repos.set(slot.id, slot.repo);
+      repos.set(slot.name.toLowerCase(), slot.repo);
+      repos.set(slot.repo, slot.repo);
+      repos.set(slot.repo.slice(slot.repo.indexOf("/") + 1), slot.repo);
+      repos.set(slot.scene === "factory" ? "lf" : slot.status === "mirror" ? "obl" : slot.scene || slot.status, slot.repo);
+    }
+    for (const value of params.getAll("ooga")) {
+      const [name, mode, caves = ""] = value.toLowerCase().split(":", 3);
+      const contributor = byName.get(name.trim());
+      if (!contributor) continue;
+      const sites = new Set();
+      if (mode?.trim() === "clank") for (const cave of caves.split(",", MAX_REPOS)) {
+        const key = cave.trim(), repo = repos.get(key) || repos.get(repositoryOf(key));
+        if (repo) sites.add(repo);
+      }
+      const state = mode?.trim() === "clank" && sites.size ? "working" : mode?.trim() === "chill" ? "chilling" : "sleeping";
+      debugModes.set(contributor, { state, sites });
+    }
+  }
   // Callers use the canonical lowercase repository key, keeping frame queries allocation-free.
   const hasRecentActivity = (contributor, repo, at = Date.now()) => {
+    if (debugRoster) return debugModes.get(contributor)?.sites.has(repo) || false;
     if (debugState === "working" && repo === ENTROPY) return true;
     if (contributor.maintainer) return true;
     const seen = contributor.activity.get(repo);
     return seen > 0 && seen <= at && at - seen < WORK_WINDOW;
   };
   const stateFor = (contributor, at = Date.now()) => {
+    if (debugRoster) return debugModes.get(contributor)?.state || "sleeping";
     if (debugState) return debugState;
     if (contributor.maintainer) return "working";
     const age = at - contributor.lastCommitAt;
@@ -185,5 +214,5 @@
     if (look.height) traits.height = look.height;
     return traits;
   };
-  BL.contributors = { roster, activeRoster, solo, debugState, stateFor, ageLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
+  BL.contributors = { roster, activeRoster, solo, debugState, debugRoster, stateFor, ageLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
 })();
