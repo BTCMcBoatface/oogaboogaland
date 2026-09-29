@@ -5056,7 +5056,7 @@ const factoryEntrance = { name: "factory entrance", why: "regression: flying abo
   const escaped = await b.evaluate(`window.__ooga.scene`);
   record("factory entrance: walking through the 2 o'clock shield takes the same Ooga inside, walking back out past the balcony returns it to the mouth, and Escape leaves the factory", arrived.scene === "factory" && arrived.ooga === "portlandhodl" && back.scene === "hub" && back.ooga === "portlandhodl" && back.fromMouth !== null && back.fromMouth < 10 && escaped === "hub", JSON.stringify({ arrived, back, escaped }));
 } };
-// ₿IFRÖST, a wip game, so its pages carry wip=bifrost. In from the top of the pass stairs through the arch, over the
+// ₿IFRÖST. In from the top of the pass stairs through the arch, over the
 // bridge and through the portal's field as the widest Ooga; W A S D in the hall; back out through the field; Escape.
 const bifrostEntrance = { name: "bifrost entrance", why: "playthrough: an Ooga walks through the arch and the portal's field into the chamber as the same Ooga, with DSB Land's picture and the view back out", run: async (b) => {
   await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"), g = B.island.gate, z = g.z + 2; if (B.crew.player !== a) B.pilot.possess(a); B.pilot.navigate({ position: { x: g.x, y: B.island.surfaceAt(g.x, z), z }, target: { x: g.x, y: 6, z: z - 6 }, yaw: 0, pitch: 0.2, dist: 5 }); B.advance(0.5, 1 / 60); })()`);
@@ -6021,9 +6021,9 @@ scene("pool", { steps: [poolLeave, trip("pool")] });
 scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryLadders, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
 scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"), steps: [factoryFloor, factoryEntrance] });
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
-scene("bifrost", { url: hubPage(src, "scene=hub&wip=bifrost&solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
-scene("bifrost", { label: "dsb round trip", query: "wip=bifrost&character=portlandhodl", steps: [bifrostDsb] });
-scene("bifrost", { label: "canvas2d", url: hubPage(src, "scene=hub&wip=bifrost&canvas2d=1"), steps: [bifrostCanvas] });
+scene("bifrost", { url: hubPage(src, "solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
+scene("bifrost", { label: "dsb round trip", query: "character=portlandhodl", steps: [bifrostDsb] });
+scene("bifrost", { label: "canvas2d", url: hubPage(src, "canvas2d=1"), steps: [bifrostCanvas] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
 scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
@@ -6038,7 +6038,7 @@ scene("orbit", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("orbit", { card
 scene("mine", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("mine", { card: "#mine-intro", required: ["#joy-move", "#joy-look", "#act", "#mine-view-btn", "#mine-pause-btn", "#mine-mute", ".leave"] })] });
 scene("pool", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("pool", { required: ["#joy-move", "#joy-look", ".leave"] })] });
 scene("factory", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("factory", { required: ["#joy-move", "#joy-look", ".leave"] })] });
-scene("bifrost", { query: "pos=0&wip=bifrost", opts: PHONE_SIZE, steps: [phone("bifrost", { required: ["#joy-move", "#joy-look", ".leave"] })] });
+scene("bifrost", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("bifrost", { required: ["#joy-move", "#joy-look", ".leave"] })] });
 
 // DSB has no hub entrance during this merge. Exercise the existing world.pilot
 // contract explicitly; no new player-facing route is introduced by the fixture.
