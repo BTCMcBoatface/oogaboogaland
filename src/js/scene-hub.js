@@ -4925,9 +4925,8 @@
     pilot.controls.reset(); input.reset(); pilot.setActive(false); hud.tooltip.hide();
     go("factory");
   };
-  // ₿IFRÖST's field, in the chamber's blue; and how near the view comes before the window into the chamber is built (it
-  // shows within 60 m of the field).
-  const BIFROST_TINT = [0.3, 0.62, 1], BIFROST_WINDOW_NEAR = 75;
+  // ₿IFRÖST's field, in the chamber's blue.
+  const BIFROST_TINT = [0.3, 0.62, 1];
   // ₿IFRÖST's field hums on its own as the factory's does, light runs along the bridge's deck and down the falls, and
   // Heimdall watches whoever comes: the played Ooga, else the view. The played Ooga walking through the field crosses into the chamber,
   // held where it crossed through the fade as at the factory.
@@ -4940,12 +4939,6 @@
     if (b.hum <= 0) {
       b.hum = 0.1 + Math.random() * 0.22;
       b.phase.ripples.pulse(o.minX + Math.random() * (o.maxX - o.minX), o.floorY + Math.random() * (o.ceilingY - o.floorY), 0);
-    }
-    // The window into the chamber is built once the view comes within BIFROST_WINDOW_NEAR of the portal, a little
-    // past the window's own range, so it is always there before it can show.
-    if (!b.window && renderer.kind === "webgl2") {
-      const c = camera.position, dx = c.x - p.x, dy = c.y - p.floorY, dz = c.z - p.z;
-      if (dx * dx + dy * dy + dz * dz < BIFROST_WINDOW_NEAR * BIFROST_WINDOW_NEAR) b.window = BL.bifrostWindow.create({ group: b.group, portal: p });
     }
     const at = player ? player.root.position : null, orbit = pilot.orbit;
     // The bridge glows under the played Ooga's feet.
@@ -4972,6 +4965,17 @@
   const FACTORY_VIEW = { width: 320, eye: 1.7, across: 0.82, up: 0.46, down: 0.5, colour: 0.83, mist: 0.12, haze: [206, 228, 238] };
   // ₿IFRÖST's chamber looks back out through its own field the same way, at a picture taken from the portal as the
   // Ooga walks in: the landing, Heimdall, the bridge and the island past it, misted in the field's blue.
+  // The window into the chamber follows the eye, so it moves once the camera is final for the frame. It is built on the
+  // first such frame the view could see it: within the window's reach (FAR) of the field's middle, measured here from
+  // the portal's foot, which lies that much farther again from the field's middle.
+  const updateBifrostWindow = (dt) => {
+    const b = bifrostIsle, p = b.site.portal;
+    if (!b.window && renderer.kind === "webgl2") {
+      const W = BL.bifrostWindow, c = camera.position, dx = c.x - p.x, dy = c.y - p.floorY, dz = c.z - p.z, reach = W.FAR + Math.hypot(W.MIDDLE, p.fieldZ);
+      if (dx * dx + dy * dy + dz * dz < reach * reach) b.window = W.create({ group: b.group, portal: p });
+    }
+    if (b.window) b.window.update(dt, camera, RENDER_OPTS);
+  };
   const BIFROST_VIEW = { ...FACTORY_VIEW, haze: [188, 208, 255] };
   const snapFactoryView = () => {
     const view = snapFromShield(factoryMouth.group, factoryMouth.mouth, BL.factoryModels.SHIELD_Z, FACTORY_VIEW);
@@ -6340,7 +6344,7 @@
     if (pitArrival) {
       updatePitArrival(dt);
       if (factoryMouth && factoryMouth.hall) factoryMouth.hall.update(dt, camera, RENDER_OPTS);
-      if (bifrostIsle && bifrostIsle.window) bifrostIsle.window.update(dt, camera, RENDER_OPTS);
+      if (bifrostIsle) updateBifrostWindow(dt);
       return;
     }
     hour = clock.read();
@@ -6472,7 +6476,7 @@
     syncMatrixInside(player);
     // The factory's window follows the eye, so it moves once the camera is final for the frame.
     if (factoryMouth && factoryMouth.hall) factoryMouth.hall.update(dt, camera, RENDER_OPTS);
-    if (bifrostIsle && bifrostIsle.window) bifrostIsle.window.update(dt, camera, RENDER_OPTS);
+    if (bifrostIsle) updateBifrostWindow(dt);
     updateMatrixWorld(dt, elapsed);
     updateMatrixControl(dt, player);
     mirrorCave.body.update(dt);

@@ -189,5 +189,5 @@
     return { root, update, dispose, debug };
   };
 
-  BL.bifrostWindow = { create, DEPTH, MARGIN };
+  BL.bifrostWindow = { create, DEPTH, MARGIN, FAR, MIDDLE };
 })();

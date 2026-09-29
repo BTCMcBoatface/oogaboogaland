@@ -5084,6 +5084,12 @@ const bifrostExit = { name: "bifrost exit", why: "playthrough: walking back out 
   const escaped = await b.evaluate(`window.__ooga.scene`);
   record("bifrost exit: walking back out through the field returns the same Ooga to the bridge's end, and Escape leaves the chamber", back.scene === "hub" && back.ooga === "portlandhodl" && back.fromArrival !== null && back.fromArrival < 4 && escaped === "hub", JSON.stringify({ back, escaped }));
 } };
+const bifrostCanvas = { name: "bifrost canvas2d", why: "contract: the Canvas 2D fallback builds ₿IFRÖST's islet without the WebGL window into the chamber, and boots and draws the chamber", run: async (b) => {
+  const hub = await b.evaluate(`(() => { const B = window.__ooga; B.pilot.goPreset("bifrost"); B.advance(1, 1 / 60); return { kind: B.renderer.kind, scene: B.scene, islet: !!B.bifrost, window: !!(B.bifrost && B.bifrost.window) }; })()`);
+  await tourGo(b, "bifrost");
+  const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return { kind: B.renderer.kind, scene: B.scene, colours: seen.size }; })()`);
+  record("bifrost canvas2d: with WebGL2 unavailable the island builds ₿IFRÖST's islet without its window into the chamber, and the chamber boots and paints", hub.kind === "canvas2d" && hub.islet && !hub.window && r.kind === "canvas2d" && r.scene === "bifrost" && r.colours >= 4, JSON.stringify({ hub, r }));
+} };
 const factoryCanvas = { name: "factory canvas2d", why: "contract: the Canvas 2D fallback boots and draws the factory", run: async (b) => {
   const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return { kind: B.renderer.kind, scene: B.scene, colours: seen.size }; })()`);
   record("factory canvas2d: with WebGL2 unavailable the factory still boots and paints", r.kind === "canvas2d" && r.scene === "factory" && r.colours >= 4, JSON.stringify(r));
@@ -6002,6 +6008,7 @@ scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, fact
 scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"), steps: [factoryFloor, factoryEntrance] });
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
 scene("bifrost", { url: hubPage(src, "scene=hub&wip=bifrost&solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
+scene("bifrost", { label: "canvas2d", url: hubPage(src, "scene=hub&wip=bifrost&canvas2d=1"), steps: [bifrostCanvas] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
 scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
@@ -6016,6 +6023,7 @@ scene("orbit", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("orbit", { card
 scene("mine", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("mine", { card: "#mine-intro", required: ["#joy-move", "#joy-look", "#act", "#mine-view-btn", "#mine-pause-btn", "#mine-mute", ".leave"] })] });
 scene("pool", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("pool", { required: ["#joy-move", "#joy-look", ".leave"] })] });
 scene("factory", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("factory", { required: ["#joy-move", "#joy-look", ".leave"] })] });
+scene("bifrost", { query: "pos=0&wip=bifrost", opts: PHONE_SIZE, steps: [phone("bifrost", { required: ["#joy-move", "#joy-look", ".leave"] })] });
 
 // DSB has no hub entrance during this merge. Exercise the existing world.pilot
 // contract explicitly; no new player-facing route is introduced by the fixture.
