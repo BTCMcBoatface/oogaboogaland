@@ -3910,7 +3910,7 @@
       if (floor <= ABYSS_FLOOR || floor < feet - 2.5 || floor > feet + 0.4
         || clankerMeshes.supportAt(x, z, feet + 0.4, 0, PLAYER_RADIUS) >= floor - 0.05
         || !flyable(p.x, p.z, x, z, feet + 0.4, cave.bodyHeight, cave)
-        || cave !== pilot.player && shared.npcLandingAllowed && !shared.npcLandingAllowed(x, floor, z, cave.bodyHeight, cave)) continue;
+        || cave !== pilot.player && !npcLandingAllowed(x, floor, z, cave.bodyHeight, cave)) continue;
       cave.hopV = crewMod.JUMP_SPEED;
       cave.jumps = 1;
       cave.leap.vx = dx * pilotMod.WALK.ledgeSpeed;
@@ -4030,6 +4030,8 @@
     for (const zone of workZones) if (workZoneContains(zone, x, y, z, cave.bodyHeight)) return true;
     return false;
   };
+  // Where an NPC may land, for the crew and for a rider jumping off a clanker.
+  const npcLandingAllowed = (x, y, z, height, cave) => !npcRampRoofAt(x, y, z) && !npcCaveRimAt(x, y, z) && !npcClosedCaveAt(x, z, y, height) && !npcPileAt(x, y, z, height) && !npcWorkZoneAt(cave, x, y, z) && npcFireClear(x, y, z, x, y, z, height);
   const npcWorkZoneClear = (cave, x, y, z, toX, toY, toZ) => {
     if (!workZoneTraveler(cave)) return true;
     const p = cave.root.position, feet = p.y - cave.baseY;
@@ -8230,7 +8232,7 @@
       && matrixGateSegmentClear(x, y, z, toX, toY, toZ, 0.001, 0.002);
     shared.inBananas = inBananas;
     shared.npcDestinationBlocked = npcDestinationBlocked;
-    shared.npcLandingAllowed = (x, y, z, height, cave) => !npcRampRoofAt(x, y, z) && !npcCaveRimAt(x, y, z) && !npcClosedCaveAt(x, z, y, height) && !npcPileAt(x, y, z, height) && !npcWorkZoneAt(cave, x, y, z) && npcFireClear(x, y, z, x, y, z, height);
+    shared.npcLandingAllowed = npcLandingAllowed;
     shared.npcRecoveryDrop = (x, y, z) => npcCaveRimAt(x, y, z);
     shared.npcHazardClear = (x, y, z, toX, toY, toZ, height, cave) => npcClosedCaveClear(x, y, z, toX, toY, toZ, height) && npcFireClear(x, y, z, toX, toY, toZ, height) && npcWorkZoneClear(cave, x, y, z, toX, toY, toZ);
     shared.onModelChange = refreshObjectGuides;
