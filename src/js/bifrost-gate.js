@@ -236,8 +236,9 @@
   // A banner as the concept hangs them, `scale` times one 1.1 m wide and 2.6 m from its rod at the origin to its point:
   // navy cloth edged in gold and cut to a point with a gold drop at its tip (`cloth`), its white mark on both faces, each
   // reading true from its own side (`mark`, apart so Canvas 2D can sort it before the cloth), and the gilt rod with its
-  // knobs (`rod`). Cached by mark and scale.
-  const BANNER = { w: 1.1, h: 2.6, tail: 0.42, top: -0.06, hem: 0.085, t: 0.02 };
+  // knobs (`rod`). Cached by mark and scale. The mark stands `lift` off the cloth: a few millimetres fight the cloth in
+  // the depth buffer from afar under the close camera's 0.06 m near plane, and flicker as the view turns.
+  const BANNER = { w: 1.1, h: 2.6, tail: 0.42, top: -0.06, hem: 0.085, t: 0.02, lift: 0.015 };
   // The marks the concept's banners carry, drawn in thick square-ended strokes. Each stroke is [x0, y0, x1, y1] in stave
   // lengths, up from the stave's foot (y 0) to its head (y 1), and each mark gives, on a banner of scale 1, how far
   // below the rod the stave's head hangs (`head`), the stave's length (`len`), the strokes' width (`w`) and how far the
@@ -281,14 +282,14 @@
     if (bannerCache.has(key)) return bannerCache.get(key);
     const M = MARKS[mark];
     if (!M) throw new Error(`No banner mark "${mark}"`);
-    const { w, h, tail, top, hem, t } = BANNER, cloth = geometry(), rune = geometry();
+    const { w, h, tail, top, hem, t, lift } = BANNER, cloth = geometry(), rune = geometry();
     const outer = [[-w / 2, top], [w / 2, top], [w / 2, top - h + tail], [0, top - h], [-w / 2, top - h + tail]], inner = inset(outer, hem);
     const at = (u, v, side) => [side * (M.dx + u) * M.len, M.head + (v - 1) * M.len];
     for (const side of [1, -1]) {
       const flat = (pts, color, emissive) => facing(cloth, pts.map(([x, y]) => [x, y, side * t]), color, emissive, 0, top - h / 2, side * 5);
       flat(inner, NAVY, 0.05);
       outer.forEach((p, k) => { const k2 = (k + 1) % outer.length; flat([p, outer[k2], inner[k2], inner[k]], GOLD, 0.25); });
-      for (const [u0, v0, u1, v1] of M.strokes) bar(rune, ...at(u0, v0, side), ...at(u1, v1, side), M.w, side * (t + 0.004), RUNE_WHITE, 0.35, side);
+      for (const [u0, v0, u1, v1] of M.strokes) bar(rune, ...at(u0, v0, side), ...at(u1, v1, side), M.w, side * (t + lift), RUNE_WHITE, 0.35, side);
     }
     const drop = moved(lathe({ profile: [[0, 0.02], [0.08, -0.08], [0, -0.22]], segments: 4, color: GOLD_LT, emissive: 0.3 }), 0, top - h, 0);
     const knob = () => lathe({ profile: [[0, -0.09], [0.075, -0.04], [0.075, 0.04], [0, 0.09]], segments: 6, color: GOLD, emissive: 0.25 });

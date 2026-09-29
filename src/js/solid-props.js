@@ -7,7 +7,7 @@
   const { mat4 } = BL.math;
   const EPS = 1e-7, geometries = new WeakMap();
   // Props use their render mesh or an explicit collision shell; a shared local-space tree preserves openings in
-  // arches, branches and aircraft without voxelizing each placed copy or rebuilding triangles when a prop moves.
+  // arches and branches without voxelizing each placed copy or rebuilding triangles when a prop moves.
   const geometryOf = (geometry) => {
     geometry = geometry.collisionGeometry || geometry;
     let cached = geometries.get(geometry);

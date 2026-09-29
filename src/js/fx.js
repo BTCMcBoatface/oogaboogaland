@@ -308,7 +308,7 @@
     };
     const stats = () => ({ particles: particles.length, pool: particlePool.length, bubbles: bubbles.length, zzz: zzz.length, damageNumbers: damageCount });
     return {
-      spawnParticle, burst, puff, say, sayAt, zzzAt, damageNumber, showTicker, drawOverlay, warmVisibility, update: stepParticles, trimPool, dispose, stats,
+      spawnParticle, burst, puff, say, sayAt, zzzAt, damageNumber, showTicker, drawOverlay, warmVisibility, warmBlockers: visibility.warm, update: stepParticles, trimPool, dispose, stats,
       get inMotion() {
         return particles.length > 0 || damageCount > 0;
       }

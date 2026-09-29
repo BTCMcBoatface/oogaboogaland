@@ -263,9 +263,10 @@
     const N = 720, edge = new Float32Array(N);
     let reach = 0;
     for (let i = 0; i < N; i++) {
-      const a = (i / N - 0.5) * TAU, s = Math.sin(a), c = Math.cos(a);
+      // The outline once a bearing, not once a step: the same table, a tenth of the hub's build time for it.
+      const a = (i / N - 0.5) * TAU, s = Math.sin(a), c = Math.cos(a), o = outline(Math.atan2(s, c));
       let r = 0;
-      while (inside(s * (r + 0.05), c * (r + 0.05))) r += 0.05;
+      while (Math.hypot(s * (r + 0.05), c * (r + 0.05)) <= o) r += 0.05;
       edge[i] = r;
       reach = Math.max(reach, r);
     }
@@ -385,11 +386,11 @@
     if (wing > rim + HEAD_LAMP.u - HEAD_LAMP.side / 2 - 0.07) throw new Error(`₿IFRÖST's head pedestals stand ${(wing - rim).toFixed(2)} m past the rim, on a ridge wall`);
     // The islet's middle, with the deck running from the head's outer face to its front edge.
     const P = plan(), dist = rim + H.over + AXIS.deck + P.frontZ, x = ux * dist, z = uz * dist;
-    // The other islets stay well clear: the Mempool island and the launch islet where their spots put them, and the
-    // Timechain Sphere anywhere out along its bearing, since where it stands is its own build's to find.
-    const pool = BL.poolModels.spot(island, {}), launch = BL.rocketModels.siteSpot(island, {}), T = BL.timechainModels;
+    // The other islets stay well clear: the Mempool island where its spot puts it, and the Timechain Sphere anywhere
+    // out along its bearing, since where it stands is its own build's to find.
+    const pool = BL.poolModels.spot(island, {}), T = BL.timechainModels;
     const out = Math.max(0, x * T.DIR.x + z * T.DIR.z);
-    for (const [name, ox, oz, r] of [["Mempool island", pool.x, pool.z, BL.poolModels.SITE.isletR], ["launch islet", launch.x, launch.z, BL.rocketModels.SITE.isletR], ["Timechain Sphere", T.DIR.x * out, T.DIR.z * out, T.SITE.radius]]) {
+    for (const [name, ox, oz, r] of [["Mempool island", pool.x, pool.z, BL.poolModels.SITE.isletR], ["Timechain Sphere", T.DIR.x * out, T.DIR.z * out, T.SITE.radius]]) {
       const apart = Math.hypot(ox - x, oz - z) - r - P.reach;
       if (apart < CLEAR) throw new Error(`₿IFRÖST's islet comes within ${apart.toFixed(1)} m of the ${name}`);
     }

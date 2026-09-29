@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  const { math, models, contributors, donations, qr, terrain, hubModels, headquartersModels, dropModels, rocketModels, rocketParts, poolModels, caves, daylight, game: gameMod, hud: hudMod, interact: interactMod, pilot: pilotMod, fx: fxMod, crew: crewMod, pile: pileMod, crates: cratesMod, critters: crittersMod, weather: weatherMod, chain, mempool, oogatronLive } = BL;
+  const { math, models, contributors, donations, qr, terrain, hubModels, headquartersModels, poolModels, caves, daylight, game: gameMod, hud: hudMod, interact: interactMod, pilot: pilotMod, fx: fxMod, crew: crewMod, pile: pileMod, crates: cratesMod, critters: crittersMod, weather: weatherMod, chain, mempool, oogatronLive } = BL;
   const { clamp, lerp, ease, fnv1a, mulberry32 } = math;
   const { createNode, addChild, removeChild, updateWorld, createCamera, addTween, stepTweens, tweenCount, traverseVisible } = BL.scene;
   const { JET_SPEED, JET_RISE, JET_FUEL_SECONDS, JET_MOVE_SECONDS } = crewMod;
@@ -60,8 +60,8 @@
   const CLOSE_VIEW = { eyeHeight: 1.1, eyeRatio: 0.95, eyeForward: 0.16, pitch: [-1.35, 1.35], trailingDist: 6, orbitDist: 6 };
   const STEP_MAX = pilotMod.WALK.step;
   const MAGAZINE_REACH = 0.7, MAGAZINE_SCALE = 2.4;
-  // LAUNCH_REACH/RALLY_REACH include room around the kart plinth and the plane's wings.
-  const RALLY_REACH = 3.2, LAUNCH_REACH = 4, RALLY_KART_Z = -3.6;
+  // Space at Ooga Arcade's mouth works from MOUTH_REACH of a point MOUTH_ACTION_Z inside its doorway.
+  const MOUTH_REACH = 3.2, MOUTH_ACTION_Z = -3.6;
   const MATRIX_TYPES = 8;
   const MATRIX_RAIN_GAP = 0.19;
   const MATRIX_SURFACE_PITCH = 0.12, MATRIX_SURFACE_GAP = 0.13, MATRIX_GLYPH_HZ = 20;
@@ -162,7 +162,6 @@
   const dressingLights = [];
   const PILE_SCALE = 0.45;
   const SCENERY_CLEARANCE = 0.25;
-  const OBL_REPO = "oogaboogax/oogaboogaland";
   const MEADOW_INNER = 5, MEADOW_OUTER = MEADOW - 1.5, CLIFF_INNER = MEADOW + 1.5, CLIFF_OUTER = RADIUS - 1;
   const DOCK_DEG = 75, LADDER_Z = -3.6, LADDER_LEAN = 0.65;
   const CLOUD_COUNT = 30, CLOUD_WRAP = 60, CLOUD_NEAR = 36;
@@ -174,13 +173,14 @@
   const WANDER_COUNT = 36, WANDER_INNER = 5.5;
   const ALTAR_HEIGHT = 0.34, ALTAR_BLOCK_WIDTH = 0.2, ALTAR_BLOCK_ARC = 0.3, ALTAR_RING_GAP = 0.02, ALTAR_MAX_BLOCKS = 512;
   const RIPEN = 25, TREE_CHANCE = 0.5, BUSH_CHANCE = 0.25;
-  const PROP_TIPS = { tree: "Tree · shake it", bush: "Bush · rustle it", rock: "Rock · hit to break", crate: "Box · hit to break", barrel: "Barrel · hit to break", flower: "Flowers", torch: "Torch · warm", firepit: "Fire pit", bedroll: "Somebody's bed", ladder: "Ladder · wobbly", dock: "Dock · creaky", magazine: "Spare magazine · walk into it to collect", plane: "Ooga Drop · tap to fly", sign: "Ooga Drop · the plane flies from here", launchpad: "Ooga Orbit · tap to build a rocket", rocket: "Ooga Orbit · tap to fly", tower: "Launch tower · steady", orbitsign: "Ooga Orbit · the pad past the bridge", bridge: "Rope bridge · to the launch pad", poolbridge: "Vine bridge · to the Mempool island", poolstair: "The Mempool · tap to climb down", poolsign: "The Mempool · the cave reads the chain", chainsign: "The chain, at a glance · tap to read it", weathersign: "Reading the weather · tap for the key", poolrock: "Mossy rock", poolfern: "Fern · rustle it", poollog: "Fallen log · something lives in it", jaguar: "Jaguar · do not poke", monkey: "Monkey · it watches you", toucan: "Toucan · big beak", canopy: "Rainforest tree · shake it", windsock: "Windsock · a fair wind", jumbotron: "Oogatron · OogaBoogaX on the big screen · tap the screen for a close-up", palm: "Palm · shake it", bifrostbridge: "Bifröst · the bridge to ₿IFRÖST", bifrostgate: "₿IFRÖST · walk an Ooga through the field", heimdall: "Heimdall · keeper of the bridge", gate: null };
-  const RETICLE_PROPS = new Set(["tree", "bush", "rock", "crate", "barrel", "flower", "torch", "firepit", "ladder", "plane", "sign", "launchpad", "rocket", "tower", "orbitsign", "poolstair", "poolsign", "chainsign", "weathersign", "poolfern", "poollog", "jaguar", "monkey", "toucan", "canopy", "jumbotron", "palm", "timechainentrance", "timechainboard", "timechainchair", "timechainbeer", "bifrostgate", "heimdall"]);
+  const PROP_TIPS = { tree: "Tree · shake it", bush: "Bush · rustle it", rock: "Rock · hit to break", crate: "Box · hit to break", barrel: "Barrel · hit to break", flower: "Flowers", torch: "Torch · warm", firepit: "Fire pit", bedroll: "Somebody's bed", ladder: "Ladder · wobbly", dock: "Dock · creaky", magazine: "Spare magazine · walk into it to collect", poolbridge: "Vine bridge · to the Mempool island", poolstair: "The Mempool · tap to climb down", poolsign: "The Mempool · the cave reads the chain", chainsign: "The chain, at a glance · tap to read it", weathersign: "Reading the weather · tap for the key", poolrock: "Mossy rock", poolfern: "Fern · rustle it", poollog: "Fallen log · something lives in it", jaguar: "Jaguar · do not poke", monkey: "Monkey · it watches you", toucan: "Toucan · big beak", canopy: "Rainforest tree · shake it", jumbotron: "Oogatron · OogaBoogaX on the big screen · tap the screen for a close-up", palm: "Palm · shake it", bifrostbridge: "Bifröst · the bridge to ₿IFRÖST", bifrostgate: "₿IFRÖST · walk an Ooga through the field", heimdall: "Heimdall · keeper of the bridge", gate: null };
+  // The factory shield's glyph crests, in the emitters' cyan.
+  const FACTORY_TINT = BL.math.hexToRgb("#5fe3ff").map((k) => k / 255);
+  const RETICLE_PROPS = new Set(["tree", "bush", "rock", "crate", "barrel", "flower", "torch", "firepit", "ladder", "poolstair", "poolsign", "chainsign", "weathersign", "poolfern", "poollog", "jaguar", "monkey", "toucan", "canopy", "jumbotron", "palm", "timechainentrance", "timechainboard", "timechainchair", "timechainbeer", "bifrostgate", "heimdall"]);
   const workCave = (slot) => slot.repo && (slot.status === "open" || slot.status === "mirror")
-    && (slot.repo !== OBL_REPO || slot.status === "mirror")
     && (slot.scene !== "factory" || contributors.debugRoster);
   const MATRIX_LIVING_PROPS = new Set(["tree"]);
-  const SOLID_PROPS = new Set(["tree", "rock", "crate", "barrel", "firepit", "dock", "jumbotron", "launchpad", "rocket", "tower", "bridge", "orbitsign", "poolbridge", "poolstair", "poolrock", "canopy"]);
+  const SOLID_PROPS = new Set(["tree", "rock", "crate", "barrel", "firepit", "dock", "jumbotron", "poolbridge", "poolstair", "poolrock", "canopy"]);
   const CLANKER_STEP_PROPS = new Set(["rock", "crate", "barrel", "poolrock"]);
   const BUSH_WORDS = ["Something rustles.", "A beetle. Ooga leaves it.", "Just a bush."];
   const PALM_WORDS = ["Coconuts. Ooga wanted bananas.", "A coconut thuds down. Ooga dodges.", "The fronds swish."];
@@ -218,7 +218,7 @@
 
   // One visit's state: created in enter, dropped in leave.
   let jumbotronSpot, oogatronUnsub, renderer, game, world, go, lootEnabled, testBananas, root, camera, overlayCanvas, island, terrainRampRoof, pathNode, altar, hud, hooks, input, pilot, fx, cameraCover, bananaCover, solids, rockGuides, objectGuides, sightGuides, bananaGuides, pileGuides, platformGuides, mirrorGuides, pile, crew, crates, critters, clock, presets, entering, mirrorCave, matrixCave, matrixControl, gateRain, fire, headquarters, dockStairs, jumbotron, positionDebug;
-  let magazine, magazineState, breakables, clankers, clankerPlay, clankerMeshes, clankerPartOwners, entropyLab, chalkboard, factoryMouth = null, glCanvas = null;
+  let magazine, magazineState, breakables, clankers, clankerPlay, clankerMeshes, clankerPartOwners, entropyLab, chalkboard, factoryMouth = null, arcadeMouth = null, glCanvas = null;
   let debugSelectedGorilla = null, debugMovementTerrain = null;
   const debugGorillaHighlights = [];
   const DEBUG_MOVE_HIT = { node: null, owner: null, type: "none", distance: Infinity, x: 0, y: 0, z: 0, normal: { x: 0, y: 0, z: 0 } };
@@ -531,7 +531,6 @@
   const clouds = [];
   const cloudObstacles = [];
   let cloudRandom = null;
-  let launchCloudSpot = null;
   const lamps = [];
   const entranceLights = [];
   const fireSeats = [];
@@ -543,10 +542,8 @@
   const labels = [];
   const spots = [];
   const chillSpots = [];
-  const openMouths = [];
   const headquartersRimLintels = [];
   const climbMasonry = [];
-  const launchers = [];
   const props = [];
   const scenery = [];
   const sceneryClaims = [];
@@ -561,7 +558,7 @@
   // Poking the set dressing. Every piece a baked set placed (`baked.picks`) gets a pick sphere on a node kept off
   // the scene graph, over one shared faceless geometry: never drawn, never baked into outlines or the GPU, and
   // released with the visit's other targets. `toWorld` maps a piece's set coordinates to the island, or null to
-  // leave it out (the garage furniture inside a mouth belongs to the cave, not the facade).
+  // leave it out (the furniture inside a mouth belongs to the cave, not the facade).
   const PICK_GEOMETRY = { verts: [-0.5, -0.5, -0.5, 0.5, 0.5, 0.5], faces: [], lines: [] };
   const addPieceTargets = (picks, toWorld) => {
     for (let i = 0; i < picks.length; i += 6) {
@@ -577,23 +574,13 @@
     lanternPost: ["Lantern post", "spark", ["The lantern swings. Ooga squints.", "Warm glass. Ooga licks a finger."]],
     crate: ["Crate", "dust", ["Nailed shut. Ooga knocks anyway.", "Something rattles inside."]],
     coalCrate: ["Coal crate", "dust", ["Coal for the Lightning Factory.", "Ooga gets coal on its nose."]],
-    dynamiteCrate: ["Dynamite · do not poke", "spark", ["DO NOT POKE. Ooga pokes.", "Fizz... phew."]],
     barrel: ["Barrel", "dust", ["Sloshes. Ooga drank half.", "Smells like banana brew."]],
     cart: ["Ore cart", "chip", ["The wheels squeak.", "Full of shiny rocks."]],
-    rails: ["Mine rails", "chip", ["Clank."]],
     banner: ["Banner", "dust", ["The banner flaps.", "Ooga salutes the banner."]],
-    tireStack: ["Tyres", "dust", ["Boing!", "Bouncy. Ooga bounces."]],
-    flag: ["Flag", "dust", ["The flag snaps in the wind."]],
-    cone: ["Cone", "dust", ["Boop.", "Ooga wears it as a hat. Briefly."]],
-    barrier: ["Barrier", "chip", ["Solid. Don't crash into it."]],
-    fuelPump: ["Fuel pump", "spark", ["Smells like banana fuel.", "Empty. The karts drank it all."]],
-    startLights: ["Start lights", "spark", ["Red... amber... GO!"]],
     die: ["Big die · roll it", "dust", null],
     flaskBench: ["Flasks", "spark", ["Bubbles. Ooga does not drink it.", "It fizzes. Science!"]],
     terminal: ["Terminal", "spark", ["beep boop", "It prints random numbers. Ooga approves."]],
     chalkboard: ["Chalkboard · write or erase", "dust", null],
-    pickRack: ["Pickaxes", "chip", ["Sharp. Ooga counts three picks."]],
-    oreHeap: ["Ore heap", "chip", ["Shiny rocks!", "Ooga finds a glint of gold."]],
     monolith: ["Monolith", "spark", ["The glyphs hum.", "Cold stone. It watches back."]],
     runeStone: ["Rune stone", "spark", ["The rune glows at Ooga."]],
     coil: ["Coil · zap", "spark", ["ZAP!", "Ooga's fur stands on end."]],
@@ -1499,16 +1486,16 @@
   // Mouth local frame: +z leads out of the cave.
   const sealedCaveVariant = (id) => id === "c3" ? 1 : id === "c10" ? 2 : 0;
   // Every cave wears its own facade from the shared voxel kit: two lantern posts, a string over the lintel,
-  // vines off the rim, and the theme's own things either side of the path (lab dice and flasks, rally tyres and
-  // start lights, mine picks and ore, the mirror's glyph monoliths, the Lightning Factory's coil and coal). The
-  // Headquarters ramps run down a cutting rather than into a cliff and wear none. Each mouth bakes to one solid, one hanging and one glowing mesh, memoised per island
+  // vines off the rim, and the theme's own things either side of the path (lab dice and flasks, the mirror's glyph
+  // monoliths, the Lightning Factory's coil and coal, Ooga Arcade's stores and log bench, on its right only, as the
+  // Lightning Factory's right side fills its left). A slot without a theme wears none: the sealed caves, and the
+  // Headquarters ramps that run down a cutting rather than into a cliff. Each mouth bakes to one solid, one hanging and one glowing mesh, memoised per island
   // so a revisit only places nodes. Pieces are [kind, x, z, quarter turns, variant, lift] in the mouth's frame.
   const THEMES = {
     lab: { glass: 1, icon: "die", string: ["bulb", 1], pieces: [["flaskBench", -5.3, 1.1], ["die", -4.1, 2.8, 0, 1], ["die", -3.5, 3.6, 1, 3], ["die", -4.1, 2.8, 1, 4, 0.5], ["terminal", 5.2, 1.0], ["die", 4.3, 3.2, 1, 2], ["banner", -6.7, 0.7, 0, 1]] },
-    rally: { glass: 0, icon: "flag", string: ["pennant", 0], inside: [["checkerMat", 0, -3.6, 0, 0, 0], ["toolWall", -3.15, -4.4, 1], ["workbench", -2.55, -4.4, 1], ["tireRack", 3.1, -4.6, 3], ["oilDrum", 2.6, -5.9, 0, 0], ["oilDrum", 2.9, -2.3, 0, 1], ["cone", -2.2, -1.6], ["cone", 2.3, -1.2]], ceiling: [[-2.2, 2.2, -1.4, -6.2, 3.05, [0.2, 0.5, 0.8]]], pieces: [["tireStack", -5.0, 0.9, 0, 0], ["tireStack", -5.8, 2.0, 0, 1], ["tireStack", -5.8, 2.0, 0, 0, 0.56], ["cone", -3.6, 3.0], ["cone", -4.0, 3.7], ["fuelPump", -6.6, 3.2], ["startLights", 5.0, 0.9], ["barrier", 5.7, 2.5, 0, 0], ["flag", 6.6, 0.9, 0, 0], ["flag", 3.7, 3.5, 0, 1], ["tireStack", 6.7, 3.4, 0, 1]] },
-    mine: { glass: 0, icon: "pick", string: ["hanging", 0, [0.28, 0.72]], pieces: [["pickRack", -5.4, 0.9], ["dynamiteCrate", -4.3, 2.6], ["oreHeap", -6.3, 2.7, 0, 0], ["coalCrate", 5.0, 1.0, 0, 2], ["oreHeap", 6.1, 2.6, 0, 1], ["barrel", 4.3, 3.0, 0, 1], ["banner", 6.7, 0.8, 0, 3], ["crate", 5.1, 2.1, 0, 0]] },
-    matrix: { glass: 2, icon: "glyph", string: ["bulb", 2], pieces: [["monolith", -5.0, 0.9, 0, 0], ["monolith", 5.0, 0.9, 0, 1], ["runeStone", -4.2, 2.8, 0, 0], ["runeStone", 4.4, 2.9, 0, 1], ["banner", 6.5, 0.8, 0, 4], ["banner", -6.5, 0.8, 0, 4], ["rubble", -6.3, 2.6, 0, 1]] },
+    matrix: { glass: 2, icon: "glyph", string: ["bulb", 2], pieces: [["monolith", -5.0, 0.9, 0, 0], ["monolith", 5.0, 0.9, 0, 1], ["runeStone", -4.2, 2.8, 0, 0], ["runeStone", 4.4, 2.9, 0, 1], ["banner", 6.5, 0.8, 0, 2], ["banner", -6.5, 0.8, 0, 2], ["rubble", -6.3, 2.6, 0, 1]] },
     lightning: { glass: 0, icon: "bolt", string: ["hanging", 0, [0.3, 0.7]], boards: true, pieces: [["coalCrate", -5.1, 0.8, 0, 3], ["crate", -5.4, 2.1, 1, 0], ["crate", -5.4, 2.1, 0, 1, 0.75], ["barrel", -4.3, 2.9, 0, 1], ["rubble", -6.4, 0.9, 0, 1], ["gauge", 5.0, 0.9], ["cart", 5.7, 2.4, 1], ["banner", 6.6, 0.8, 0, 0], ["coil", 3.8, 3.4], ["coalCrate", 6.4, 3.4, 0, 1]] },
+    arcade: { glass: 0, icon: "banana", string: ["hanging", 0, [0.12, 0.5, 0.88]], inside: [["barrel", -2.4, -1.9, 0, 0], ["crate", 2.4, -2.0, 1, 0], ["barrel", 2.4, -2.0, 0, 1, 0.75]], ceiling: [[-2.35, 2.35, -1.5, -5.8, 3.0, [0.35, 0.8]]], pieces: [["crate", 5.2, 1.0, 0, 0], ["crate", 5.2, 1.0, 1, 1, 0.75], ["barrel", 4.4, 2.8, 0, 0], ["bench", 5.8, 3.5], ["rubble", 6.4, 2.3, 0, 1], ["banner", 6.6, 0.8, 0, 3]] }
   };
   const THEME_ICON = (slot) => slot.id === "c1" ? "favicon" : THEMES[slot.theme]?.icon || null;
   const mouthDressing = (slot, m) => {
@@ -1626,7 +1613,7 @@
         posts.push(p);
         stand("lanternPost", p.x, p.z, turns, 0, 0.7);
       }
-      const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["banner", 0.6, 5], ["rubble", 0.8]];
+      const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["banner", 0.6, 3], ["rubble", 0.8]];
       let placed = 0;
       for (let k = 0; k < 16 && placed < CAMP.length; k++) {
         const a = k / 16 * Math.PI * 2 + 0.3, x = fire.x + Math.cos(a) * 3.1, z = fire.z + Math.sin(a) * 3.1;
@@ -1846,48 +1833,18 @@
       const bounds = BL.scene.boundsOf(geometry);
       matrixGates.push({ kind: "matrix-gate", caveIndex, mouth: m, node: bars, sr: ax, cr: az, open: false, localOpen: false, locked: false, raising: false, held: false, floor: opening.floorY, ceiling: opening.ceilingY, bottom: bounds.min[1], top: bounds.max[1], minX: bounds.min[0], maxX: bounds.max[0], minZ: bars.position.z + bounds.min[2], maxZ: bars.position.z + bounds.max[2], distance: matrixTravelDistance(m.x + ax * bars.position.z, m.z + az * bars.position.z) });
     }
-    if (slot.status === "open" && slot.scene === "race") {
-      const kart = BL.raceModels.kart("#d98a2e");
-      Object.assign(kart.node.position, { x: 0, y: 0.5, z: RALLY_KART_Z });
-      kart.node.rotation.y = 0.5;
-      const plinth = createNode({ position: { x: 0, y: 0, z: RALLY_KART_Z }, geometry: hubModels.altarSlab() });
-      Object.assign(plinth.scale, { x: 1.4, y: 0.5, z: 1.4 });
-      const wheels = createNode({ position: { x: -1.7, y: 0, z: -2.6 } });
-      for (let i = 0; i < 3; i++) addChild(wheels, createNode({ position: { x: 0, y: 0.12 + i * 0.24, z: 0 }, rotation: { x: 0, y: 0, z: Math.PI / 2 }, geometry: BL.raceModels.kartWheel() }));
-      const crate = createNode({ position: { x: 1.7, y: 0, z: -3 }, rotation: { x: 0, y: 0.3, z: 0 }, geometry: hubModels.woodCrate() });
-      const barrel = createNode({ position: { x: 1.9, y: 0, z: -1.9 }, geometry: hubModels.barrel() });
-      addChild(group, plinth, kart.node, wheels, crate, barrel);
-      solids.add(plinth); solids.add(kart.node); solids.add(wheels); solids.add(crate); solids.add(barrel);
-      const roof = dropModels.roofSpot(island, m, {}, 0.8);
-      const plane = dropModels.plane();
-      Object.assign(plane.node.position, { x: 0, y: roof.y - m.floorY, z: dropModels.ROOF_BACK });
-      Object.assign(plane.node.scale, { x: 0.8, y: 0.8, z: 0.8 });
-      plane.node.rotation.x = dropModels.PARK_PITCH;
-      plane.node.matrixExterior = true;
-      const sockX = 3.2, sockZ = dropModels.ROOF_BACK + 0.6;
-      const sock = createNode({ position: { x: sockX, y: roof.y - m.floorY, z: sockZ }, geometry: dropModels.windsock() });
-      sock.matrixExterior = true;
-      addChild(group, plane.node, sock);
-      solids.add(plane.node);
-      addProp("plane", plane.node.children[0], roof.x, roof.z, 2.6).roof = roof;
-      addProp("windsock", sock, m.x + ax * sockZ + Math.cos(m.ry) * sockX, m.z + az * sockZ - Math.sin(m.ry) * sockX, 1);
-      const signX = m.x + ax * dropModels.SIGN_AT.z + Math.cos(m.ry) * dropModels.SIGN_AT.x, signZ = m.z + az * dropModels.SIGN_AT.z - Math.sin(m.ry) * dropModels.SIGN_AT.x;
-      const sign = createNode({ position: { x: dropModels.SIGN_AT.x, y: island.surfaceAt(signX, signZ) - m.floorY, z: dropModels.SIGN_AT.z }, geometry: dropModels.roofSign() });
-      sign.matrixExterior = true;
-      sign.matrixSignLiving = true;
-      addChild(group, sign);
-      addProp("sign", sign, signX, signZ, 1);
-      claim(roof.x, roof.z, 3.8);
-      launchers.push(roof);
-    } else if (slot.status === "headquarters") {
+    if (slot.status === "headquarters") {
       addChild(group, createNode({ position: { x: 0, y: 0, z: 0 }, geometry: headquartersModels.entranceRamp(), depthBias: 0.25 }));
-    } else if (slot.status === "open" && slot.scene === "mine") {
-      // Ooga Mine's mouth: a track out of the dark, a cart of glowing ore, timbers and a rack blinking inside.
-      const cart = createNode({ position: { x: 0, y: 0, z: -1.9 }, rotation: { x: 0, y: 0.05, z: 0 }, geometry: BL.mineModels.hubCart() });
-      const rack = createNode({ position: { x: 1.3, y: 0, z: -4.6 }, rotation: { x: 0, y: -0.5, z: 0 }, geometry: BL.mineModels.hubRack() });
-      addChild(group, createNode({ geometry: BL.mineModels.hubTrack() }), cart, rack);
-      solids.add(cart);
-      solids.add(rack);
+    } else if (slot.status === "open" && slot.scene === "arcade") {
+      // Ooga Arcade's mouth: two cabinets glowing in the dark inside, each showing its loop's first frame.
+      const AM = BL.arcadeModels;
+      for (const [c, x, turn] of [[AM.CABINETS[0], -1.3, 0.25], [AM.CABINETS[3], 1.3, -0.25]]) {
+        const cabinet = createNode({ position: { x, y: 0, z: -4.4 }, rotation: { x: 0, y: turn, z: 0 }, geometry: AM.cabinet(c.index) });
+        addChild(cabinet, createNode({ position: { x: 0, y: AM.SCREEN.y, z: AM.SCREEN.z }, rotation: { x: AM.SCREEN.lean, y: 0, z: 0 }, geometry: AM.attractFrames(c.game)[0], sightHidden: true }));
+        addChild(group, cabinet);
+        solids.add(cabinet);
+      }
+      arcadeMouth = { slot, x: m.x + ax * MOUTH_ACTION_Z, y: m.floorY + 1.1, z: m.z + az * MOUTH_ACTION_Z };
     } else if (slot.status === "open" && slot.scene === "lab") {
       const lab = hubModels.entropyLab(m.room, m.floorY);
       addChild(group, lab.node);
@@ -1908,7 +1865,7 @@
     } else if (slot.status === "open" && slot.scene === "factory") {
       // The Lightning Factory's tunnel: timber sets and lamps down to a phase shield like the lab's, set further in.
       const tunnel = BL.factoryModels.hubTunnel();
-      addChild(group, createNode({ geometry: tunnel.timber }), createNode({ geometry: tunnel.glow, sightHidden: true }));
+      addChild(group, createNode({ geometry: tunnel.timber }), createNode({ geometry: tunnel.glow, sightHidden: true }), createNode({ geometry: tunnel.coin, highlight: 0.6, sightHidden: true }));
       factoryMouth = { slot, mouth: m, group, opening: rim.geometry.openingBounds, phase: null };
     } else if (slot.status === "open") {
       const geometry = hubModels.caveShelves(), back = -6.5 - BL.scene.boundsOf(geometry).min[2];
@@ -2128,32 +2085,6 @@
     // Windows and ramp torches stay physical/emissive; no camera-proximity light spills into an unclaimed room.
     const sources = [hearth];
     return { node: room, entrances, mattresses, roomSigns, rampMarkers, benches, fireHazards, lights, sources, hearth, firepit, rooms: island.headquarters.rooms, windows: island.headquarters.windows, ramps: island.headquarters.ramps, openFloor: island.headquarters.room, basement, sleepMarksVisible };
-  };
-  // The launch islet (bridge, pad, tower, sign) is all solid, so an Ooga walks over the bridge onto the pad.
-  const buildLaunchSite = () => {
-    const { SITE } = rocketModels;
-    const spot = rocketModels.siteSpot(island, {});
-    launchCloudSpot = spot;
-    const site = rocketModels.site(spot);
-    addChild(root, site.node);
-    placed.push(site.node);
-    addTerrainSection(site.islet.geometry.cutawaySource, site.node, spot.y);
-    solids.add(site.islet);
-    addProp("launchpad", site.pad, spot.x, spot.z, SITE.padR);
-    addProp("tower", site.tower, spot.x + SITE.towerX, spot.z, 1.4);
-    addProp("bridge", site.bridge, spot.x, spot.bridgeZ + SITE.span / 2, SITE.width);
-    addProp("orbitsign", site.sign, spot.x + site.sign.position.x, spot.z + site.sign.position.z, 1);
-    const saved = game.state.orbit.build;
-    const rocket = rocketModels.assemble(saved && rocketParts.check(saved).ok ? saved : rocketParts.PRESETS[0].stack);
-    Object.assign(rocket.node.position, { x: spot.x, y: spot.padY, z: spot.z });
-    addChild(root, rocket.node);
-    placed.push(rocket.node);
-    for (const part of rocket.parts) addProp("rocket", part.node, spot.x, spot.z, part.part.r + 0.3);
-    claim(spot.x, spot.z, SITE.isletR + 1);
-    // Claim the meadow-to-bridge-head walk so scatter keeps scenery off it.
-    for (let z = spot.bridgeZ; z > spot.bridgeZ - 7; z -= 1.5) claim(spot.x, z, 2.4);
-    launchers.push({ x: spot.x, y: spot.padY, z: spot.z, scene: "orbit" });
-    presets.orbit = { yaw: -0.64, pitch: 0.3, dist: 22 + rocket.height, target: { x: spot.x, y: spot.padY + rocket.height * 0.45, z: spot.z } };
   };
   // An invisible one-way staircase continues from the dock into the sky. It
   // only arms from a grounded step off the outer deck: arriving from the air,
@@ -4048,10 +3979,6 @@
   const buildCloudObstacles = () => {
     cloudObstacles.length = 0;
     cloudBox(-RADIUS - 4, -30, -RADIUS - 4, RADIUS + 4, 24, RADIUS + 4);
-    const launch = launchCloudSpot, launchSite = rocketModels.SITE;
-    cloudBox(launch.x - launchSite.isletR - 2, launch.y - launchSite.isletDepth - 1, launch.z - launchSite.isletR - 2,
-      launch.x + launchSite.isletR + 2, launch.y + 24, launch.z + launchSite.isletR + 2);
-    cloudBridgeBox(launch.x, launch.bridgeZ, launch.x, launch.bridgeZ + launchSite.span, launch.y, launchSite.width);
     const pool = mempoolIsland.place, poolSite = poolModels.SITE, poolDir = poolModels.DIR;
     cloudBox(pool.x - poolSite.isletR - 4, pool.y - poolSite.isletDepth - 1, pool.z - poolSite.isletR - 4,
       pool.x + poolSite.isletR + 4, pool.y + 25, pool.z + poolSite.isletR + 4);
@@ -4603,19 +4530,6 @@
       case "gate":
         hud.toast(bifrostIsle ? "₿IFRÖST · Bifröst starts here" : `${caves.gate.name} · leads nowhere yet`);
         break;
-      case "plane":
-      case "sign":
-        enterLaunch();
-        break;
-      case "launchpad":
-      case "rocket":
-      case "tower":
-      case "orbitsign":
-        enterLaunch("orbit");
-        break;
-      case "bridge":
-        hud.toast("The planks sway. Ooga built it.");
-        break;
       case "poolstair":
       case "poolsign":
         enterScene(presets.pool, "pool");
@@ -4677,9 +4591,6 @@
       case "toucan":
         pokeBeast(o.node, o.prop);
         break;
-      case "windsock":
-        hud.toast("A fair wind for a drop.");
-        break;
       default:
         break;
     }
@@ -4718,15 +4629,7 @@
       }
       if (nearest) return nearest;
     }
-    for (let i = 0; i < openMouths.length; i++) {
-      const entry = openMouths[i], m = entry.m;
-      if (entry.slot.scene === "race" && actionWithinReach(x, y, z, entry.actionX, m.floorY + 1.1, entry.actionZ, RALLY_REACH)) return entry;
-    }
-    for (let i = 0; i < launchers.length; i++) {
-      const launcher = launchers[i];
-      if (!BL.scenes[launcher.scene || "drop"]) continue;
-      if (actionWithinReach(x, y, z, launcher.x, launcher.y + 1.1, launcher.z, LAUNCH_REACH)) return launcher;
-    }
+    if (arcadeMouth && actionWithinReach(x, y, z, arcadeMouth.x, arcadeMouth.y, arcadeMouth.z, MOUTH_REACH)) return arcadeMouth;
     return null;
   };
   const useNearbyAction = (action) => {
@@ -4739,8 +4642,7 @@
       action.localOpen = action.open = action.raising = true;
       hud.toast("The glyph gate rises.");
     } else if (action === matrixControl) toggleMatrixControl();
-    else if (action.slot) enterCave(action.slot);
-    else enterLaunch(action.scene);
+    else enterCave(action.slot);
   };
   const freeAction = () => {
     const action = nearbyAction(camera.position.x, camera.position.y, camera.position.z, MATRIX_BUTTON_REACH);
@@ -4917,11 +4819,6 @@
     if (entering) return;
     world.pilot = pilot.player ? pilot.player.traits.name : null;
     enterScene(presets[slot.scene], slot.scene);
-  };
-  const enterLaunch = (id = "drop") => {
-    if (entering) return;
-    world.pilot = pilot.player ? pilot.player.traits.name : null;
-    enterScene(presets[id], id);
   };
   const selectDebugGorilla = (entry) => {
     if (debugSelectedGorilla) for (let i = 0; i < debugGorillaHighlights.length; i++) {
@@ -5301,9 +5198,8 @@
         hud.hint(COARSE ? `Tap to ${label}` : `Press Space or tap to ${label}`);
         if (player) hud.setAct(matrixControl.pressed ? "PULL DOWN" : "PUSH UP");
       } else {
-        const label = action.slot ? "START RALLY" : action.scene === "orbit" ? "BUILD ROCKET" : "FLY PLANE";
-        hud.hint(COARSE ? `Tap ${label} to play` : `Press Space to ${action.slot ? "start Ooga Rally" : action.scene === "orbit" ? "build for Ooga Orbit" : "fly Ooga Drop"}`);
-        if (player) hud.setAct(label);
+        hud.hint(COARSE ? "Tap ENTER ARCADE to go in" : "Press Space to enter Ooga Arcade");
+        if (player) hud.setAct("ENTER ARCADE");
       }
     } else if (hadPlayerPrompt || player) pilot.showAct();
   };
@@ -5485,8 +5381,8 @@
       setVec(target, island.gate.x, GATE_VIEW.target.y, island.gate.z);
       pitch = player ? 0 : 0.2;
       dist = player ? 10 : 12;
-    } else if (name === "lab" || name === "mirror" || name === "factory") {
-      const id = name === "lab" ? "c11" : name === "factory" ? "c2" : "c1", m = island.mouths.find((mouth) => mouth.id === id);
+    } else if (name === "lab" || name === "mirror" || name === "factory" || name === "arcade") {
+      const id = name === "lab" ? "c11" : name === "factory" ? "c2" : name === "arcade" ? "c3" : "c1", m = island.mouths.find((mouth) => mouth.id === id);
       yaw = m.ry;
       // Leave enough distance to frame the sign above the mouth, including
       // arrivals viewed from the controlled character's first-person eye.
@@ -6320,8 +6216,6 @@
     // clampCamera resolves the eye's entrance crossing inside pilot.update.
     // Commit portal and Matrix state after that, before rendering, so mirror and interior never disagree.
     syncMatrixInside(player);
-    // The factory's window follows the eye, so it moves once the camera is final for the frame.
-    if (factoryMouth && factoryMouth.hall) factoryMouth.hall.update(dt, camera, RENDER_OPTS);
     if (bifrostIsle) updateBifrostWindow(dt);
     updateMatrixWorld(dt, elapsed);
     updateMatrixControl(dt, player);
@@ -6485,12 +6379,6 @@
       admitted = bridge || Math.hypot(dx, dz) + radius < s.radius;
     }
     if (!admitted && bifrostIsle) admitted = bifrostIsle.site.groundAt(x, z) > -Infinity;
-    if (!admitted && launchCloudSpot) {
-      const p = launchCloudSpot, s = rocketModels.SITE, dx = x - p.x, dz = z - p.z;
-      const bridge = Math.abs(dx) + radius <= s.width / 2 + 1e-7
-        && z >= p.bridgeZ - 0.8 - radius && z <= p.bridgeZ + s.span + 0.8 + radius;
-      admitted = bridge || Math.hypot(dx, dz) + radius < s.isletR;
-    }
     if (!admitted) return false;
     const support = solids.supportAt(x, z, y, STEP_MAX, radius);
     return support > -Infinity && support <= y + STEP_MAX && support >= y - 3.5;
@@ -7921,19 +7809,14 @@
         workZones.push({ x: m.x, z: m.z, floor: m.floorY, sr: Math.sin(m.ry), cr: Math.cos(m.ry), active: false, half: 3.4, front: 5.8 });
       }
 
-      if (slot.scene) {
-        presets[slot.scene] = mouthView(m);
-        openMouths.push({ slot, m, actionX: m.x + Math.sin(m.ry) * RALLY_KART_Z, actionZ: m.z + Math.cos(m.ry) * RALLY_KART_Z });
-      }
+      if (slot.scene) presets[slot.scene] = mouthView(m);
     }
-    for (const roof of launchers) presets.drop = { yaw: roof.ry, pitch: 0.36, dist: 14, target: { x: roof.x, y: roof.y + 1.2, z: roof.z } };
     const buildSpotsList = BUILD_DEGREES.map((deg) => {
       const { x, z } = spotAt(deg, BUILD_RADIUS, 1);
       claim(x, z, 0.9);
       return { x, z, ry: Math.atan2(-x, -z) };
     });
     buildRim();
-    buildLaunchSite();
     mempoolIsland = buildMempoolIsland();
     timechainIsland = buildTimechainIsland();
     bifrostIsle = BL.scenes.bifrost ? buildBifrostIsle(archLamp) : null;
@@ -8045,12 +7928,9 @@
     mirrorCave.shattered = false;
     mirrorCave.ripples = BL.mirrorRipples.create(mirrorCave.node);
     entropyLab.phase = BL.labPhase.create(entropyLab.group, entropyLab.mouth, entropyLab.opening);
-    // The factory's shield crests in its emitters' cyan, and on WebGL its window into the hall, which shows the page's
-    // one factory node: the island ticks it while it is here, as the hall does.
-    if (factoryMouth) {
-      Object.assign(factoryMouth, { phase: BL.labPhase.create(factoryMouth.group, factoryMouth.mouth, factoryMouth.opening, BL.factoryModels.SHIELD_Z, BL.factoryWindow.TINT), hum: 0, node: BL.factoryFeed.node(world) });
-      factoryMouth.hall = renderer.kind === "webgl2" ? BL.factoryWindow.create({ group: factoryMouth.group, mouth: factoryMouth.mouth, node: factoryMouth.node }) : null;
-    }
+    // The factory's shield crests in its emitters' cyan in front of the tunnel. The island ticks the page's one factory
+    // node while it is here, as the hall does, so walking in carries on its show.
+    if (factoryMouth) Object.assign(factoryMouth, { phase: BL.labPhase.create(factoryMouth.group, factoryMouth.mouth, factoryMouth.opening, BL.factoryModels.SHIELD_Z, FACTORY_TINT), hum: 0, node: BL.factoryFeed.node(world) });
     // ₿IFRÖST's field crests in the chamber's blue, and on WebGL shows the chamber through it; Heimdall keeps the bridge.
     if (bifrostIsle) {
       const b = bifrostIsle, p = b.site.portal, h = b.site.heimdall;
@@ -8117,13 +7997,19 @@
       surfaceAt: (x, z, y) => island.supportAt(x, z, y, 1e-6, null, PLAYER_RADIUS) });
     const sleepNavigation = headquarters.sleepNavigation = BL.headquartersSleep.create({ island, beds: bedrolls, walkable: sleepRouteClear, surfaceRoute: shared.npcPaths.route });
     const sleepRouteFrom = { x: 0, y: 0, z: 0 };
-    shared.bedRoute = (cave, bed, toBed) => sleepNavigation.route(cave.root.position.x, cave.root.position.y - cave.baseY, cave.root.position.z, bed, toBed, cave.slot?.x, cave.slot?.z);
+    // An Ooga stood up on its mattress plans from the floor under it: the planner joins a start to its graph along the
+    // island's floor both ways, and that floor never climbs back onto a bed, so a start on one would never join.
+    const planFeet = (cave) => {
+      const p = cave.root.position, feet = p.y - cave.baseY;
+      return Math.abs(bedSupportAt(p.x, p.z, feet, 1e-4, 0) - feet) < 1e-4 ? island.supportAt(p.x, p.z, feet, STEP_MAX, -120, sleepNavigation.radius) : feet;
+    };
+    shared.bedRoute = (cave, bed, toBed) => sleepNavigation.route(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, cave.slot?.x, cave.slot?.z);
+    shared.bedPlan = (cave, bed, toBed) => sleepNavigation.plan(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, cave.slot?.x, cave.slot?.z);
     shared.bedRouteClear = (cave, to) => {
       const p = cave.root.position;
       sleepRouteFrom.x = p.x; sleepRouteFrom.y = p.y - cave.baseY; sleepRouteFrom.z = p.z;
       return sleepNavigation.clearSegment(sleepRouteFrom, to, false, 0.3);
     };
-    // The Rally cave shares the island's repository, but work happens at its mirror cave.
     shared.workSites = caves.slots.filter(workCave).map((slot) => {
       const mouth = island.mouths.find((entry) => entry.id === slot.id), sr = Math.sin(mouth.ry), cr = Math.cos(mouth.ry);
 
@@ -8389,8 +8275,8 @@
     let initialCharacter = ctx.from === null && preloadedCharacter ? contributors.activeRoster.find((entry) => entry.name.toLowerCase() === preloadedCharacter) : null;
     if (ctx.from === null && (preloadedJetpackWear || preloadedEquipment) && !params.has("character") && !initialCharacter) initialCharacter = contributors.activeRoster.find((entry) => crew.stateOf(crew.cavemen.get(entry.name)) === "working") || contributors.activeRoster[0];
     const initialGorilla = initialCharacter && preloadedGorilla ? crew.cavemen.get(initialCharacter.name) : null;
-    // The Ooga that went into DSB, the Lightning Factory or ₿IFRÖST comes back out as the one played.
-    const handsBack = ctx.from === "dsb" || ctx.from === "factory" || ctx.from === "bifrost";
+    // The Ooga that went into DSB, the Lightning Factory, ₿IFRÖST or Ooga Arcade comes back out as the one played.
+    const handsBack = ctx.from === "dsb" || ctx.from === "factory" || ctx.from === "bifrost" || ctx.from === "arcade";
     const returningCharacter = handsBack ? world.pilot : null;
     if (handsBack) world.pilot = null;
     if (initialGorilla) {
@@ -8412,7 +8298,7 @@
     }
     const initialFirstPerson = ctx.from === null && preloadedFirstPerson && !initialGorilla;
     if (initialFirstPerson) pilot.enterClose(true);
-    if (returningCharacter) navigate(ctx.from === "factory" || ctx.from === "bifrost" ? ctx.from : "pile");
+    if (returningCharacter) navigate(ctx.from === "factory" || ctx.from === "bifrost" || ctx.from === "arcade" ? ctx.from : "pile");
     else if (ctx.from === "bifrost" && !ctx.place) navigate("bifrost");
     else if (!crew.sleeping && !initialGorilla && (ctx.place || preloadedView || initialCharacter || initialFirstPerson)) navigate(ctx.place || preloadedView || "pile");
     if (initialCharacter && !initialGorilla && preloadedJetpack) {
@@ -8458,13 +8344,13 @@
       root, camera, input,
       debug: {
         get timechainIsland() { return timechainIsland; },
-        get factory() { return factoryMouth && factoryMouth.hall ? factoryMouth.hall.debug : null; },
+        get factory() { return factoryMouth ? { node: factoryMouth.node } : null; },
         get bifrost() { return bifrostIsle; },
         slots: pile.slots, drops: pile.drops, core: pile.core, shell: pile.shell, delivery: pile.delivery, spillEffect: pile.spillEffect, cavemen: crew.cavemen, crates: crates.list, lab: null, hud, applyAllSwag: crew.applyAllSwag, renderLocker: crew.renderLocker, demoTip, setPileLevel: pile.setLevel, refreshStates: crew.refreshStates, trimPool: fx.trimPool,
         get shown() {
           return pile.shown;
         },
-        terrainSections, caveSections, cutawayPaths: CUTAWAY_PATH_STATE, terrainRampRoof, get cutawayTravelRamp() { return cutawayTravelRamp; }, get cutawayTravelChannel() { return cutawayTravelChannel; }, get cutawayTravelStation() { return cutawayTravelStation; }, island, mouths: island.mouths, labels, launchers, camera, weather, chain, beasts, pokeBeast, useProp, refreshChainSign, get chainSign() { return chainSign; }, get poolIsland() { return mempoolIsland; }, cameraPose: POSITION_POSE, crew, fx, controls: pilot.controls, props, altar, path: island.path.debug, headquarters, jumbotron, fireworks: launchFireworks, get fireworksPending() { return fireworksShells.length; }, clankers, clankerPlay,
+        terrainSections, caveSections, cutawayPaths: CUTAWAY_PATH_STATE, terrainRampRoof, get cutawayTravelRamp() { return cutawayTravelRamp; }, get cutawayTravelChannel() { return cutawayTravelChannel; }, get cutawayTravelStation() { return cutawayTravelStation; }, island, mouths: island.mouths, labels, camera, weather, chain, beasts, pokeBeast, useProp, refreshChainSign, get chainSign() { return chainSign; }, get poolIsland() { return mempoolIsland; }, cameraPose: POSITION_POSE, crew, fx, controls: pilot.controls, props, altar, path: island.path.debug, headquarters, jumbotron, fireworks: launchFireworks, get fireworksPending() { return fireworksShells.length; }, clankers, clankerPlay,
         scenery: {
           get candidateCount() { return scenery.length; },
           get visibleCount() { return sceneryVisible; },
@@ -8689,6 +8575,7 @@
     if (POSITION_DEBUG) updatePositionDebug(true);
     mark("visibility-start");
     fx.warmVisibility(crew);
+    fx.warmBlockers();
     mark("visibility");
     mark("covered-view-start");
     prepareCoveredView(ctx.overlay);
@@ -8775,11 +8662,8 @@
     mirrorCave.ripples.dispose();
     entropyLab.phase.dispose();
     entropyLab = null;
-    if (factoryMouth) {
-      if (factoryMouth.hall) factoryMouth.hall.dispose();
-      factoryMouth.phase.dispose();
-    }
-    factoryMouth = null;
+    if (factoryMouth) factoryMouth.phase.dispose();
+    factoryMouth = arcadeMouth = null;
     if (bifrostIsle) {
       if (bifrostIsle.window) bifrostIsle.window.dispose();
       bifrostIsle.phase.dispose();
@@ -8800,8 +8684,8 @@
     }
     for (const node of targets) input.remove(node);
     for (const node of placed) removeChild(root, node);
-    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = spots.length = chillSpots.length = openMouths.length = headquartersRimLintels.length = climbMasonry.length = launchers.length = props.length = 0;
-    launchCloudSpot = cloudRandom = null;
+    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = spots.length = chillSpots.length = headquartersRimLintels.length = climbMasonry.length = props.length = 0;
+    cloudRandom = null;
     fireHazards.length = 0;
     clankerFireReachable = null;
     workZones.length = 0;

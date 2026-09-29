@@ -9,9 +9,9 @@ import { writeCharacters } from "../scripts/characters.mjs";
 // ---- solid-props.mjs ----
 const { solidPropsProbe } = (() => {
   // Exercise the same transformed mesh queries used by hub movement.
-  // The old arch and the plane wing prove a prop's empty bounding-box space stays traversable.
+  // The old arch proves a prop's empty bounding-box space stays traversable.
   const solidPropsProbe = () => {
-    const { scene, models, hubModels, raceModels, dropModels, solidProps } = window.BL;
+    const { scene, models, hubModels, solidProps } = window.BL;
     const solids = solidProps.create(), rows = [];
     const box = scene.createNode({ geometry: models.box({ w: 2, h: 2, d: 2, color: "#fff", offset: { y: 1 } }) });
     const sync = (root) => { scene.updateWorld(root); solids.sync(); };
@@ -51,15 +51,12 @@ const { solidPropsProbe } = (() => {
       ["barrel", scene.createNode({ geometry: hubModels.barrel() })],
       ["box", scene.createNode({ geometry: hubModels.woodCrate() })],
       ["tree", scene.createNode({ geometry: hubModels.tree(0) })],
-      ["rock", scene.createNode({ geometry: hubModels.rock(0) })],
-      ["rally car", raceModels.kart("#d98a2e").node],
-      ["plane", dropModels.plane().node]
+      ["rock", scene.createNode({ geometry: hubModels.rock(0) })]
     ]) {
       solids.add(root); sync(root);
       const top = solids.supportAt(0, 0, 20, 0, 0.3);
       const side = solids.segmentClear(-4, 0.05, 0, 4, 0.05, 0, 0.3, 1.5);
       rows.push({ name: `${name} sides and landing`, ok: Number.isFinite(top) && top > 0 && !side && solids.clearAt(0, top, 0, 0.3, 1.5), top });
-      if (name === "plane") rows.push({ name: "walk below wing and land on wing", ok: solids.clearAt(2.5, 0, 0.35, 0.2, 1) && solids.supportAt(2.5, 0.35, 5, 0, 0.2) > 1.4 });
       solids.remove(root);
     }
     // Outer visible leaves, rather than the old collision crown, are the
@@ -2323,7 +2320,7 @@ const orbitFlow = async (b) => {
 // `node test/run.mjs race mine` runs the global unit tier plus those scenes; `full` runs every scene and the
 // perf floor; `perf` runs the perf floor alone; `unit` (or nothing) runs only the global tier.
 // Eight lanes saturate a 16-core box (measured 2026-09-20); raising it only adds heat.
-const SCENES = ["hub", "lab", "race", "drop", "orbit", "mine", "pool", "dsb", "factory", "bifrost"];
+const SCENES = ["hub", "lab", "race", "drop", "orbit", "mine", "pool", "dsb", "factory", "bifrost", "arcade", "skee", "hoops", "shy", "claw", "hockey", "billiards", "darts", "pinball", "ride", "invaders", "snake", "pong", "stampede", "flap", "breaker", "dash", "stacker"];
 const LANES = Number(process.env.LANES) || 8;
 const ARGS = process.argv.slice(2);
 for (const a of ARGS) if (!SCENES.includes(a) && !["unit", "perf", "full"].includes(a)) throw new Error(`Unknown argument "${a}" (unit | perf | full | ${SCENES.join(" | ")})`);
@@ -2952,8 +2949,8 @@ const npcPaths = (backend) => [`NPC paths ${backend}`, async (b) => {
   record(`NPC paths ${backend}: blocked-trail recovery can jump onto its obstacle without path hints canceling flight`, recovery.recovered && recovery.jumps > 0 && recovery.intersections === 0 && recovery.stable && recovery.maximumStep <= 3 / 30 + 1e-6, JSON.stringify(recovery));
 }];
 
-// The games' rules and saves in Node, under the same localStorage the page uses: the mine's seeded sim
-// and every game's stored best.
+// The games' rules and saves in Node, under the same localStorage the page uses: the mine's seeded sim,
+// every game's stored best, the tickets a machine spends and the jackpot wheel's odds.
 const GAME_SOURCES = ["math", "donations", "rocket-parts", "mine-rigs", "mine-sim", "game"];
 const gameRulesChecks = async () => {
   const store = new Map();
@@ -2994,8 +2991,29 @@ const gameRulesChecks = async () => {
     store.set("oogaboogaland.v1", "{not json");
     const junk = make().state.orbit.best === null;
     record("saves: every game's best survives a reload, a worse result or a crash landing never replaces it, and a malformed best, a stored crash or a broken file is dropped alone", Object.values(bests).flat().every(Boolean) && kept && dropped && junk, JSON.stringify({ bests, kept, dropped, junk }));
+    // Tickets spent at a machine (the jackpot wheel): refused, spending nothing, when they fall short or the cost is
+    // no whole number above nothing; a spend that goes through is saved.
+    const wallet = make();
+    wallet.addTickets(19);
+    const short = !wallet.spendTickets(20) && wallet.state.arcade.tickets === 19;
+    const malformed = [0, -5, 2.5, NaN, "20"].every((n) => !wallet.spendTickets(n)) && wallet.state.arcade.tickets === 19;
+    wallet.addTickets(1);
+    const spent = wallet.spendTickets(20) && wallet.state.arcade.tickets === 0 && make().state.arcade.tickets === 0;
+    record("tickets: a spend refuses when the tickets fall short or the cost is no whole number above nothing, spending nothing, and one that goes through is saved", short && malformed && spent, JSON.stringify({ short, malformed, spent }));
   }
-
+  {
+    // The jackpot wheel, from arcade-models.js on the builders it loads with: the house wins slowly, and every
+    // wedge, from a turn at rest and one far round after many spins, stops under the clapper wherever in it the spin
+    // aims, after its whole turns and less than one more.
+    for (const name of ["scene", "models", "jumbotron", "hub-models", "arcade-models"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
+    const { WHEEL_VALUES: V, WHEEL_COST: cost, wheelAt, wheelStop } = BL.arcadeModels;
+    const ev = V.reduce((s, v) => s + v, 0) / V.length, jackpot = Math.max(...V), missed = [];
+    for (const from of [0, -0.3, -1234.567]) for (let k = 0; k < V.length; k++) for (const at of [0.2, 0.5, 0.8]) {
+      const to = wheelStop(from, k, at, 3), turns = (from - to) / (Math.PI * 2);
+      if (wheelAt(to) !== k || turns < 3 || turns >= 4) missed.push({ from, k, at, got: wheelAt(to), turns });
+    }
+    record("jackpot wheel: a spin pays back 75 to 90% of its cost on average, the jackpot is ten spins' worth, and every wedge stops under the clapper wherever the spin aims in it", V.length === 20 && ev >= cost * 0.75 && ev <= cost * 0.9 && jackpot >= cost * 10 && missed.length === 0, JSON.stringify({ ev, cost, jackpot, missed: missed.slice(0, 4) }));
+  }
 };
 const wallPerformance = async (b) => {
   await b.send("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 2, mobile: false });
@@ -3435,26 +3453,18 @@ const hubRainforestSteps = { name: "rainforest bridge steps", why: "regression: 
   record("rainforest approach: Oogas walk onto the bridge and back without stopping or jumping, including the reported W-S Bitcoin combat position", r.rows.every(row => row.top > 32 && row.bottom < 27 && row.feet > 5 && row.longest < 4 && !row.airborne), JSON.stringify(r.rows));
   record("rainforest bridge: hanging vines end at the gateways instead of extending through the stair rock", r.tails === 0, JSON.stringify({ tails: r.tails }));
 } };
-// The hub is the games' menu: walk up to each and press Space, or tap the Mempool stair.
-const HUB_SPOTS = {
-  race: `(() => { const slot = window.BL.caves.slots.find((s) => s.scene === "race"), m = B.mouths.find((m) => m.id === slot.id); return { x: m.x - Math.sin(m.ry) * 1.2, y: m.floorY, z: m.z - Math.cos(m.ry) * 1.2, yaw: m.ry }; })()`,
-  drop: `(() => { const r = B.launchers.find((l) => !l.scene); return { x: r.x + 1.5, y: r.y, z: r.z, yaw: r.ry }; })()`,
-  orbit: `(() => { const r = B.launchers.find((l) => l.scene === "orbit"); return { x: r.x + 2.5, y: r.y, z: r.z, yaw: 0 }; })()`
-};
+// The island opens Ooga Arcade with Space at its mouth, and the Mempool with a tap on its stair.
 const WAIT_OUT = `(() => { const B = window.__ooga; for (let i = 0; i < 240 && (B.transitioning || B.scene === "hub"); i++) B.advance(1 / 30, 1 / 30); B.advance(0.3, 1 / 30); return B.scene; })()`;
-const hubRoutes = { name: "hub routes", why: "playthrough: every game is reached from the island the way a player gets there", run: async (b) => {
-  const reached = {};
-  for (const [id, spot] of Object.entries(HUB_SPOTS)) {
-    await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const s = ${spot}; B.pilot.navigate({ position: { x: s.x, y: s.y, z: s.z }, yaw: s.yaw, pitch: 0.4, dist: 10 }); B.advance(0.5, 1 / 60); })()`);
-    await b.key(" ");
-    reached[id] = await b.evaluate(WAIT_OUT);
-    await tourGo(b, "hub");
-  }
+const hubRoutes = { name: "hub routes", why: "playthrough: every scene the island opens is reached the way a player gets there", run: async (b) => {
+  await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"), slot = window.BL.caves.slots.find((s) => s.scene === "arcade"), m = B.mouths.find((m) => m.id === slot.id); if (B.crew.player !== a) B.pilot.possess(a); B.pilot.navigate({ position: { x: m.x - Math.sin(m.ry) * 1.2, y: m.floorY, z: m.z - Math.cos(m.ry) * 1.2 }, yaw: m.ry, pitch: 0.4, dist: 10 }); B.advance(0.5, 1 / 60); })()`);
+  await b.key(" ");
+  const reached = { arcade: await b.evaluate(WAIT_OUT) };
+  await tourGo(b, "hub");
   const t = await b.evaluate(`(() => { const B = window.__ooga, o = B.props.find((p) => p.prop === "poolstair"), w = o.node.world; B.pilot.navigate({ position: { x: w[12], y: w[13], z: w[14] }, target: { x: w[12], y: w[13], z: w[14] }, yaw: 0, pitch: 0.9, dist: 12 }); B.advance(0.6, 1 / 60); return B.project(w[12], w[13], w[14], {}); })()`);
   await b.click(t.x, t.y);
   reached.pool = await b.evaluate(WAIT_OUT);
   await tourGo(b, "hub");
-  record("hub routes: Space at the rally mouth, the plane and the rocket pad, and a tap on the Mempool stair, each enter their game", Object.entries(reached).every(([id, scene]) => id === scene), JSON.stringify(reached));
+  record("hub routes: Space at the arcade mouth and a tap on the Mempool stair each enter their scene", Object.entries(reached).every(([id, scene]) => id === scene), JSON.stringify(reached));
 } };
 const hubFall = { name: "hub fall", why: "rule: walking off the island drops the Ooga into the abyss and brings it back to the pile, still yours", run: async (b) => {
   await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"), I = B.island, ang = Math.PI / 4; if (B.crew.player !== a) B.pilot.possess(a); let r = 5; while (I.onLand(Math.sin(ang) * r, Math.cos(ang) * r)) r += 0.25; r -= 1.5; const x = Math.sin(ang) * r, z = Math.cos(ang) * r; B.pilot.navigate({ position: { x, y: I.surfaceAt(x, z), z }, yaw: ang + Math.PI, pitch: 0.4, dist: 10 }); B.advance(0.5, 1 / 60); })()`);
@@ -3578,12 +3588,12 @@ const hubMatrix = { name: "hub matrix", why: "rule: the room lever raises the mi
     regions: D.caveSections.map(entry => { const room = rooms.get(entry.region.id); return { id: entry.region.id, width: entry.region.halfWidth, depth: entry.region.halfDepth, expectedWidth: room.w / 2 + 0.45, expectedDepth: (room.to + 1.6) / 2 }; }),
     sealed: B.matrixGate.sealed.map(entry => ({ id: entry.mouth.id, visible: entry.node.visible, stop: entry.stopZ }))
   }; })()`);
-  // c2 opened onto the Lightning Factory, so it has a roof region of its own and only c3 is still sealed.
-  record("hub caves: every ordinary carved chamber feeds complete Matrix surfaces, fitted bird's-eye roof regions and the one dormant cave seal", carved.caves.length === 6 && [...new Set(carved.caves.map(cave => cave.id))].sort().join() === "c1,c10,c11,c2,c3,c9"
+  // Open and mirror caves carry a bird's-eye roof region; the sealed c9 and c10 carry a seal.
+  record("hub caves: every ordinary carved chamber feeds complete Matrix surfaces, fitted bird's-eye roof regions and the two sealed caves' seals", carved.caves.length === 6 && [...new Set(carved.caves.map(cave => cave.id))].sort().join() === "c1,c10,c11,c2,c3,c9"
     && carved.caves.every(cave => cave.terrain > 0 && cave.counts.floor > 0 && cave.counts.ceiling > 0 && cave.counts.wall > 0)
-    && carved.regions.length === 5 && carved.regions.map(region => region.id).sort().join() === "c1,c10,c11,c2,c9"
+    && carved.regions.length === 4 && carved.regions.map(region => region.id).sort().join() === "c1,c11,c2,c3"
     && carved.regions.every(region => Math.abs(region.width - region.expectedWidth) < 1e-7 && Math.abs(region.depth - region.expectedDepth) < 1e-7)
-    && carved.sealed.length === 1 && carved.sealed.map(entry => entry.id).sort().join() === "c3" && carved.sealed.every(entry => entry.visible && Number.isFinite(entry.stop)), JSON.stringify(carved));
+    && carved.sealed.length === 2 && carved.sealed.map(entry => entry.id).sort().join() === "c10,c9" && carved.sealed.every(entry => entry.visible && Number.isFinite(entry.stop)), JSON.stringify(carved));
 } };
 const hubMirror = { name: "hub mirror", why: "rule: 116 damage shatters the mirror, unlocks its gate and ends the glyph hint; a short scene trip preserves the broken mirror before its repair delay", run: async (b) => {
   const r = await b.evaluate(`(() => { const B = window.__ooga, M = B.mirrorCave, g = M.gate, w = M.node.world, G = B.matrixGate, m = M.mouth; B.pilot.navigate({ position: { x: G.x + Math.sin(m.ry) * 0.8, y: m.floorY, z: G.z + Math.cos(m.ry) * 0.8 }, yaw: m.ry, pitch: 0.3, dist: 3 }); B.advance(0.5, 1 / 60); const before = { broken: M.damage.broken, locked: g.locked, hint: M.guides.state.doorway }; M.damage.hit(115.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const whole = { broken: M.damage.broken, locked: g.locked }; M.damage.hit(0.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const u0 = M.guides.state.doorwayUpdates; B.advance(1, 1 / 60); const after = { broken: M.damage.broken, shattered: M.shattered, locked: g.locked, reveal: M.node.mirrorReveal, hint: M.guides.state.doorway, frozen: M.guides.state.doorwayUpdates === u0 }; B.go("pool"); let n = 0; while ((B.transitioning || B.scene !== "pool") && n++ < 600) B.advance(1 / 30, 1 / 30); B.go("hub"); n = 0; while ((B.transitioning || B.scene !== "hub") && n++ < 600) B.advance(1 / 30, 1 / 30); B.advance(0.5, 1 / 60); const N = B.mirrorCave; return { before, whole, after, back: { broken: N.damage.broken, shattered: N.shattered, locked: N.gate.locked, reveal: N.node.mirrorReveal, hint: N.guides.state.doorway } }; })()`);
@@ -3592,7 +3602,7 @@ const hubMirror = { name: "hub mirror", why: "rule: 116 damage shatters the mirr
 // The Canvas 2D fallback, for a device without WebGL2: every scene, entered in one page, paints real
 // colour (sampled small, after the arrival fade) and keeps the leave contract; the console stays clean.
 const canvasTour = { name: "canvas2d tour", why: "contract: the Canvas 2D fallback boots and draws every scene with the leave contract kept", run: async (b) => {
-  const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); const paint = () => { x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return seen.size; }; const rows = { hub: { kind: B.renderer.kind, colours: paint() } }; for (const id of ["lab", "race", "drop", "orbit", "mine", "pool", "hub"]) { B.go(id); let n = 0; while ((B.transitioning || B.scene !== id) && n++ < 600) B.advance(1 / 30, 1 / 30); B.advance(0.5, 1 / 30); rows[id === "hub" ? "back" : id] = { arrived: B.scene === id && !B.transitioning, colours: paint() }; } return rows; })()`);
+  const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); const paint = () => { x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return seen.size; }; const rows = { hub: { kind: B.renderer.kind, colours: paint() } }; for (const id of ["lab", "race", "drop", "orbit", "mine", "pool", "arcade", "hub"]) { B.go(id); let n = 0; while ((B.transitioning || B.scene !== id) && n++ < 600) B.advance(1 / 30, 1 / 30); B.advance(0.5, 1 / 30); rows[id === "hub" ? "back" : id] = { arrived: B.scene === id && !B.transitioning, colours: paint() }; } return rows; })()`);
   record("canvas2d tour: with WebGL2 unavailable every scene still boots, arrives and paints", r.hub.kind === "canvas2d" && Object.entries(r).every(([, row]) => row.colours >= 4 && row.arrived !== false), JSON.stringify(r));
 } };
 
@@ -4591,7 +4601,7 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
   record("birds-eye combat: inward zoom switches at relative height 21 with the same head clearance on the surface, hills, HQ and basement", state.thresholds.length === 4
     && state.thresholds.every(r => r.above.mode === "birds-eye" && r.above.relative > 21.2 && r.switched.mode === "shoulder" && r.switched.relative >= 20.99 && r.switched.relative <= 21.09 && r.frames < 150)
     && Math.max(...state.thresholds.map(r => r.switched.headClearance)) - Math.min(...state.thresholds.map(r => r.switched.headClearance)) < 0.05, JSON.stringify(state.thresholds));
-  record("birds-eye combat: zoom leaves section meshes cached, translated islands share the exact world cut height, and terrain and centered landmarks stay unchanged", state.immutable && state.regionStorage && state.sections >= 3 && state.caves > 0 && state.caves <= 8
+  record("birds-eye combat: zoom leaves section meshes cached, translated islands share the exact world cut height, and terrain and centered landmarks stay unchanged", state.immutable && state.regionStorage && state.sections >= 2 && state.caves > 0 && state.caves <= 8
     && rows.every(r => r.zoomStable && r.zoomMoved && r.caps.every(c => !c.visible || Math.abs(c.y + 0.002 - r.cutoff) < 1e-5))
     && underground.some(r => r.caps.slice(1).some(c => c.visible && c.faces > 0))
     && state.cache.every(c => c.cacheEntries <= 16) && state.cache.some(c => c.cacheEntries === 16)
@@ -5438,6 +5448,50 @@ const bifrostDsb = { name: "bifrost dsb round trip", why: "playthrough: the same
   const back = await b.evaluate(`(() => { const B = window.__ooga, d = B.scene === "bifrost" && B.bifrost, a = d && d.avatar, w = d && d.scene.windows.find((w) => w.row.scene === "dsb"), p = a && a.root.position; return { scene: B.scene, ooga: a ? a.traits.name : null, along: p ? +(p.x * w.sn + p.z * w.c - window.BL.bifrostModels.HALL.r).toFixed(2) : null, across: p ? +(p.x * w.c - p.z * w.sn).toFixed(2) : null }; })()`);
   record("bifrost dsb round trip: walking through the DSB window takes the same Ooga into DSB Land, and DSB's gate home brings it back into the chamber, standing before the DSB window", there.scene === "dsb" && there.ooga === "portlandhodl" && back.scene === "bifrost" && back.ooga === "portlandhodl" && back.along > -3.5 && back.along < -2 && Math.abs(back.across) < 0.5, JSON.stringify({ there, back }));
 } };
+const arcadeWalking ={ name: "arcade walking", why: "rule: W A S D walk the visitor's Ooga their way on screen in Ooga Arcade, as they do on the island", run: async (b) => {
+  const ooga = await walkKeys(b, "portlandhodl", 0, -1, [0, 2.2], 0.5);
+  record("arcade walking: W A S D walk the visitor's Ooga away, left, back and right on screen on the hall floor from two camera angles", allWalk(ooga), JSON.stringify(ooga));
+} };
+const arcadePlay = { name: "arcade play", why: "rule: a cabinet starts its game, the game's exit comes back to that cabinet as the same Ooga, and Escape leaves for the island", run: async (b) => {
+  await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"), s = window.BL.arcadeModels.CABINETS[0].play; if (B.crew.player !== a) B.pilot.possess(a); a.root.position.x = s.x; a.root.position.z = s.z; B.advance(0.2, 1 / 60); })()`);
+  await b.key(" ");
+  const played = await untilPage(b, 'B.scene === "race" && !B.transitioning', 15000);
+  await b.evaluate(`(() => { const go = document.querySelector('[data-intro="race"] [data-action="intro-go"]'); if (go && go.offsetParent) go.click(); document.querySelector('nav[data-scene="race"] .leave').click(); })()`);
+  await untilPage(b, 'B.scene === "arcade" && !B.transitioning', 15000);
+  const back = await b.evaluate(`(() => { const B = window.__ooga, p = B.pilot.player, s = window.BL.arcadeModels.CABINETS[0].play; return { scene: B.scene, who: p && p.traits.name, off: p ? Math.hypot(p.root.position.x - s.x, p.root.position.z - s.z) : null }; })()`);
+  await b.key("Escape");
+  await untilPage(b, 'B.scene === "hub" && !B.transitioning', 15000);
+  const out = await b.evaluate(`(() => { const B = window.__ooga, p = B.pilot.player; return { scene: B.scene, who: p && p.traits.name }; })()`);
+  record("arcade play: Space at the Rally cabinet starts Ooga Rally, leaving the race returns the same Ooga to that cabinet, and Escape takes them out to the island", played && back.scene === "arcade" && back.who === "portlandhodl" && back.off < 0.5 && out.scene === "hub" && out.who === "portlandhodl", JSON.stringify({ played, back, out }));
+} };
+const arcadeMachine = { name: "arcade machine", why: "rule: Space at a carnival machine opens its game, and leaving the game brings the same Ooga back to that machine", run: async (b) => {
+  await b.evaluate(`(() => { const B = window.__ooga, st = B.arcade.stations.find((s) => s.kind === "machine" && s.game.kind === "skee"), p = B.pilot.player.root.position; p.x = st.play.x; p.z = st.play.z; B.advance(0.2, 1 / 60); })()`);
+  await b.key(" ");
+  const opened = await untilPage(b, 'B.scene === "skee" && !B.transitioning', 15000);
+  // The first Escape closes the title card, the second leaves the game.
+  await b.key("Escape");
+  await b.evaluate("window.__ooga.advance(0.1, 1 / 60)");
+  await b.key("Escape");
+  await untilPage(b, 'B.scene === "arcade" && !B.transitioning', 15000);
+  const back = await b.evaluate(`(() => { const B = window.__ooga, st = B.arcade.stations.find((s) => s.kind === "machine" && s.game.kind === "skee"), p = B.pilot.player; return { scene: B.scene, who: p && p.traits.name, off: p ? Math.hypot(p.root.position.x - st.play.x, p.root.position.z - st.play.z) : null }; })()`);
+  record("arcade machine: Space at the skee-ball machine opens skee-ball, and Escape brings the same Ooga back to the machine", opened && back.scene === "arcade" && back.who === "portlandhodl" && back.off < 0.5, JSON.stringify({ opened, back }));
+} };
+// A carnival game from its title card to its results: a press every `step` seconds (the hoop shot presses only
+// outside the green, so the first round is missed and ends on time), then the saved best and the tickets it paid.
+const carnivalPlay = (kind, step) => ({ name: `${kind} playthrough`, why: "playthrough: the carnival game runs from its title card through its rounds to results, and saves its best and the tickets it paid", run: async (b) => {
+  const before = await b.evaluate("window.__ooga.game.state.arcade.tickets");
+  await b.key("Enter");
+  await b.evaluate("window.__ooga.advance(3.5, 1 / 60)");
+  for (let i = 0; i < 400 && (await b.evaluate("window.__ooga.carnival.phase")) === "play"; i++) {
+    const s = await b.evaluate("window.__ooga.carnival.status");
+    if (kind !== "hoops" || s.meter < s.window0 || s.meter > s.window1) await b.key(" ");
+    await b.evaluate(`window.__ooga.advance(${step}, 1 / 60)`);
+  }
+  await b.evaluate("window.__ooga.advance(1.5, 1 / 60)");
+  const r = await b.evaluate(`(() => { const B = window.__ooga, a = B.game.state.arcade; return { phase: B.carnival.phase, score: B.carnival.status.score, best: a["${kind}"], tickets: a.tickets, paid: B.carnival.tickets(B.carnival.status.score), shown: !document.getElementById("carnival-results").hidden }; })()`);
+  // The run pays once: an end reported twice (a later substep of the same frame) once paid its tickets again.
+  record(`${kind} playthrough: the game reaches its results card, and its best and tickets are saved, paid once`, r.phase === "results" && r.shown && r.best === r.score && r.tickets === before + r.paid, JSON.stringify({ ...r, before }));
+} });
 const factoryCanvas = { name: "factory canvas2d", why: "contract: the Canvas 2D fallback boots and draws the factory", run: async (b) => {
   const r = await b.evaluate(`(() => { const B = window.__ooga, c = document.getElementById("scene"), t = document.createElement("canvas"); t.width = t.height = 8; const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, 8, 8); const d = x.getImageData(0, 0, 8, 8).data, seen = new Set(); for (let i = 0; i < d.length; i += 4) seen.add(d[i] + "," + d[i + 1] + "," + d[i + 2]); return { kind: B.renderer.kind, scene: B.scene, colours: seen.size }; })()`);
   record("factory canvas2d: with WebGL2 unavailable the factory still boots and paints", r.kind === "canvas2d" && r.scene === "factory" && r.colours >= 4, JSON.stringify(r));
@@ -6772,6 +6826,24 @@ scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas
 scene("bifrost", { url: hubPage(src, "solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
 scene("bifrost", { label: "dsb round trip", query: "character=portlandhodl", steps: [bifrostDsb] });
 scene("bifrost", { label: "canvas2d", url: hubPage(src, "canvas2d=1"), steps: [bifrostCanvas] });
+scene("arcade", { query: "character=portlandhodl", steps: [arcadeWalking, arcadeMachine, arcadePlay, trip("arcade")] });
+scene("skee", { steps: [carnivalPlay("skee", 0.5), trip("skee")] });
+scene("hoops", { steps: [carnivalPlay("hoops", 0.2), trip("hoops")] });
+scene("shy", { steps: [carnivalPlay("shy", 0.7), trip("shy")] });
+scene("claw", { steps: [carnivalPlay("claw", 0.6), trip("claw")] });
+scene("hockey", { steps: [carnivalPlay("hockey", 0.5), trip("hockey")] });
+scene("billiards", { steps: [carnivalPlay("billiards", 0.8), trip("billiards")] });
+scene("darts", { steps: [carnivalPlay("darts", 0.5), trip("darts")] });
+scene("pinball", { steps: [carnivalPlay("pinball", 0.5), trip("pinball")] });
+scene("ride", { steps: [carnivalPlay("ride", 0.2), trip("ride")] });
+scene("invaders", { steps: [carnivalPlay("invaders", 0.25), trip("invaders")] });
+scene("snake", { steps: [carnivalPlay("snake", 0.5), trip("snake")] });
+scene("pong", { steps: [carnivalPlay("pong", 0.5), trip("pong")] });
+scene("stampede", { steps: [carnivalPlay("stampede", 0.5), trip("stampede")] });
+scene("flap", { steps: [carnivalPlay("flap", 0.5), trip("flap")] });
+scene("breaker", { steps: [carnivalPlay("breaker", 0.5), trip("breaker")] });
+scene("dash", { steps: [carnivalPlay("dash", 0.5), trip("dash")] });
+scene("stacker", { steps: [carnivalPlay("stacker", 0.5), trip("stacker")] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
 scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
@@ -6787,6 +6859,7 @@ scene("mine", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("mine", { card: 
 scene("pool", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("pool", { required: ["#joy-move", "#joy-look", ".leave"] })] });
 scene("factory", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("factory", { required: ["#joy-move", "#joy-look", ".leave"] })] });
 scene("bifrost", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("bifrost", { required: ["#joy-move", "#joy-look", ".leave"] })] });
+scene("arcade", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("arcade", { required: ["#joy-move", "#joy-look", ".leave"] })] });
 
 // DSB has no hub entrance during this merge. Exercise the existing world.pilot
 // contract explicitly; no new player-facing route is introduced by the fixture.
@@ -6857,7 +6930,7 @@ scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ nam
     const sources = name => policy.split(";").map(s => s.trim().split(/\\s+/)).find(s => s[0] === name).slice(1).sort().join("|");
     return sources("connect-src") === ["https:", "wss:"].sort().join("|") && sources("media-src") === "https://stream.noderunnersradio.com" && !policy.includes("unsafe-");
   })()`));
-  record("dsb registry: Mine owns c10 and DSB is internally addressable without a cave", await b.evaluate(`(BL.caves.slots.find(s => s.id === "c10").name === "Ooga Mine" && BL.caves.slots.find(s => s.id === "c10").scene === (BL.scenes.mine ? "mine" : null)) && !BL.caves.slots.some(s => s.scene === "dsb") && !!BL.scenes.dsb`));
+  record("dsb registry: c10 stays sealed and DSB is internally addressable without a cave", await b.evaluate(`(BL.caves.slots.find(s => s.id === "c10").status === "dark" && BL.caves.slots.find(s => s.id === "c10").scene === null) && !BL.caves.slots.some(s => s.scene === "dsb") && !!BL.scenes.dsb`));
   record("dsb compatibility: hub keeps the Agent module without spawning a standalone gorilla", await b.evaluate(`__ooga.scene === "hub" && !__ooga.agent && !!BL.agent && !!BL.characters.get("rules-without-rulers") && Object.hasOwn(__ooga, "agent") && Object.hasOwn(__ooga, "dsb") && !__ooga.dsb`));
   await b.evaluate(`(() => {
     const B = __ooga, cave = B.cavemen.get("rules-without-rulers");
@@ -7514,7 +7587,7 @@ for (const backend of ["webgl2", "canvas2d"]) scene("dsb", { label: `dsb land ${
   record("dsb data: validates and orders feeds, rejects stale ticks, caps history", !data.bad && data.good && !data.stale && data.count === 48 && data.size === 240 && data.price === 299, JSON.stringify(data));
   await dsbExit(b);
   const hub = await b.evaluate(`({ scene: __ooga.scene, dsb: BL.caves.slots.find((s) => s.id === "c10"), sheet: document.getElementById("sheet").hidden, body: document.body.classList.contains("dsb-active") })`);
-  record("dsb return: restores Bifrost and interface without changing Mine registration", hub.scene === "bifrost" && hub.dsb.scene === null && hub.dsb.status === "dark" && hub.dsb.name === "Ooga Mine" && !hub.sheet && !hub.body, JSON.stringify(hub));
+  record("dsb return: restores Bifrost and interface and leaves c10 sealed", hub.scene === "bifrost" && hub.dsb.scene === null && hub.dsb.status === "dark" && hub.dsb.name === null && !hub.sheet && !hub.body, JSON.stringify(hub));
   record("dsb land: console remains clean", b.logs.length === 0, b.logs.join(" | "));
 } }] });
 
@@ -7576,7 +7649,7 @@ scene("dsb", { label: "lifecycle", url: hubPage(src), steps: [{ name: "dsb lifec
   record("soak: dsb cycles: GPU records, listeners and heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
 } }] });
 
-scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "factory lifecycle", why: "contract: repeated factory visits release the window and hall's listeners, nodes and GPU resources while retaining one bounded shared node", run: async (b) => {
+scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "factory lifecycle", why: "contract: repeated factory visits release the hall's listeners, nodes and GPU resources while retaining one bounded shared node", run: async (b) => {
   const { rendered, settled, snapshot, travel, heapDetail, within } = await dsbSoak(b);
   await b.evaluate(`(() => {
     const node = __ooga.factory.node, feed = node.feed, subscribe = feed.subscribe;
@@ -7587,20 +7660,18 @@ scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "facto
       return () => { if (live) { live = false; __factoryLife.subscriptions--; } return off(); };
     };
   })()`);
-  // Warm both scenes and replace the window's initial, uninstrumented subscription.
+  // Warm both scenes, so the counts below start from a visit made after the instrumenting.
   await travel("factory"); await travel("hub"); await settled(); await rendered(2);
   const before = await snapshot(), visits = [];
   for (let i = 0; i < 6; i++) {
     await travel("factory"); await travel("hub"); await settled(); await rendered(2);
     visits.push(await b.evaluate(`(() => {
-      const f = __ooga.factory, n = f.node;
-      return { same: n === __factoryLife.node, subscriptions: __factoryLife.subscriptions,
-        lines: n.placeOf.size, places: n.bays.length + n.stands.length, sats: f.sats,
-        finite: Object.values(f.batches).every((b) => b.instanceCount * 20 <= b.instanceData.length && b.instanceData.every(Number.isFinite)) };
+      const n = __ooga.factory.node;
+      return { same: n === __factoryLife.node, subscriptions: __factoryLife.subscriptions, lines: n.placeOf.size, places: n.bays.length + n.stands.length };
     })()`));
   }
   const after = await snapshot(), same = (key) => before.stats[key] === after.stats[key];
-  record("soak: factory cycles: one bounded node and one view subscription survive six round trips without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.subscriptions === 1 && v.lines <= v.places && v.sats <= 48 && v.finite)
+  record("soak: factory cycles: one bounded node survives six round trips, the hall's subscription released, without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.subscriptions === 0 && v.lines <= v.places)
     && same("allNodes") && same("targets") && same("dom") && after.stats.tweens === 0, JSON.stringify({ visits, before: before.stats, after: after.stats }));
   record("soak: factory cycles: GPU records, listeners and retained heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
 } }] });
@@ -8238,7 +8309,7 @@ const unitChecks = async () => {
   }
   {
     const meshes = solidPropsProbe();
-    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings across tree crowns while preserving gate and aircraft openings`, meshes.length === 16 && meshes.every((row) => row.ok), JSON.stringify(meshes));
+    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings across tree crowns while preserving the gate's openings`, meshes.length === 14 && meshes.every((row) => row.ok), JSON.stringify(meshes));
   }
   {
     const r = windowFlareProbe();
