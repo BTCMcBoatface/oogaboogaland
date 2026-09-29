@@ -390,7 +390,10 @@
     go("hub");
   };
   const onKey = (e) => {
+    if ((e.key === "x" || e.key === "X") && !e.repeat && pilot.modeAction("mode-toggle")) return true;
     if ((e.key === "1" || e.key === "2") && pilot.weaponMode(Number(e.key))) return true;
+    if (e.key === "g" || e.key === "G") return pilot.weaponAction("weapon-toggle");
+    if (e.key === "v" || e.key === "V") return pilot.weaponAction("weapon-fire");
     if (e.key === "Escape") {
       leaveCave();
       return true;
@@ -752,6 +755,7 @@
     camera = createCamera({ fov: 55, near: 0.3, far: 150 });
     root = createNode();
     hud = hudMod.create({ roster: contributors.activeRoster, catalog: models.SWAG, tierColors: models.TIER_COLORS, renderIcon: hudMod.renderIcon, lootEnabled: ctx.lootEnabled });
+    hud.setAreaLabel("LF");
     if (window.matchMedia("(max-width: 720px), (max-height: 500px)").matches) hud.el.sheet.dataset.open = "false";
     hooks = {};
     input = interactMod.create({ canvas: ctx.canvas, renderer, camera, hooks });
@@ -802,6 +806,8 @@
     hud.onAction((action) => {
       if (action === "leave") leaveCave();
       else if (action === "reset-view") pilot.goPreset("entrance");
+      else if (action === "act") pilot.action();
+      else if (action.startsWith("mode-")) pilot.modeAction(action);
       else if (action.startsWith("weapon-") || action === "magazine-swap") pilot.weaponAction(action);
     });
     fx = fxMod.create({ root, input, hooks, hud, game, world, renderer, camera, overlay: ctx.overlay, tickerAt: { x: 0, y: 14, z: -4 } });
@@ -819,7 +825,9 @@
     const playerName = named ? named.name : world.pilot && contributors.roster.some((c) => c.name === world.pilot) ? world.pilot : null;
     world.pilot = null;
     if (playerName) {
-      playerWorld = { level: 0, weapons: new Map(), magazine: { owned: false, count: 0, ammo: 0, carrier: null } };
+      // Keep the visitor's weapons and magazines across the doorway. The
+      // factory has no banana pile, so its private pile level stays zero.
+      playerWorld = { level: 0, weapons: world.weapons, magazine: world.magazine };
       const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor, flyable: flyableFor, ceilingAt: ceilingFor, ladders: LAYOUT.ladders, onBodyMove: resolveLanding, clipProjectileTarget, absorbProjectile, reloadPolicy };
       shared.onModelChange = () => {
         if (!avatar) return;
@@ -827,9 +835,12 @@
         for (const t of scene.tunnels) t.body.refresh(avatar.root);
       };
       people = shared.crew = BL.crew.create(shared);
+      world.weapons = playerWorld.weapons;
+      world.magazine = playerWorld.magazine;
       pilot.bind(shared);
       avatar = people.cavemen.get(playerName);
       pilot.possess(avatar);
+      people.selectWeapon(avatar.weapon.selectedSlot, avatar);
       // An arrival, as on the island: the Ooga stands a step inside the gate facing the core and the view starts
       // settled over its shoulder, never sweeping in from wherever the new camera began.
       pilot.navigate(ARRIVAL);
@@ -1233,9 +1244,10 @@
     for (const g of scene.crew) g.agent.dispose();
     scene.gate.phase.dispose();
     for (const t of scene.tunnels) { t.ripples.dispose(); t.body.dispose(); }
+    // Save the carry/combat choice while the controlled actor still exists.
+    pilot.dispose();
     if (people) people.dispose();
     fx.dispose();
-    pilot.dispose();
     for (const node of targets) input.remove(node);
     targets.length = 0;
     while (root.children.length) removeChild(root, root.children[root.children.length - 1]);

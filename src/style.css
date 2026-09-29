@@ -1757,7 +1757,7 @@ body[data-active-scene="mine"] .mode-hud {
   width: 100%;
   height: 100%;
   background: #ffd84a;
-  transform: scaleY(0.25);
+  transform: scaleY(0.5);
   transform-origin: bottom;
 }
 
@@ -1779,6 +1779,18 @@ body[data-active-scene="mine"] .mode-hud {
   height: 100%;
   background: #ffd84a;
   transform-origin: bottom;
+}
+
+.jetpack-compact-fuel::after {
+  content: "";
+  position: absolute;
+  bottom: 20%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: none;
 }
 
 .jetpack-compact-fuel[data-level="low"] .jetpack-compact-fuel-fill {
@@ -2026,6 +2038,7 @@ body[data-active-scene="mine"] .mode-hud {
 }
 
 .jetpack-fuel {
+  position: relative;
   height: 8px;
   overflow: hidden;
   border-radius: 2px;
@@ -2041,12 +2054,24 @@ body[data-active-scene="mine"] .mode-hud {
   transform-origin: left;
 }
 
+.jetpack-hud[data-equipped="true"] .jetpack-fuel-fill {
+  background: #ffd84a;
+}
+
 .jetpack-fuel[data-level="low"] .jetpack-fuel-fill {
   background: var(--danger);
 }
 
-.jetpack-hud[data-equipped="true"] .jetpack-fuel-fill {
-  background: #ffd84a;
+.jetpack-fuel::after {
+  content: "";
+  position: absolute;
+  left: 20%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: none;
 }
 
 @media (max-width: 360px) {
@@ -2523,6 +2548,9 @@ body[data-active-scene="mine"] .mode-hud {
 }
 
 .board-page {
+  display: grid;
+  place-items: center;
+  padding: 0;
   height: 32px;
   border: 2px solid var(--wood-edge);
   border-radius: 6px;
@@ -2531,6 +2559,18 @@ body[data-active-scene="mine"] .mode-hud {
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
+}
+
+.board-page svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+  pointer-events: none;
+}
+
+.board-pause[aria-pressed="false"] .board-play,
+.board-pause[aria-pressed="true"] .board-pause-bars {
+  display: none;
 }
 
 /* A one-page board keeps the caption centred: the chevrons keep their columns, unseen. */
@@ -2545,6 +2585,141 @@ body[data-active-scene="mine"] .mode-hud {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   overflow-wrap: anywhere;
+}
+
+.board-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.board-caption[hidden], .board-pause[hidden], .board-resize[hidden] {
+  display: none;
+}
+
+.board-pause {
+  width: 44px;
+}
+
+/* The Oogatron is a window over the island, without a modal backdrop or input barrier. */
+.board-modal.board-floating[open] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: none;
+  max-height: none;
+  padding: calc(8px * var(--board-scale)) calc(10px * var(--board-scale));
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 11px), repeating-linear-gradient(180deg, var(--plank) 0 34px, var(--wood-edge) 34px 36px, var(--wood) 36px 70px, var(--wood-edge) 70px 72px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: calc(8px * var(--board-scale));
+  overflow: hidden;
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.board-floating .panel-head {
+  display: grid;
+  grid-template-columns: calc(28px * var(--board-scale)) minmax(0, 1fr) calc(28px * var(--board-scale));
+  align-items: center;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.board-floating .panel-head h2 {
+  margin: 0;
+  font-size: calc(14px * var(--board-scale));
+  text-align: center;
+}
+
+.board-filter[hidden], .board-filter-menu[hidden] { display: none; }
+.board-filter svg { display: block; width: 1em; height: 1em; margin: auto; pointer-events: none; }
+.board-filter[data-active="true"] { color: var(--accent); border-color: var(--accent); }
+.board-filter-menu {
+  position: absolute;
+  inset: calc(44px * var(--board-scale)) calc(10px * var(--board-scale)) calc(10px * var(--board-scale));
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: calc(8px * var(--board-scale));
+  padding: calc(8px * var(--board-scale));
+  border: 2px solid var(--wood-edge);
+  border-radius: 6px;
+  background: var(--tablet);
+  font-size: calc(12px * var(--board-scale));
+}
+.board-filter-tabs { display: flex; gap: calc(6px * var(--board-scale)); }
+.board-filter-tabs button, .board-filter-done {
+  padding: calc(6px * var(--board-scale)) calc(10px * var(--board-scale));
+  border: 2px solid var(--wood-edge);
+  border-radius: 5px;
+  background: var(--wood-edge);
+  color: var(--paper);
+  font: inherit;
+  cursor: pointer;
+}
+.board-filter-tabs button { flex: 1; }
+.board-filter-tabs [aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
+.board-filter-list { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.board-filter-list label { display: flex; align-items: center; gap: calc(8px * var(--board-scale)); padding: calc(5px * var(--board-scale)); overflow-wrap: anywhere; cursor: pointer; }
+.board-filter-list input { flex: none; width: calc(15px * var(--board-scale)); height: calc(15px * var(--board-scale)); margin: 0; accent-color: var(--accent); }
+
+.board-floating .modal-close {
+  margin: 0;
+  width: calc(28px * var(--board-scale));
+  height: calc(28px * var(--board-scale));
+  font-size: calc(18px * var(--board-scale));
+}
+
+.board-floating .board-screen {
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  object-fit: contain;
+}
+
+.board-floating .board-nav {
+  grid-template-columns: calc(36px * var(--board-scale)) minmax(0, 1fr) calc(36px * var(--board-scale));
+  gap: calc(8px * var(--board-scale));
+}
+
+.board-floating .board-page {
+  height: calc(32px * var(--board-scale));
+  font-size: calc(22px * var(--board-scale));
+}
+
+.board-floating .board-pause {
+  width: calc(44px * var(--board-scale));
+}
+
+.board-floating .board-dots {
+  margin: 0;
+  gap: calc(7px * var(--board-scale));
+}
+
+.board-floating .board-dot {
+  width: calc(12px * var(--board-scale));
+  height: calc(12px * var(--board-scale));
+}
+
+.board-floating .help[hidden] {
+  display: none;
+}
+
+.board-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: calc(20px * var(--board-scale));
+  height: calc(20px * var(--board-scale));
+  padding: 0;
+  border: 0;
+  background: repeating-linear-gradient(135deg, transparent 0 4px, var(--paper) 4px 6px);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  cursor: nwse-resize;
+  touch-action: none;
 }
 
 .board-dots {

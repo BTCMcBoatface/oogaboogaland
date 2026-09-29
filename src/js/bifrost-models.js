@@ -6,8 +6,8 @@
 //
 // A window is a row in `WINDOWS` and a slot in `SLOTS`, in the same order. A `travel` row walks through to its
 // scene, and looks through a short passage lined with the field's blue onto a picture of that world (the scene
-// takes the picture); a world not open yet is a `mirror`, a reflector that sends whoever touches it back into the
-// hall. Opening a world is changing its row, and giving the scene its picture and stand-in.
+// takes the picture); a world not open yet is a `mirror`, a reflector linked to the next mirror in the hall.
+// Opening a world is changing its row, and giving the scene its picture and stand-in.
 //
 // The name is carved in raised gilt letters (`word`), chiselled strokes swept along each letter's centre line,
 // since the island's 3x5 sign alphabet has no ₿ or Ö. `supportAt`, `clearAt` and `walkable` are the walkable
@@ -592,16 +592,14 @@
     return noShadow(merge(...parts));
   });
   // A window's mirror, `MIRROR_Z` past the wall's face inside its arch: one quad facing +z at z 0, a reflector keyed on
-  // its own geometry, so each window has a glass of its own (by slot). `flash` is the same opening in the field's blue
-  // a hair in front, which the scene fades in when the glass sends someone back; `backing` closes the arch behind the
-  // glass, which shows nothing until its first capture and on Canvas 2D only its sheen. Every window shares those two.
+  // its own geometry, so each window has a glass of its own (by slot). `backing` closes the arch behind the glass,
+  // which shows nothing until its first capture and on Canvas 2D only its sheen. Every window shares the backing.
   const MIRROR_Z = 0.25;
   const quadAt = (z, color, emissive) => ({
     verts: [-WINDOW.halfW, 0.05, z, WINDOW.halfW, 0.05, z, WINDOW.halfW, WINDOW_TOP, z, -WINDOW.halfW, WINDOW_TOP, z],
     faces: [{ i: [0, 1, 2, 3], color: hexToRgb(color), emissive }], lines: [], castShadow: false
   });
   const mirrorShared = cached(() => ({
-    flash: quadAt(0.03, "#5fb8ff", 1),
     backing: box({ w: 2 * WINDOW.halfW + 0.4, h: WINDOW_TOP + 0.4, d: 0.2, color: "#0a0d16", offset: { y: (WINDOW_TOP + 0.4) / 2, z: -MIRROR_Z - 0.35 } })
   }));
   const mirror = variants(() => ({ glass: { ...quadAt(0, "#8395a6", 0), reflector: true }, ...mirrorShared() }));
@@ -830,8 +828,9 @@
     ...DRESS.flatMap(([, x, z, , , r]) => [x, z, r])
   ]);
   // How far past the wall's face a walker's body may reach in each window: a traveller walks on through the field
-  // while the scene fades; a mirror stops them just short of the glass.
-  const reachOf = (kind) => kind === "travel" ? WINDOW.plane + WINDOW.recess : MIRROR_Z - 0.05;
+  // while the scene fades; a linked mirror allows the body's centre across the
+  // glass before the scene carries that step out of its destination mirror.
+  const reachOf = (kind) => (kind === "travel" ? WINDOW.plane : MIRROR_Z) + WINDOW.recess;
   const clearAt = (x, z, radius, kinds) => {
     const r = Math.hypot(x, z);
     if (r < CORE.plinth + radius) return false;

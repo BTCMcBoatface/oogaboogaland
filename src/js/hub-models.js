@@ -593,8 +593,13 @@
     };
     for (const x of [-half + 1.17, 0, half - 1.17]) {
       const desk = place(labDesk(), x, back), display = createLabScreen(desk, stations.length, 0, x ? codeGeometry[0] : null);
+      if (!x) {
+        display.work = createLabScreen(desk, stations.length, 0, codeGeometry[0]);
+        display.work.node.visible = false;
+        addChild(node, display.work.node);
+      }
       addChild(node, display.node); displays.push(display);
-      stations.push({ x, y: 0, z: rearWork, heading: Math.PI, kind: "type", enabled: x !== 0 });
+      stations.push({ x, y: 0, z: rearWork, heading: Math.PI, kind: "type", overflow: x === 0 });
     }
     const sideZ = -Math.max(room.from + 1.4, 2.17);
     for (const side of [-1, 1]) {
@@ -606,9 +611,9 @@
         const offset = (i - 1) * 0.9, front = -0.03;
         const home = { x: bench.position.x + Math.cos(facing) * offset + Math.sin(facing) * front,
           y: 1.14, z: i === 2 ? -1.08 : side < 0 ? -2.3 - i * 0.8 : -2.5 - i * 0.68 };
-        const kind = side > 0 && i === 2 ? "die" : i === 1 ? "beaker" : "flask";
+        const kind = i === 2 ? side > 0 ? "die" : "beaker" : i === 1 ? "beaker" : "flask";
         const geometry = kind === "die" ? labDie() : kind === "beaker" ? labBeaker(side > 0 ? 1 : 0) : BL.agent.labFlaskGeometry(side > 0 ? 1 : 0);
-        if (i === 1) geometry.labGripY = 0.3;
+        if (kind === "beaker") geometry.labGripY = 0.3;
         const item = createNode({ geometry, position: { ...home }, rotation: { x: 0, y: facing, z: 0 } });
         BL.models.attachGlassShell(item);
         addChild(node, item);
@@ -622,15 +627,21 @@
             minZ: kind === "die" ? -1.5 : sideZ - 1.3, maxZ: sideZ + 1.3, y: 1.13 },
           pickup: { x: home.x, y: home.y + geometry.labGripY, z: home.z } });
       }
-      stations.push({ x: side * (half - 1.78), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side });
+      stations.push({ x: side * (half - 1.78), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side, contact: screen });
     }
     for (const side of [-1, 1]) stations.push({ x: side * (half - 0.44 - 1.213094), y: 0, z: -1.08 + side * 0.272893, heading: side * Math.PI / 2, kind: "carry", side });
-    const updateScreens = (dt, activeMask) => {
-      if (!activeMask || !(dt > 0)) return false;
+    const updateScreens = (dt, activeMask, claimedMask = activeMask) => {
       let changed = false;
       for (let i = 0; i < displays.length; i++) {
-        const display = displays[i];
-        if (!display.strips.length || !(activeMask & (1 << display.station))) continue;
+        let display = displays[i];
+        if (display.work) {
+          const occupied = !!(claimedMask & (1 << display.station));
+          if (display.work.node.visible !== occupied) {
+            display.work.node.visible = occupied; display.node.visible = !occupied; changed = true;
+          }
+          display = display.work;
+        }
+        if (!(dt > 0) || !display.strips.length || !(activeMask & (1 << display.station))) continue;
         const span = LAB_CODE.length * 0.088;
         display.clock = (display.clock + dt) % (span / LAB_SCROLL_SPEED);
         const top = (display.kind ? 2.59 : 2.04) + display.clock * LAB_SCROLL_SPEED;
@@ -850,15 +861,32 @@
     if (geo.normals) padNormals(geo);
     return geo;
   };
-  const cartoonTree = (i, rand) => {
+  // The drawn leaves extend beyond the old solid crown. Their upward faces
+  // catch landings, but never become walls or ceilings for walkers below.
+  // Built once with the tree and indexed by solidProps with its trunk shell.
+  const canopySupport = (geo, from, to = geo.faces.length) => {
+    const faces = [], v = geo.verts;
+    for (let f = from; f < to; f++) {
+      const face = geo.faces[f], a = face.i[0] * 3;
+      for (let i = 1; i + 1 < face.i.length; i++) {
+        const b = face.i[i] * 3, c = face.i[i + 1] * 3;
+        const ny = (v[b + 2] - v[a + 2]) * (v[c] - v[a]) - (v[b] - v[a]) * (v[c + 2] - v[a + 2]);
+        if (ny > 1e-10) faces.push({ i: [a / 3, b / 3, c / 3], color: face.color, emissive: 0, supportOnly: true });
+      }
+    }
+    return { verts: v, faces, lines: [] };
+  };
+  const cartoonTree = (i, rand, shell) => {
     const geo = { verts: [], faces: [], lines: [], smooth: true, normals: [] }, tones = CANOPIES[i].map(hexToRgb);
     limb(geo, 0, -0.1, 0, 0.05, 2.1, 0.02, 0.24, 0.14, 8, BARK[0]);
     limb(geo, 0.05, 1.55, 0, 0.62, 1.95, 0.02, 0.09, 0.05, 6, BARK[1]);
     if (i % 2) limb(geo, 0, 1.5, -0.1, -0.7, 1.9, -0.3, 0.08, 0.05, 6, BARK[1]);
     // The bark keeps its smooth normals: zeros mean "not given" to the renderer.
     while (geo.normals.length < geo.verts.length) geo.normals.push(0);
+    const canopyStart = geo.faces.length;
     for (const [cx, cy, cz, rx, ry, rz] of CROWNS[i]) leafy(geo, cx * QUARTER, cy * QUARTER, cz * QUARTER, rx * QUARTER, ry * QUARTER, rz * QUARTER, tones, rand, Math.round(14 + rx * rz * 2.6), 0.3);
     geo.normals = Float32Array.from(geo.normals);
+    geo.collisionGeometry = merge(shell, canopySupport(geo, canopyStart));
     return geo;
   };
   // Tree is TREE_HEIGHT units tall.
@@ -898,14 +926,15 @@
     }
     const palette = ["#6b4a2b", "#4e361f", ...CANOPIES[i]];
     // Drawn as a cartoon tree: a tapered eight-sided trunk with its branch stubs under crowns of low-poly
-    // puffs on the voxel crown's own ellipsoids. The voxels still decide collision and every measurement below.
-    const geometry = cartoonTree(i, rand);
-    geometry.collisionGeometry = voxGeo(solid, { unit: QUARTER, palette });
+    // puffs on the voxel crown's own ellipsoids. Keep its solid shell and
+    // extend landing support across every visible leaf and lower crown.
+    const shell = voxGeo(solid, { unit: QUARTER, palette });
+    const geometry = cartoonTree(i, rand, shell);
     // Crowns stir in the wind; the collision shell stays where it stands.
     geometry.sway = 0.003;
     let radius = 0, solidRadius = 0;
     for (let j = 0; j < geometry.verts.length; j += 3) radius = Math.max(radius, Math.hypot(geometry.verts[j], geometry.verts[j + 2]));
-    const solidVerts = geometry.collisionGeometry.verts;
+    const solidVerts = shell.verts;
     for (let j = 0; j < solidVerts.length; j += 3) solidRadius = Math.max(solidRadius, Math.hypot(solidVerts[j], solidVerts[j + 2]));
     geometry.treeRadius = radius;
     geometry.treeSolidRadius = solidRadius;
@@ -1332,5 +1361,5 @@
       ...[-0.8, 0.8].map(brace)
     );
   });
-  BL.hubModels = { SIGN_GLYPHS, SIGN_ICONS, AMMO_BANANA, jetpack, jetFlame, caveMouthRim, mirrorPanel, matrixPrisonBars, sealedCaveFace, matrixLeverPlate, matrixLeverLights, matrixLeverHub, matrixLeverArm, matrixLeverGrip, matrixLeverLabels, matrixGlyph, caveSign, postSign, CAVE_SIGN_WIDTH, CAVE_SIGN_HEIGHT, gate, caveShelves, entropyLab, bedroll, tree, bush, rock, breakableRock, voxelRock, puff, leafy, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, altarSlab, altarBlock, woodCrate, barrel, flowerTuft, torch, grass, lawnTuft, lantern, firepit, fireFlame, butterfly, firefly, ember, vine, cloud, ladder, dock, TREE_HEIGHT };
+  BL.hubModels = { SIGN_GLYPHS, SIGN_ICONS, AMMO_BANANA, jetpack, jetFlame, caveMouthRim, mirrorPanel, matrixPrisonBars, sealedCaveFace, matrixLeverPlate, matrixLeverLights, matrixLeverHub, matrixLeverArm, matrixLeverGrip, matrixLeverLabels, matrixGlyph, caveSign, postSign, CAVE_SIGN_WIDTH, CAVE_SIGN_HEIGHT, gate, caveShelves, entropyLab, bedroll, tree, bush, rock, breakableRock, voxelRock, puff, leafy, canopySupport, pointedLeaf, flower, FLOWER_INKS, limb, padNormals, flatInto, altarSlab, altarBlock, woodCrate, barrel, flowerTuft, torch, grass, lawnTuft, lantern, firepit, fireFlame, butterfly, firefly, ember, vine, cloud, ladder, dock, TREE_HEIGHT };
 })();
