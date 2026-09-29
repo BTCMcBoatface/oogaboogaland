@@ -23,7 +23,7 @@
   const BL = window.BL = window.BL || {};
   const { box, bevelBox, merge, cached } = BL.models;
   const { createNode, addChild } = BL.scene;
-  const { mat4, hexToRgb } = BL.math;
+  const { mat4 } = BL.math;
 
   // Palette extracted from this world's own materials (see oogatron Phase 4).
   const PALETTE = {
@@ -277,7 +277,7 @@
 
   const TYPE_COLOR = { commit: "commits", pr: "prs", review: "reviews", merge: "accent", issue: "issues", comment: "comments" };
   // Short relative age for the recent feed, against wall-clock now.
-  const recentAge = (iso, nowMs = Date.now()) => {
+  const recentAge = (iso, nowMs) => {
     const ms = nowMs - Date.parse(iso);
     if (!Number.isFinite(ms) || ms < 0) return "NOW";
     const minutes = Math.floor(ms / 60000);
@@ -289,7 +289,7 @@
 
   // The latest ten matching events, newest first, with no age cutoff.
   // Readers filter the complete history before this display limit is applied.
-  const renderRecent = (ctx, model) => {
+  const renderRecent = (ctx, model, params, nowMs) => {
     clearBoard(ctx);
     header(ctx, "RECENT", model.latestWeek || "");
     if (!model.recent.length) {
@@ -297,7 +297,8 @@
       return false;
     }
     const recent = model.recent.slice(0, 10);
-    const step = (BOARD_H - 4 - GLYPH_H - 16) / Math.max(1, recent.length - 1);
+    // Keep the ten-row spacing so shorter lists stay at the top.
+    const step = (BOARD_H - 4 - GLYPH_H - 16) / 9;
     for (let i = 0; i < recent.length; i++) {
       const e = recent[i], y = Math.round(16 + i * step);
       // A draft PR reads muted: it is announced, not landed.
@@ -306,7 +307,7 @@
       drawText(ctx, fitText(displayLabel(e).toUpperCase(), 60, 1), 4, y, PALETTE.text, 1);
       drawText(ctx, fitText(e.repo.toUpperCase(), 54, 1), 68, y, PALETTE.dim, 1);
       drawText(ctx, fitText(draft ? "DRAFT PR" : e.type.toUpperCase(), 42, 1), 126, y, color, 1);
-      const age = recentAge(e.occurredAt);
+      const age = recentAge(e.occurredAt, nowMs);
       drawText(ctx, age, BOARD_W - 4 - measureText(age, 1), y, PALETTE.dim, 1);
     }
     return false;
@@ -343,8 +344,8 @@
       bevelBox({ w: outerW - 0.008, h: t, d: FRAME_D, color: PALETTE.woodDark, offset: { y: outerH / 2 - t / 2, z: fz } }),
       bevelBox({ w: outerW - 0.008, h: t, d: FRAME_D, color: PALETTE.woodDark, offset: { y: -(outerH / 2 - t / 2), z: fz } }),
       // Side rails a clear 0.02 shallower front and back than the top and bottom ones they overlap at the corners.
-      recessedRail(outerW / 2 - t / 2, fz, outerH),
-      recessedRail(-(outerW / 2 - t / 2), fz, outerH),
+      bevelBox({ w: t, h: outerH - 0.008, d: FRAME_D - 0.04, color: PALETTE.woodDark, bevel: 0.022, offset: { x: outerW / 2 - t / 2, z: fz } }),
+      bevelBox({ w: t, h: outerH - 0.008, d: FRAME_D - 0.04, color: PALETTE.woodDark, bevel: 0.022, offset: { x: -(outerW / 2 - t / 2), z: fz } }),
       // A thick cap plank along the top, overhanging the frame like a sign's header.
       bevelBox({ w: outerW + 0.2, h: 0.12, d: FRAME_D + 0.08, color: PALETTE.plank, offset: { y: outerH / 2 + 0.06, z: fz } }),
       box({ w: 2 * OPEN_X + 0.04, h: 2 * OPEN_Y + 0.04, d: 0.06, color: PALETTE.screenBezel, offset: { z: 0.01 } })
@@ -406,39 +407,17 @@
   };
 
   // ---- Frame-mounted navigation chrome -------------------------------------
-  // Square-pixel arrows recessed into the side rails and circular indicators on the bottom rail, in the cave sign's
-  // paper white. Cut the wood in front of the arrows so the inset is real, with clearance above the pocket floor.
+  // Paper-white square-pixel arrows painted flat on the side rails. Circular indicators on the bottom rail use
+  // the popup's dark stone and orange selection colours. Small clearance above the wood avoids coplanar flicker.
   const CHROME_WHITE = [243, 239, 228];
-  const CHROME_DIM = [166, 166, 162];
+  const DOT_DARK = [45, 43, 40], DOT_ORANGE = [216, 137, 43];
   const OUTER_W = SW + 2 * BORDER, OUTER_H = SH + 2 * BORDER;
   const CHROME_CELL = 0.027, CHROME_PIXEL = 0.0225;
-  const ARROW_Z = 0.058, DOT_Z = 0.1, DOT_SIZE = 0.05;
+  const ARROW_Z = 0.074, DOT_Z = 0.1, DOT_SIZE = 0.05;
   const RAIL_X = OUTER_W / 2 - RAIL / 2, RAIL_Y = OUTER_H / 2 - RAIL / 2;
   // 4x7 chevrons, rows top-first; mirrored for the right rail.
   const ARROW_LEFT = ["0001", "0010", "0100", "1000", "0100", "0010", "0001"];
   const ARROW_RIGHT = ARROW_LEFT.map((row) => [...row].reverse().join(""));
-  const recessedRail = (cx, fz, outerH) => {
-    const bevel = 0.022, front = 0.02 + DEPTH / 2 - 0.02, floor = ARROW_Z - 0.004;
-    const geo = bevelBox({ w: RAIL, h: outerH - 0.008, d: FRAME_D - 0.04, color: PALETTE.woodDark, bevel, offset: { x: cx, z: fz } });
-    // Replace only the flat front; retain the rail's sides, back and outer chamfers.
-    geo.faces = geo.faces.filter(face => !face.i.every(i => Math.abs(geo.verts[i * 3 + 2] - front) < 1e-9));
-    const x0 = cx - RAIL / 2 + bevel, x1 = cx + RAIL / 2 - bevel, y = (outerH - 0.008) / 2 - bevel;
-    const halfW = 0.06, halfH = 0.12, lip = 0.006, wood = hexToRgb(PALETTE.woodDark), shade = hexToRgb(PALETTE.woodJoint);
-    pushQuad(geo, x0, x1, halfH, y, front, wood, 0);
-    pushQuad(geo, x0, x1, -y, -halfH, front, wood, 0);
-    pushQuad(geo, x0, cx - halfW, -halfH, halfH, front, wood, 0);
-    pushQuad(geo, cx + halfW, x1, -halfH, halfH, front, wood, 0);
-    const base = geo.verts.length / 3;
-    for (const [w, h, z] of [[halfW, halfH, front], [halfW - lip, halfH - lip, floor]]) {
-      geo.verts.push(cx - w, -h, z, cx + w, -h, z, cx + w, h, z, cx - w, h, z);
-    }
-    for (let i = 0; i < 4; i++) {
-      const next = (i + 1) % 4;
-      geo.faces.push({ i: [base + i, base + next, base + 4 + next, base + 4 + i], color: shade, emissive: 0 });
-    }
-    pushQuad(geo, cx - halfW + lip, cx + halfW - lip, -halfH + lip, halfH - lip, floor, wood, 0);
-    return geo;
-  };
   const pushBlock = (geo, cx, cy, size, z, color, emissive) => {
     pushQuad(geo, cx - size / 2, cx + size / 2, cy - size / 2, cy + size / 2, z, color, emissive);
   };
@@ -474,7 +453,7 @@
     const { pitch, x0 } = dotLayout(count);
     for (let i = 0; i < count; i++) {
       const lit = i === current;
-      pushDot(geo, x0 + i * pitch, -RAIL_Y, lit ? CHROME_WHITE : CHROME_DIM, lit ? 0.9 : 0.12);
+      pushDot(geo, x0 + i * pitch, -RAIL_Y, lit ? DOT_ORANGE : DOT_DARK, lit ? 0.9 : 0);
     }
     geo.castShadow = false;
     return geo;
@@ -502,6 +481,8 @@
     let lastSwitchAt = 0;
     let resetRotation = false;
     let dirty = true;
+    // All canvases use one minute-aligned age sample, even when painted at different times or paused on RECENT.
+    let recentNow = Math.floor(Date.now() / 60000) * 60000;
     // World->local for board taps, cached: the cabinet never moves once placed.
     const tapInverse = new Float32Array(16);
     let tapInverseValid = false;
@@ -590,7 +571,7 @@
         drawText(ctx, "AWAITING DATA", 57, 60, PALETTE.dim, 1);
         return;
       }
-      (VIEWS[view.name] || VIEWS.totals)(ctx, model, view.params);
+      (VIEWS[view.name] || VIEWS.totals)(ctx, model, view.params, recentNow);
     };
 
     const node = createNode({
@@ -687,6 +668,7 @@
         let index = indexOfView(state ? state.screen : view, pages), selected = pages[index], seenModel = model;
         let filterVersion = 0;
         let paused = state?.paused ?? false, dirty = true, version = 0, switchAt = lastElapsed;
+        let shownRecentNow = -1;
         const reader = {
           title: "Oogatron", floating: true, help: "", note: "", canvas,
           get count() { return pages.length; },
@@ -723,13 +705,15 @@
               dirty = true;
             }
             if (!paused && rotateEvery > 0 && elapsed - switchAt >= rotateEvery) reader.go((index + 1) % pages.length);
+            if (selected.name === "recent" && shownRecentNow !== recentNow) dirty = true;
             if (!dirty) return;
-            if (source) (VIEWS[selected.name] || VIEWS.totals)(context, source, selected.params);
+            if (source) (VIEWS[selected.name] || VIEWS.totals)(context, source, selected.params, recentNow);
             else {
               clearBoard(context);
               drawText(context, "AWAITING DATA", 57, 48, PALETTE.dim, 1);
             }
             dirty = false;
+            shownRecentNow = recentNow;
             version++;
           },
           dispose() { canvas.width = canvas.height = 0; }
@@ -822,6 +806,11 @@
       },
       update(elapsed, renderer) {
         lastElapsed = elapsed;
+        const now = Math.floor(Date.now() / 60000) * 60000;
+        if (now !== recentNow) {
+          recentNow = now;
+          if (view.name === "recent") dirty = true;
+        }
         // Any manual slide change restarts the auto-rotate countdown.
         if (resetRotation) {
           lastSwitchAt = elapsed;
