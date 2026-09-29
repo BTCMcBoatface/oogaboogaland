@@ -447,7 +447,7 @@
     bifrostScene.input = input;
     bifrostScene.debug = {
       hud, camera, controls: pilot.controls, pilot, crew: people, cavemen: people ? people.cavemen : null,
-      bifrost: { get scene() { return scene; }, get avatar() { return avatar; }, get pictured() { return !!(world.windowViews && world.windowViews.dsb); } }
+      bifrost: { get scene() { return scene; }, get avatar() { return avatar; }, get pictured() { return !!(world.windowViews && world.windowViews.dsb); }, get outside() { return !!world.bifrostView; } }
     };
   };
 
