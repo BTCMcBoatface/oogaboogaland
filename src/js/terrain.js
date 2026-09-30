@@ -252,7 +252,7 @@
   const UNDER_SPHERE_CENTER = DEPTH - UNDER_SPHERE_RADIUS;
   const MAX_HEIGHT = 8;
   const BLUFF = 6;
-  const MOUTH = { w: 5, h: 3, depth: 5 };
+  const MOUTH = { w: 5, h: 3, depth: 5, front: 0.5 };
   const ROOM = { w: 6, h: 4, from: 2.5, to: 6.5 };
   const PATH_HALF = 0.75;
   const RING_HALF = PATH_HALF * 1.5;
@@ -637,7 +637,7 @@
           const dx = wx - f.x, dz = wz - f.z;
           const along = dx * f.ox + dz * f.oz, across = Math.abs(dz * f.ox - dx * f.oz);
           const room = along > chamber.from - e && along < chamber.to + e && across < chamber.w / 2 + e;
-          if (!room && !(along > -0.5 && along < MOUTH.depth + e && across < MOUTH.w / 2 + e)) continue;
+          if (!room && !(along > -MOUTH.front && along < MOUTH.depth + e && across < MOUTH.w / 2 + e)) continue;
           const gyTop = SURFACE - 1 + Math.round((room ? chamber.h : MOUTH.h) / UNIT);
           for (let gy = SURFACE; gy <= gyTop; gy++) {
             grid.set(gx, gy, gz, 0);

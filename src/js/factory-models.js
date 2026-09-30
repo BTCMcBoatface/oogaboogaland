@@ -2311,9 +2311,11 @@
   const tunnelFrame = (reach) => {
     const geos = [], glow = [];
     for (const z of [0.2, -1.6, -3.2]) {
-      for (const x of [-2.15, 2.15]) geos.push(bevelBox({ w: 0.34, h: 3.3, d: 0.34, color: TIMBER_DK, bevel: 0.06, offset: { x, y: 1.65, z } }));
-      geos.push(bevelBox({ w: 4.8, h: 0.36, d: 0.42, color: TIMBER, bevel: 0.06, offset: { y: 3.4, z } }));
-      for (const s of [-1, 1]) geos.push(beam(s * 2.1, 2.6, z, s * 1.4, 3.3, z, 0.14, TIMBER_DK));
+      const front = z > -2.5, postHeight = front ? 3 : 3.3;
+      for (const x of [-2.15, 2.15]) geos.push(bevelBox({ w: 0.34, h: postHeight, d: 0.34, color: TIMBER_DK, bevel: 0.06, offset: { x, y: postHeight * 0.5, z } }));
+      // The front passage has a 3 m stone ceiling; tuck its crossbeams beneath it.
+      geos.push(bevelBox({ w: 4.8, h: 0.36, d: 0.42, color: TIMBER, bevel: 0.06, offset: { y: front ? 2.84 : 3.4, z } }));
+      for (const s of [-1, 1]) geos.push(beam(s * 2.1, front ? 2.25 : 2.6, z, s * 1.4, front ? 2.85 : 3.3, z, 0.14, TIMBER_DK));
     }
     for (const x of [-0.5, 0.5]) geos.push(box({ w: 0.07, h: 0.07, d: reach + 4.6, color: IRON_LT, offset: { x, y: 0.1, z: (reach - 4.6) / 2 } }));
     for (let z = reach - 0.2; z > -4.5; z -= 0.5) geos.push(box({ w: 1.3, h: 0.06, d: 0.18, color: TIMBER_DK, offset: { y: 0.04, z } }));
