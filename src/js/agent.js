@@ -1354,10 +1354,16 @@
             }
           }
         }
-        arm.rotation.x = damp(previous, pitch, 18, dt);
-        arm.rotation.y = damp(previousYaw, yaw, 18, dt);
+        // Once the torso is hanging from the wall, the palm must reach its
+        // checked hold in this frame. Easing the last few degrees leaves a
+        // visible gap while the root continues climbing.
+        arm.rotation.x = blend > 0.98 ? pitch : damp(previous, pitch, 18, dt);
+        arm.rotation.y = blend > 0.98 ? yaw : damp(previousYaw, yaw, 18, dt);
       }
     };
+    const climbHandContactMask = () => !climbSolidAt ? 0
+      : (climbArmContact(parts.armL, 0, false, 0, 0, 0, 0.4) === 1 ? 1 : 0)
+        | (climbArmContact(parts.armR, 1, false, 0, 0, 0, 0.4) === 1 ? 2 : 0);
     // These matrices come from the current pose, including the floor adjustment
     // and reclining hips, so projectiles never chase the previous render frame.
     const previewNodes = managed ? [root, hips, ...envelopeParts, chest, ...(coatParts ? [coatParts.torso, coatParts.armL, coatParts.armR] : [])] : null;
@@ -1772,7 +1778,7 @@
     };
     const agent = {
       root, parts, hips, chest, update, setForm, setGait, walk, pace, place, poke, jump, reveal, setDriven, drive, toggleStyle, liveGeometry, dispose,
-      managed, poseManaged, climbPoseClear, walkPoseClear, walkSupportAt, labPoseClear, mouth, bodyTarget, envelope, feed, pound, beat, holdLabItem, releaseLabItem,
+      managed, poseManaged, climbPoseClear, climbHandContactMask, walkPoseClear, walkSupportAt, labPoseClear, mouth, bodyTarget, envelope, feed, pound, beat, holdLabItem, releaseLabItem,
       get climbBlockedArm() { return climbBlockedArm; },
       get climbContactMask() { return climbContactMask; },
       get labFlask() { return labFlask; },

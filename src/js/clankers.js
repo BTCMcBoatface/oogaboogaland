@@ -2162,9 +2162,8 @@
       const compact = e.compact, planning = e.planningRoam, mode = e.footprintMode, radius = e.radius, height = e.height;
       e.compact = e.planningRoam = true; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
       try {
-        // Admission reserves the same full walking turn as a ground route.
-        // The mount cannot start by snapping from an arbitrary approach yaw
-        // onto the wall bearing, especially when perched on a narrow ledge.
+        // Prove the full turn before aligning to the wall on admission,
+        // especially when the approach is diagonal on a narrow ledge.
         if (!staticClear(e, p.x, p.y, p.z, p.x, p.y, p.z, e.heading, heading)) return false;
         const steps = Math.max(1, Math.ceil(Math.abs(turn) / 0.12));
         for (let i = 1; i <= steps; i++) {
@@ -2194,6 +2193,13 @@
         if (!clear) return false;
       }
       return true;
+    };
+    const climbGroundPoseClear = (e, x, y, z, heading) => {
+      plannedTurnMotion.climbBlend = plannedTurnMotion.mantle = 0;
+      plannedTurnMotion.climbDirection = plannedTurnMotion.climbSide = 0;
+      plannedTurnMotion.climbStride = e.motion.climbStride + y - e.root.position.y;
+      return e.gorilla.climbPoseClear(2, x, y, z, heading, plannedTurnMotion,
+        ctx.solidAt, plannedTurnClear, e, 0, true);
     };
     const climbCrestClear = (e) => {
       const c = e.climb, p = e.root.position, savedIndex = c.index;
@@ -2480,6 +2486,7 @@
       e.drive.jumpPressed = false; e.drive.jumpBuffer = 0; e.drive.jumpDown = e.drive.jumpHeld; e.motion.groom = 0;
       e.motion.climb = 1; e.motion.climbBlend = 0; e.motion.mantle = 1;
       e.drive.climbExitHeading = e.drive.climbExitLook = NaN;
+      e.heading = c.heading;
       e.lounge = ""; if (e.controlled) e.loungePartner = null;
       e.speed = 0; e.biped = false;
       releasePortal(e);
@@ -2489,15 +2496,14 @@
       const c = e.climb, sx = Math.sin(heading), sz = Math.cos(heading), p = e.root.position;
       c.claimPending = c.crestPending = false;
       c.claimFor = -1; c.claimOwnerOrder = 0;
-      const topHeading = descending ? e.heading : heading;
+      const topHeading = heading;
       c.probeHeading = heading;
       c.debugTraverse = false; c.traverseStart = c.traverseEnd = 0;
       c.attempts++; c.failure = "start";
-      // The current walking pose already passed movement collision. The
-      // climbing centre remains outside stone before the first grip.
-      if (descending ? !e.gorilla.climbPoseClear(0, p.x, p.y, p.z, e.heading, e.motion, ctx.solidAt) : !climbClear(e, p.x, p.y, p.z)) return false;
+      // Check the roof start at the wall bearing before taking the first grip.
+      if (descending ? !e.gorilla.climbPoseClear(0, p.x, p.y, p.z, heading, e.motion, ctx.solidAt) : !climbClear(e, p.x, p.y, p.z)) return false;
       c.failure = "approach turn";
-      if (!descending && !climbStartTurnClear(e, heading)) return false;
+      if (!climbStartTurnClear(e, heading)) return false;
       c.failure = "top";
       if (!descending && !climbWalkClear(e, ux, uy, uz, ux, uy, uz, topHeading, false)) return false;
       c.failure = "path"; c.count = 0; c.length = 0; c.index = 0; c.basePrepEnd = 0;
@@ -2853,16 +2859,35 @@
     };
     const cliffRiserAhead = (x, z, heading, direction, distance = 3.2) => {
       const floor = climbSurfaceAt(x, z);
-      if (walkingRampAt(x, floor, z, heading)) return false;
+      const ramp = walkingRampAt(x, floor, z, heading);
       const sx = Math.sin(heading), sz = Math.cos(heading);
       let previous = climbSurfaceAt(x - sx * 0.4, z - sz * 0.4);
       for (let d = -0.2; d <= distance; d += 0.2) {
         const height = climbSurfaceAt(x + sx * d, z + sz * d);
         // Walkable treads and hills can gain a body height over several
-        // steps. Only a single tall riser calls for a wall grip.
+        // steps. A nearly vertical terraced face can have no single tall
+        // riser, so also measure its rise over a short continuous span.
         if (!Number.isNaN(height) && Number.isFinite(previous)
-          && (height - previous) * direction > 0.85) return true;
+          && (height - previous) * direction > (ramp ? BL.wallPanels.RAMP_STEP : 0.85)) return true;
+        if (d >= 0.8 && Number.isFinite(height)) {
+          const behind = climbSurfaceAt(x + sx * (d - 0.8), z + sz * (d - 0.8));
+          if (Number.isFinite(behind)
+            && (height - behind) * direction > BL.wallPanels.RAMP_SLOPE * 0.8 + 0.15) return true;
+        }
         previous = height;
+      }
+      return false;
+    };
+    const roofEdgeCrossing = (e, x, z, heading) => {
+      if (!climbSurfaceAt) return false;
+      const p = e.root.position, side = e.root.scale.x * 0.7;
+      const acrossX = Math.cos(heading), acrossZ = -Math.sin(heading);
+      for (let i = 0; i < 3; i++) {
+        const offset = i === 0 ? 0 : i === 1 ? -side : side;
+        const fromX = p.x + acrossX * offset, fromZ = p.z + acrossZ * offset;
+        if (Math.abs(climbSurfaceAt(fromX, fromZ) - p.y) > 0.2
+          || climbSurfaceAt(x + acrossX * offset, z + acrossZ * offset) >= p.y - STEP) continue;
+        if (cliffRiserAhead(fromX, fromZ, heading, -1, 1.6)) return true;
       }
       return false;
     };
@@ -2896,6 +2921,7 @@
       d.vz = away ? -Math.cos(e.heading) * 1.5 : 0;
       d.motionEnvelope = false; d.resume = !e.controlled;
       m.climb = m.mantle = m.climbDirection = m.climbSide = 0; m.climbBlend = NaN;
+      m.climbGripX = m.climbGripY = m.climbGripZ = NaN; m.climbGripRelease = 0;
       e.footprintMode = "walk"; e.compact = false;
       e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
     };
@@ -3079,7 +3105,7 @@
         if (c.mountPending && c.blocked > 0.6) {
           const floor = support(e, p.x, p.z, p.y, STEP);
           if (Number.isFinite(floor) && Math.abs(floor - p.y) < 0.1)
-            finishRectangleClimb(e, floor, heading + Math.PI);
+            finishRectangleClimb(e, floor, heading);
           else dropRectangleClimb(e);
           c.mountPending = false;
           return;
@@ -3132,22 +3158,29 @@
       if (c.handoffDirection === -1 || vertical < 0) {
         if (c.handoffDirection !== -1) {
           c.freeTargetY = NaN;
-          for (let retreat = 0.3; retreat <= 2.4; retreat += 0.3) {
-            const x = p.x - sx * retreat, z = p.z - sz * retreat;
-            const y = support(e, x, z, p.y, STEP, heading);
-            if (!Number.isFinite(y) || y > p.y + 0.1 || p.y - y > 0.8
-              || !wallBodyClear(x, y, z, heading) || !actorLanding(e, x, y, z)
-              || !climbWalkClear(e, x, y, z, x, y, z, heading)) continue;
-            c.freeTargetX = x; c.freeTargetY = y; c.freeTargetZ = z;
-            c.handoffStartX = p.x; c.handoffStartY = p.y; c.handoffStartZ = p.z;
-            c.handoffDirection = -1; break;
+          for (let lane = 0; lane < 5 && c.handoffDirection !== -1; lane++) {
+            const across = lane ? Math.ceil(lane / 2) * 0.6 * (lane % 2 ? -1 : 1) : 0;
+            for (let retreat = 0.3; retreat <= 2.4; retreat += 0.3) {
+              const x = p.x - sx * retreat + sz * across, z = p.z - sz * retreat - sx * across;
+              const y = support(e, x, z, p.y, STEP, heading);
+              const terrain = ctx.terrainSupportAt ? ctx.terrainSupportAt(e, x, z, p.y, STEP, heading) : groundAt(x, z, p.y);
+              // A barrel touching one corner is not a complete landing.
+              if (!Number.isFinite(y) || Math.abs(y - terrain) > 0.1 || y > p.y + 0.1 || p.y - y > 0.8
+                || !wallBodyClear(x, y, z, heading) || !actorLanding(e, x, y, z)
+                || !climbWalkClear(e, x, y, z, x, y, z, heading)
+                || !climbGroundPoseClear(e, x, y, z, heading)) continue;
+              c.freeTargetX = x; c.freeTargetY = y; c.freeTargetZ = z;
+              c.handoffStartX = p.x; c.handoffStartY = p.y; c.handoffStartZ = p.z;
+              c.handoffDirection = -1; break;
+            }
           }
         }
         if (c.handoffDirection === -1) {
           m.climb = m.climbBlend = 1 - handoffProgress(c, p);
           const remaining = Math.hypot(c.freeTargetX - p.x, c.freeTargetZ - p.z);
           const advance = Math.min(remaining, distance);
-          const x = p.x - sx * advance, z = p.z - sz * advance;
+          const x = remaining ? p.x + (c.freeTargetX - p.x) * advance / remaining : p.x;
+          const z = remaining ? p.z + (c.freeTargetZ - p.z) * advance / remaining : p.z;
           // Clear the lower projection before lowering the body past it.
           const y = remaining - advance < 0.03 ? Math.max(c.freeTargetY, p.y - distance) : p.y;
           if ((remaining - advance >= 0.03 || wallBodyClear(x, y, z, heading))
@@ -3209,9 +3242,17 @@
       if (vertical < 0 && !wallContactShare(e, tx, ty, tz, heading)
         && wallBodyClear(tx, ty, tz, heading)
         && climbClear(e, p.x, p.y, p.z, tx, ty, tz, heading, true, true)) {
-        p.x = tx; p.y = ty; p.z = tz;
-        if (!openingLanding(e, tx, ty, tz, heading, null, true)) dropRectangleClimb(e);
-        return;
+        if (openingLanding(e, tx, ty, tz, heading, null, true)) {
+          p.x = tx; p.y = ty; p.z = tz;
+          return;
+        }
+        // The side of a cave frame can end before the cliff behind it. Keep
+        // the wall grip and let the face projection below cross that recess.
+        if (!Number.isFinite(wallFaceDepth(tx, ty, tz, heading))) {
+          p.x = tx; p.y = ty; p.z = tz;
+          dropRectangleClimb(e);
+          return;
+        }
       }
       // A projecting voxel can occupy the tangent step while the wall is
       // still climbable. Ease the rectangle outward and retry next frame.
@@ -3248,10 +3289,23 @@
         c.lipBypass = false; c.blocked = 0; return;
       }
       c.blocked += dt;
+      if (!e.controlled && c.blocked > 1.2) {
+        // A frame-to-cliff seam may leave no clear tangent step. Reverse the
+        // checked wall route once; if even that is blocked, release the grip
+        // so an autonomous gorilla never remains frozen on the face.
+        if (c.returning) dropRectangleClimb(e);
+        else climbBlocked(e, 0);
+      }
     };
     const wallFaceHeading = (e, heading) => {
       const p = e.root.position;
       return wallPanels && wallPanels.fit(p.x, p.y, p.z, heading, PANEL)
+        ? PANEL.heading : NaN;
+    };
+    const roofWallHeading = (e, outward, edge) => {
+      const p = e.root.position, sx = Math.sin(outward), sz = Math.cos(outward);
+      return wallPanels && wallPanels.fit(p.x + sx * (edge + CLIMB_STANDOFF), p.y - 2.1,
+        p.z + sz * (edge + CLIMB_STANDOFF), outward + Math.PI, PANEL)
         ? PANEL.heading : NaN;
     };
     const bindWallPanel = (e, heading, x = e.root.position.x, y = e.root.position.y, z = e.root.position.z) => {
@@ -3351,13 +3405,15 @@
           if (climbSurfaceAt(p.x + sx * d, p.z + sz * d) < p.y - 0.8) { edge = d; break; }
         }
         if (!Number.isFinite(edge)) return false;
+        const wallHeading = roofWallHeading(e, heading, edge);
+        if (!Number.isFinite(wallHeading)) return false;
         for (let n = 0; n < 7; n++) for (let d = edge + 1.8; d <= edge + 6; d += 0.6) {
           const side = n ? Math.ceil(n / 2) * 0.75 * (n % 2 ? 1 : -1) : 0;
           const x = p.x + sx * d + sz * side, z = p.z + sz * d - sx * side;
-          const y = support(e, x, z, climbSurfaceAt(x, z), STEP, heading + Math.PI);
+          const y = support(e, x, z, climbSurfaceAt(x, z), STEP, wallHeading);
           if (!landing(x, y, z) || y > p.y - 0.8 || y < p.y - 16
-            || !climbWalkClear(e, x, y, z, x, y, z, heading + Math.PI, false)) continue;
-          if (attemptClimb(e, x, y, z, p.x, p.y, p.z, heading + Math.PI, true)) return true;
+            || !climbWalkClear(e, x, y, z, x, y, z, wallHeading, false)) continue;
+          if (attemptClimb(e, x, y, z, p.x, p.y, p.z, wallHeading, true)) return true;
           if (e.climb.searchDeferred) return false;
         }
       } else {
@@ -3388,7 +3444,8 @@
     };
     const tryClimb = (e, heading, descending = false) => {
       const c = e.climb, p = e.root.position;
-      if (c.retry > 0 || walkingRampAt(p.x, p.y, p.z, heading)) return false;
+      if (c.retry > 0 || walkingRampAt(p.x, p.y, p.z, heading)
+        && !cliffRiserAhead(p.x, p.z, heading, descending ? -1 : 1)) return false;
       heading = climbApproachHeading(e, heading, descending);
       if (!Number.isFinite(heading)) return false;
       if (c.claimPending && c.searchDescending === descending && pendingClimbSearch(e)) {
@@ -3449,9 +3506,11 @@
         const sx = Math.sin(heading), sz = Math.cos(heading);
         for (let edge = 0.35; edge <= 3.1; edge += 0.25) {
           if (climbSurfaceAt(p.x + sx * edge, p.z + sz * edge) >= p.y - 0.8) continue;
+          const wallHeading = roofWallHeading(e, heading, edge);
+          if (!Number.isFinite(wallHeading)) break;
           for (let depth = 16; depth >= 2; depth -= 2) {
             const x = p.x + sx * (edge + 2), z = p.z + sz * (edge + 2);
-            if (attemptClimb(e, x, p.y - depth, z, p.x, p.y, p.z, heading + Math.PI, true, false)) return true;
+            if (attemptClimb(e, x, p.y - depth, z, p.x, p.y, p.z, wallHeading, true, false)) return true;
             if (c.searchDeferred) return false;
           }
           break;
@@ -4184,7 +4243,7 @@
         // the explicit exit route remains the only way out.
         if (!mirrorWorkClear(e, p.x, p.z, x, z)) continue;
         const y = support(e, x, z, p.y, PROP_STEP, facing);
-        const propStep = onProp || Math.abs(y - groundAt(x, z, p.y)) > 0.02;
+        const propStep = onProp || Math.abs(y - groundAt(x, z, p.y)) > 0.02 || p.y - y > STEP;
         if (onProp && y < p.y - PROP_STEP && beginSupportFall(e, x, z, facing, sx * speed, sz * speed)) return;
         if (!Number.isFinite(y) || y > p.y + PROP_STEP || y < p.y - PROP_STEP || !actorLanding(e, x, y, z)
           || e.phase === "work" && !e.lab.yielding && caveAt(x, y, z) !== e.site
@@ -4202,7 +4261,7 @@
         }
         const aheadTurn = Math.min(Math.PI, ahead / Math.max(0.1, speed) * 5);
         const aheadFacing = e.heading + clamp(facingTurn, -aheadTurn, aheadTurn);
-        const aheadPropStep = onProp || Math.abs(ay - groundAt(ax, az, p.y)) > 0.02;
+        const aheadPropStep = onProp || Math.abs(ay - groundAt(ax, az, p.y)) > 0.02 || p.y - ay > STEP;
         const goodAhead = Number.isFinite(ay) && Math.abs(ay - p.y) <= PROP_STEP && actorLanding(e, ax, ay, az)
           && !occupied(e, ax, ay, az, true, aheadFacing)
           && (aheadPropStep ? propStepClear : staticClear)(e, p.x, p.y, p.z, ax, ay, az, e.heading, aheadFacing);
@@ -4225,10 +4284,22 @@
         if (!directAhead && side && (e.steerFor <= 0 || side !== e.steerSide)) { e.steerSide = side; e.steerFor = 1.2; }
         e.steerHeading = chosen;
         const x = p.x + Math.sin(chosen) * chosenStep, z = p.z + Math.cos(chosen) * chosenStep;
+        if (roofEdgeCrossing(e, x, z, chosen)) {
+          if (beginEdgeClimb(e, chosen) || beginSupportFall(e, x, z, chosen,
+            Math.sin(chosen) * speed, Math.cos(chosen) * speed)) return;
+          if (chosenY < p.y - STEP) {
+            e.speed = 0; e.blocked += dt;
+            if (e.blocked > 1.5 && e.phase === "chill") { e.blocked = 0; chooseChill(e); }
+            return;
+          }
+        }
         setSupportY(e, chosenY, x, z, chosenFacing); p.x = x; p.z = z; e.heading = chosenFacing;
         e.speed = chosenStep / dt * (Math.cos(chosen - e.heading) < 0 ? -1 : 1);
         e.blocked = Math.cos(chosen - desired) > 0.3 ? Math.max(0, e.blocked - dt * 2) : e.blocked + dt;
       } else {
+        const x = p.x + Math.sin(desired) * step, z = p.z + Math.cos(desired) * step;
+        if (support(e, x, z, p.y, PROP_STEP, desired) < p.y - PROP_STEP
+          && beginSupportFall(e, x, z, desired, Math.sin(desired) * speed, Math.cos(desired) * speed)) return;
         e.speed = damp(e.speed, 0, 16, dt); e.blocked += dt;
         if (!e.parked && !doorway && e.retry <= 0 && e.blocked > 0.3) {
           const tall = tallBodyAhead(e, desired);
@@ -4386,9 +4457,20 @@
       // Match roamFuture's reserved pause instead of inching into the other
       // actor's corridor whenever a single prediction sample becomes clear.
       if (elapsed < r.waitUntil) { e.speed = 0; return; }
+      if (step > 0 && roofEdgeCrossing(e, x, z, facing)) {
+        if (beginEdgeClimb(e, facing) || beginSupportFall(e, x, z, facing,
+          Math.sin(facing) * CHILL_SPEED, Math.cos(facing) * CHILL_SPEED)) return;
+        if (y < p.y - STEP) {
+          e.speed = 0; r.blocked += dt;
+          if (r.blocked > 1.5) abandonRoam(e);
+          return;
+        }
+      }
       if (step > 0 && y < p.y - PROP_STEP && raisedSupport(e) && actorLanding(e, x, y, z)
         && !occupied(e, x, y, z, true, heading) && propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)
         && beginSupportFall(e, x, z, heading, 0, 0)) return;
+      if (step > 0 && y < p.y - PROP_STEP && beginSupportFall(e, x, z, heading,
+        Math.sin(facing) * CHILL_SPEED, Math.cos(facing) * CHILL_SPEED)) return;
       if (Number.isFinite(y) && Math.abs(y - p.y) <= PROP_STEP && actorLanding(e, x, y, z)
         && !occupied(e, x, y, z, true, heading) && propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)) {
         setSupportY(e, y, x, z, heading); p.x = x; p.z = z; e.heading = heading;
@@ -4423,7 +4505,8 @@
       const currentRoof = !e.debugMove.active && e.mode === "chilling" && e.loungeRoof ? roofAt(p.x, p.y, p.z) : -1;
       const destinationRoof = currentRoof >= 0 ? roofAt(e.goalX, e.goalY, e.goalZ) : -1;
       const roofHop = destinationRoof >= 0 && destinationRoof !== currentRoof;
-      const roofGap = roofHop && ctx.surfaceAt(p.x + Math.sin(heading) * 4.5, p.z + Math.cos(heading) * 4.5) < p.y - 0.8;
+      const roofGap = roofHop && !walkingRampAt(p.x, p.y, p.z, heading)
+        && ctx.surfaceAt(p.x + Math.sin(heading) * 4.5, p.z + Math.cos(heading) * 4.5) < p.y - 0.8;
       r.jumpRetry = Math.max(0, r.jumpRetry - dt);
       if (roofGap && r.runUp >= ROOF_RUN_UP && !r.jumpRetry && !e.fire.burning) {
         r.jumpRetry = 0.4;
@@ -4706,10 +4789,14 @@
       const currentFloor = ctx.terrainSupportAt
         ? ctx.terrainSupportAt(e, p.x, p.z, p.y, PROP_STEP, e.heading) : groundAt(p.x, p.z, p.y);
       const d = e.drive, edgeLeap = e.controlled && d.run && p.y - currentFloor <= STEP;
+      // Do not enter flight while a walking pad still has roof support.
+      const terrainEdge = p.y - currentFloor <= STEP && floor < p.y - STEP
+        && pointSupportAt(x, z, p.y + 0.1) < p.y - STEP;
+      const landingFloor = terrainEdge ? pointSupportAt(x, z, p.y + 0.1) : floor;
       // A run over terrain gets the Ooga's short ledge hop. Walking off a
       // raised prop still hands its unsupported step to ordinary gravity.
-      if (e.parked || e.climb.active || !Number.isFinite(floor)
-        || !edgeLeap && (!landing(x, floor, z) || p.y - currentFloor <= STEP)) return false;
+      if (e.parked || e.climb.active || !terrainEdge && (!Number.isFinite(landingFloor)
+        || !edgeLeap && (!landing(x, landingFloor, z) || p.y - currentFloor <= STEP))) return false;
       // A running gorilla leaves the rim under its own momentum. Check the
       // airborne centre path before committing, including beyond the island.
       if (edgeLeap) d.airborne = true;
@@ -4802,35 +4889,40 @@
     const beginEdgeClimb = (e, outward) => {
       const p = e.root.position, c = e.climb, d = e.drive;
       if (d.airborne || c.active || !climbSurfaceAt
-        || Math.abs(climbSurfaceAt(p.x, p.z) - p.y) > 0.2) return false;
-      if (!cliffRiserAhead(p.x, p.z, outward, -1, 1.6)) return false;
-      const sx = Math.sin(outward), sz = Math.cos(outward);
-      for (let edge = 0.2; edge <= 0.8; edge += 0.2) {
-        if (climbSurfaceAt(p.x + sx * edge, p.z + sz * edge) >= p.y - 0.8) continue;
-        const distance = edge + CLIMB_STANDOFF;
-        let x = p.x + sx * distance, z = p.z + sz * distance;
-        const y = p.y - 0.7;
-        if (!wallPanels.fit(x, y - 1.4, z, outward + Math.PI, PANEL)) continue;
-        const heading = PANEL.heading, nx = PANEL.nx, nz = PANEL.nz;
-        // Put the mount outside the fitted panel, even at a diagonal edge.
-        const correction = (PANEL.x - x) * nx + (PANEL.z - z) * nz - CLIMB_STANDOFF;
-        if (Math.abs(correction) > 0.6) continue;
-        x += nx * correction; z += nz * correction;
-        if (wallContactShare(e, x, y, z, heading) < WALL_ENTER_SHARE || !wallBodyClear(x, y, z, heading)
-          || !climbClear(e, p.x, p.y, p.z, x, p.y, z, heading, true, true)
-          || !climbClear(e, x, p.y, z, x, y, z, heading, true, true)) continue;
-        c.active = c.free = c.mountPending = c.descending = c.fromTop = true;
-        c.handoffDirection = 0; c.freeTargetX = x; c.freeTargetY = y; c.freeTargetZ = z;
-        c.handoffStartX = p.x; c.handoffStartY = p.y; c.handoffStartZ = p.z;
-        c.waitRelease = e.controlled && d.climbAxis > 0;
-        c.heading = c.topHeading = heading; c.blocked = 0; c.autoTo = -1; c.climbs++;
-        bindWallPanel(e, heading, x, y, z);
-        c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
-        d.airborne = d.passiveFall = d.grounded = false;
-        d.vx = d.vy = d.vz = 0; d.jumps = 0;
-        e.heading = heading; e.motion.climb = e.motion.mantle = 0;
-        e.lounge = ""; e.speed = 0;
-        return true;
+        || Math.abs(support(e, p.x, p.z, p.y, STEP) - p.y) > 0.2) return false;
+      const sx = Math.sin(outward), sz = Math.cos(outward), side = e.root.scale.x * 0.7;
+      for (let lane = 0; lane < 3; lane++) {
+        const offset = lane === 0 ? 0 : lane === 1 ? -side : side;
+        const baseX = p.x + sz * offset, baseZ = p.z - sx * offset;
+        if (Math.abs(climbSurfaceAt(baseX, baseZ) - p.y) > 0.2
+          || !cliffRiserAhead(baseX, baseZ, outward, -1, 1.6)) continue;
+        for (let edge = 0.2; edge <= 0.8; edge += 0.2) {
+          if (climbSurfaceAt(baseX + sx * edge, baseZ + sz * edge) >= p.y - 0.8) continue;
+          const distance = edge + CLIMB_STANDOFF;
+          let x = baseX + sx * distance, z = baseZ + sz * distance;
+          const y = p.y - 0.7;
+          if (!wallPanels.fit(x, y - 1.4, z, outward + Math.PI, PANEL)) continue;
+          const heading = PANEL.heading, nx = PANEL.nx, nz = PANEL.nz;
+          // Put the mount outside the fitted panel, even at a diagonal edge.
+          const correction = (PANEL.x - x) * nx + (PANEL.z - z) * nz - CLIMB_STANDOFF;
+          if (Math.abs(correction) > 0.6) continue;
+          x += nx * correction; z += nz * correction;
+          if (wallContactShare(e, x, y, z, heading) < WALL_ENTER_SHARE || !wallBodyClear(x, y, z, heading)
+            || !climbClear(e, p.x, p.y, p.z, x, p.y, z, heading, true, true)
+            || !climbClear(e, x, p.y, z, x, y, z, heading, true, true)) continue;
+          c.active = c.free = c.mountPending = c.descending = c.fromTop = true;
+          c.handoffDirection = 0; c.freeTargetX = x; c.freeTargetY = y; c.freeTargetZ = z;
+          c.handoffStartX = p.x; c.handoffStartY = p.y; c.handoffStartZ = p.z;
+          c.waitRelease = e.controlled && d.climbAxis > 0;
+          c.heading = c.topHeading = heading; c.blocked = 0; c.autoTo = -1; c.climbs++;
+          bindWallPanel(e, heading, x, y, z);
+          c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
+          d.airborne = d.passiveFall = d.grounded = false;
+          d.vx = d.vy = d.vz = 0; d.jumps = 0;
+          e.heading = heading; e.motion.climb = e.motion.mantle = 0;
+          e.lounge = ""; e.speed = 0;
+          return true;
+        }
       }
       return false;
     };
@@ -4840,7 +4932,8 @@
       const speed = Math.hypot(d.vx, d.vz);
       if (speed < 0.2) return false;
       const travelHeading = Math.atan2(d.vx, d.vz);
-      if (walkingRampAt(p.x, p.y, p.z, travelHeading)) return false;
+      if (walkingRampAt(p.x, p.y, p.z, travelHeading)
+        && !cliffRiserAhead(p.x, p.z, travelHeading, 1)) return false;
       let heading = wallFaceHeading(e, travelHeading), descending = false;
       if (d.airborne && d.vy <= 0 && (!Number.isFinite(heading)
         || wallContactShare(e, p.x, p.y, p.z, heading) < WALL_ENTER_SHARE)) {
@@ -4850,7 +4943,8 @@
         }
       }
       if (!Number.isFinite(heading)) return false;
-      if (walkingRampAt(p.x, p.y, p.z, heading)) return false;
+      if (walkingRampAt(p.x, p.y, p.z, heading)
+        && !cliffRiserAhead(p.x, p.z, heading, descending ? -1 : 1)) return false;
       const sx = Math.sin(heading), sz = Math.cos(heading);
       if (!descending && (d.vx * sx + d.vz * sz < 0.2
         || !d.airborne && !cliffRiserAhead(p.x, p.z, heading, 1))) return false;
@@ -5037,10 +5131,10 @@
       const p = e.root.position, d = e.drive;
       const ramp = walkingRampAt(x, p.y, z, heading);
       if (ramp) drop = Math.max(drop, BL.wallPanels.RAMP_STEP);
-      if (allowFall && e.controlled && d.run && !ramp
+      if (allowFall && e.controlled && !ramp
         && pointSupportAt(p.x, p.z, p.y + 0.1) >= p.y - STEP
-        && pointSupportAt(x, z, p.y + 0.1) < p.y - STEP
-        && beginSupportFall(e, x, z, heading, d.vx, d.vz)) return true;
+        && pointSupportAt(x, z, p.y + 0.1) < p.y - STEP)
+        return beginSupportFall(e, x, z, heading, d.vx, d.vz);
       const y = support(e, x, z, p.y, PROP_STEP, heading);
       if (!Number.isFinite(y) || y < p.y - drop) {
         // Only the requested step may leave a prop. An avoidance sidestep
@@ -5299,6 +5393,24 @@
       }
       e.gorilla.poseManaged(dt, p.x, p.y, p.z, e.heading, e.speed,
         e.jump.active || e.drive.airborne && !e.drive.passiveFall, e.biped, e.lounge, e.motion);
+      if (e.climb.active && !e.climb.mountPending && !e.climb.handoffDirection
+        && e.motion.climbBlend > 0.98 && e.motion.mantle < 0.01) {
+        // The rendered palms, rather than the wall's coarse body samples,
+        // decide whether this gorilla is still attached. One hand may release
+        // for a checked regrip, but every other hand must hold actual stone.
+        const released = Number.isFinite(e.motion.climbGripX) ? e.motion.climbGripRelease : 0;
+        const required = 3 & ~released;
+        if ((e.gorilla.climbHandContactMask() & required) !== required) {
+          dropRectangleClimb(e, false);
+          e.climb.debugStuck = false;
+          if (e.debugMove.active) {
+            e.debugMove.status = "blocked";
+            e.debugMove.reason = "Lost wall grip";
+            e.debugMove.wallPending = false;
+          }
+          e.gorilla.poseManaged(dt, p.x, p.y, p.z, e.heading, 0, false, e.biped, "", e.motion);
+        }
+      }
       e.motion.walkPhase = NaN;
       e.roam.riseAdmitted = false;
       if (!e.motion.lab && e.footprintMode === "lab") {
@@ -5526,7 +5638,9 @@
       // the grounded handoff. Re-read live support before any idle/work logic;
       // an unsupported gorilla falls now instead of waiting at the old height.
       const liveFloor = support(e, p.x, p.z, p.y, PROP_STEP);
-      if (!e.jump.active && !e.fire.rolling && Number.isFinite(liveFloor) && liveFloor < p.y - STEP
+      const centerFloor = pointSupportAt(p.x, p.z, p.y + 0.1);
+      if (!e.jump.active && !e.fire.rolling && Number.isFinite(liveFloor)
+        && (liveFloor < p.y - STEP || centerFloor < p.y - STEP && p.y - liveFloor <= STEP)
         && beginSupportFall(e, p.x, p.z, e.heading, 0, 0)) {
         updateDriven(e, dt); poseEntry(e, dt, beforeX, beforeY, beforeZ); return;
       }

@@ -482,6 +482,7 @@
       for (const f of frames) {
         const dx = wx - f.x, dz = wz - f.z;
         const along = dx * f.ox + dz * f.oz, across = Math.abs(dz * f.ox - dx * f.oz);
+        // Use the recessed edge of diagonal cliff cells for the wall plane; the half-metre entrance rim projects from it.
         if (along > -f.e && across < 5) bluff = Math.max(bluff, (1 - smooth((across - 3) / 2)) * (1 - smooth((along - BLUFF_LEN) / 2)));
         else if (f.lean && along > -APRON && across < 3.5) {
           apron = true;

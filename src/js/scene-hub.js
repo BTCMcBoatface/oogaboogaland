@@ -6534,6 +6534,9 @@
       side = -(lift - hip) * across / rollNorm;
       lift = hip + (relative + along * forward) / norm;
       forward = (forward - along * relative) / norm;
+      // Downhill pitch must not put the trunk core below the lower contact
+      // ray, where a legal tread would be mistaken for a blocking wall.
+      lift = Math.max(lift, 0.65 * scale);
     }
     const sine = Math.sin(heading), cosine = Math.cos(heading);
     out.x = x + sine * forward + cosine * side;
@@ -6922,6 +6925,22 @@
           floor = Math.max(floor, solids.gorillaBlendedStepAt(x, z, y, reach, heading, floor,
             rect.halfForward, rect.halfSide, rect.centerForward));
         } else floor = Math.max(floor, solids.gorillaStepAt(x, z, y, step));
+      }
+      // At a diagonal roof edge the center can be over lower ground while
+      // the walking pads still stand on the lip. One remaining corner alone
+      // cannot hold the whole body up.
+      if (!entry.drive.airborne && !entry.jump.active && !entry.climb.active && y - floor > STEP_MAX) {
+        const sine = Math.sin(heading), cosine = Math.cos(heading), scale = entry.root.scale.x;
+        let planted = 0;
+        for (let forward = 0; forward < 2; forward++) for (let side = -1; side <= 1; side += 2) {
+          const along = (forward ? 1.35 : 0.05) * scale, across = side * 0.6 * scale;
+          const px = x + sine * along + cosine * across, pz = z + cosine * along - sine * across;
+          if (Math.abs(clankerPadSupportAt(px, pz, y, step, props) - y) <= 0.1) planted++;
+        }
+        if (planted >= 2) {
+          const pads = entry.gorilla.walkSupportAt(x, z, y, heading, step, props, clankerPadSupportAt);
+          if (Number.isFinite(pads)) floor = Math.max(floor, pads);
+        }
       }
       return floor;
     }
