@@ -38,35 +38,64 @@
     v.set(2, -6, -1, L.maneDk);
     return v;
   };
+  // The cub drawn cartoon over the same frame: a round body with a pale belly, a fluffy mane round the head, a muzzle
+  // with a black nose, eyes and ears, front legs reaching forward, hind legs and a tail with a dark tuft. Placed in
+  // cell units where the voxel cub's parts stand, the voxel cub kept as its shell.
+  const cartoonLion = (u, origin) => {
+    const { geometry, blob } = BL.models, geo = geometry(), c = (i) => LION_PALETTE[i];
+    geo.smooth = true;
+    const part = (x, y, z, rx, ry, rz, i, e = 2) => blob(geo, origin.x + x * u, origin.y + y * u, origin.z + z * u, rx * u, ry * u, rz * u, c(i), 0, e);
+    part(2, 3, 2, 2.1, 3.1, 2.0, 0);
+    part(2, 2.6, 3.4, 1.3, 2.2, 0.9, 4);
+    part(2, 8.4, 2.9, 3.1, 2.7, 2.4, 2, 2.2);
+    part(2, 8.5, 4.3, 2.0, 1.7, 1.6, 0);
+    part(2, 7.7, 5.7, 0.95, 0.65, 0.55, 4);
+    part(2, 8.25, 6.2, 0.38, 0.28, 0.2, 5);
+    for (const x of [1.1, 2.9]) part(x, 9.2, 5.75, 0.3, 0.36, 0.14, 5);
+    for (const x of [0.6, 3.4]) part(x, 10.9, 3.2, 0.55, 0.55, 0.35, 0);
+    for (const x of [0.6, 3.4]) {
+      part(x, 3.9, 5.1, 0.55, 1.1, 1.3, 0);
+      part(x, 2.1, 6.3, 0.62, 0.55, 0.6, 0);
+      part(x, -1.4, 1.9, 0.62, 1.7, 0.9, 0);
+      part(x, -2.8, 3.1, 0.6, 0.5, 0.75, 0);
+    }
+    part(2.5, -2.8, -0.5, 0.35, 2.5, 0.35, 0);
+    part(2.5, -5.6, -0.5, 0.55, 0.6, 0.55, 3);
+    return geo;
+  };
+  // The gold banded cap, round and built once in the head's frame from smooth masses: a dome set down over the crown
+  // to just above the brows, two darker bands round it and a knob on top.
+  let cap = null;
+  const capGeometry = (u) => {
+    if (cap) return cap;
+    const { geometry, blob } = BL.models, geo = geometry(), gold = hexToRgb("#d4a83a"), goldDk = hexToRgb("#9c7a22");
+    geo.smooth = true;
+    // Set back over the crown so its front rests on the brow and its back covers the curls.
+    const z = -1.0 * u;
+    blob(geo, 0, 7.0 * u, z, 4.25 * u, 2.3 * u, 4.35 * u, gold, 0, 2.2);
+    blob(geo, 0, 5.75 * u, z, 4.1 * u, 0.32 * u, 4.2 * u, goldDk, 0, 2.2);
+    blob(geo, 0, 7.55 * u, z, 4.15 * u, 0.3 * u, 4.25 * u, goldDk, 0, 2.2);
+    blob(geo, 0, 9.35 * u, z, 0.7 * u, 0.5 * u, 0.7 * u, gold);
+    return (cap = geo);
+  };
   BL.characters.add({
     handle: "timechainb",
     joined: 1788800921,
     lastCommit: 1788171200,
-    look: { portrait: { min: [-1, -2, 0], max: [7, 11, 8] }, hairless: true, hatY: 12, skin: "#b8703c", hair: "#33200f" },
+    // The Anunnaki: dark hair under a round gold banded cap, and a full beard to the chest.
+    look: { portrait: { min: [-1, -2, 0], max: [7, 11, 8] }, face: "beard", beardLong: true, hatY: 12, skin: "#b8703c", hair: "#33200f" },
     dress: {
       // The staff stands upright in the grip.
       club: (k) => ({ voxels: staffVoxels(k.rand), rest: { x: 0.2, z: 0 } }),
-      // The Anunnaki: a gold banded cap over the brow, hair curling down the back and sides, a full beard to the chest
-      crown(k, v) {
-        const P = k.P, gold = k.color("#d4a83a"), goldDk = k.color("#9c7a22");
-        const curl = (x, y, z) => (x + y + z) % 2 ? P.hairDk : P.hair;
-        v.fill(-1, 7, -4, 5, -2, -1, curl);
-        v.fill(-1, -1, -4, 5, 0, 2, curl);
-        v.fill(7, 7, -4, 5, 0, 2, curl);
-        v.fill(0, 6, 0, 1, 5, 7, curl);
-        v.fill(0, 6, -2, -1, 5, 8, curl);
-        v.fill(1, 5, -5, -3, 6, 8, curl);
-        v.fill(2, 4, -7, -6, 7, 8, curl);
-        v.set(3, -8, 8, P.hairDk);
-        v.fill(-1, 7, 6, 8, -1, 6, (x, y) => y === 7 ? gold : goldDk);
-        v.fill(0, 6, 9, 9, 0, 5, gold);
-        v.fill(1, 5, 10, 10, 1, 4, goldDk);
-        v.fill(2, 4, 11, 11, 2, 3, gold);
+      headgear(k) {
+        addChild(k.parts.head, createNode({ geometry: capGeometry(k.u) }));
       },
       // A lion cub carried on the right arm
       extras(k) {
         const u = k.u;
-        k.parts.lion = createNode({ geometry: voxelGeometry(lionVoxels(k.rand), { unit: u, palette: LION_PALETTE, origin: { x: k.armX + 1.5 * u, y: -1 * u, z: -2 * u } }) });
+        const origin = { x: k.armX + 1.5 * u, y: -1 * u, z: -2 * u }, geometry = cartoonLion(u, origin);
+        geometry.toonShell = geometry.collisionGeometry = voxelGeometry(lionVoxels(k.rand), { unit: u, palette: LION_PALETTE, origin });
+        k.parts.lion = createNode({ geometry });
         addChild(k.root, k.parts.lion);
       }
     }

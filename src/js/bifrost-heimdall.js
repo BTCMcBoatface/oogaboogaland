@@ -396,7 +396,7 @@
       P.club.visible = false;
       P.staff = createNode({ position: { x: 0, y: -GRIP * h, z: 0 }, scale: scale(), quaternion: quat.create(), geometry: staff() });
       addChild(P.armL, P.staff);
-      P.horn = createNode({ position: { x: 0, y: -0.62 * h, z: 0.08 * h }, scale: scale(), quaternion: quat.create(), geometry: gjallar.geometry });
+      P.horn = createNode({ position: { x: 0, y: -BL.models.CLUB_HAND * h, z: 0.08 * h }, scale: scale(), quaternion: quat.create(), geometry: gjallar.geometry });
       P.bell = createNode({ position: { ...gjallar.bell } });
       addChild(P.horn, P.bell);
       addChild(P.armR, P.horn);
