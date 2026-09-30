@@ -1821,7 +1821,8 @@
     if (renderer.kind === "canvas2d") return;
     const gulls = BL.dressing.flock({ count: 22, radius: [28, 70], height: [8, 30], seed: 3 });
     const shore = BL.dressing.flock({ count: 10, radius: [90, 150], height: [SEA_Y + 6, SEA_Y + 20], seed: 8, scale: 3 });
-    const boats = BL.dressing.fleet({ sea: SEA_Y, spots: [[140, 0.4, 5.6], [190, 2.2, 6.8], [230, 3.9, 6.2], [170, 5.1, 5.3], [260, 1.3, 7.3]] });
+    // Keep the full hulls between the main island's outlying islets and the sea stacks starting at r240.
+    const boats = BL.dressing.fleet({ sea: SEA_Y, spots: [[140, 0.4, 5.6], [160, 2.2, 6.8], [125, 3.9, 6.2], [150, 5.1, 5.3], [170, 1.3, 7.3]] });
     for (const node of [gulls.node, shore.node, ...boats.nodes]) {
       addChild(root, node);
       placed.push(node);
