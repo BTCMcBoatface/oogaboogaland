@@ -2336,6 +2336,11 @@ void main() {
     };
     const init = () => {
       parallel = gl.getExtension("KHR_parallel_shader_compile");
+      // Every flat varying is the same at a triangle's three corners, so the first corner draws the same pixels as
+      // GL's default last. Under the default, ANGLE's Metal backend (Safari, Chrome on Apple) rewrites each flat
+      // draw's vertices into index buffers it keeps: about 2.6 GB of GPU memory on the hub.
+      const provoking = gl.getExtension("WEBGL_provoking_vertex");
+      if (provoking) provoking.provokingVertexWEBGL(provoking.FIRST_VERTEX_CONVENTION_WEBGL);
       buildPrograms();
       buildMatrixTexture();
       buildShadow();
