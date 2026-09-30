@@ -212,7 +212,7 @@
         if (y >= roof.y - 0.55 && (roof.x - x) ** 2 + (roof.z - z) ** 2 < 4.5 ** 2) { patch = true; break; }
       }
       if (!patch) return false;
-      // Unused cave tops contain exposed stone as well as grass. All four
+      // Eligible cave and HQ tops contain exposed stone as well as grass. All four
       // sides still need a nearby supporting top; the full rig clearance
       // rejects higher rock before a resting place is accepted.
       for (let side = 0; side < 4; side++) {
@@ -1359,7 +1359,7 @@
       const roofs = ctx.loungeRoofs || ctx.climbRoofs, meadow = ctx.meadowRadius || 22;
       const compact = e.compact, radius = e.radius, height = e.height;
       e.compact = false; e.radius = Math.max(radius, 2.12); e.height = Math.max(height, 2.7);
-      // Search clear patches on inactive roofs, including stone. The
+      // Search clear patches on inactive cave and HQ ramp roofs, including stone. The
       // first small ring often lands on trees or higher voxels; a bounded half-
       // metre grid finds the actual clearings without moving props or rock.
       if (roofs && ctx.surfaceAt) for (let i = 0; i < roofs.length && loungeCount < 80; i++) {
