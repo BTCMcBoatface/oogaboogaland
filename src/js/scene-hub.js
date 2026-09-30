@@ -2160,16 +2160,18 @@
   // An invisible one-way staircase continues from the dock into the sky. It
   // only arms from a grounded step off the outer deck: arriving from the air,
   // or jumping once on it, leaves every tread intangible until the visitor
-  // returns to the dock. The small fixed glyph pool reveals only fresh foot
-  // contacts, without adding collision meshes or per-frame allocations.
+  // returns to the dock. A fixed glyph pool reveals nearby treads after each
+  // foot contact, without adding collision meshes or per-frame allocations.
   const buildDockStairs = (dock) => {
-    const START = 4.25, RUN = 0.62, RISE = 0.5, HALF_WIDTH = 0.78, EFFECT_TIME = 0.62;
+    const START = 4.25, RUN = 0.62, RISE = 0.5, HALF_WIDTH = 0.78, EFFECT_TIME = 2.8;
+    const REVEAL_RADIUS = 3, GLYPH_POOL = 40;
     const base = dock.position.y, count = Math.ceil((FLY.yMax - base) / RISE), end = START + count * RUN;
     const ry = dock.rotation.y, ux = Math.cos(ry), uz = -Math.sin(ry), vx = Math.sin(ry), vz = Math.cos(ry);
     const glyphs = [];
-    for (let i = 0; i < MATRIX_TYPES; i++) {
-      const node = createNode({ visible: false, rotation: { x: -Math.PI / 2, y: ry, z: 0 }, geometry: hubModels.matrixGlyph(i), glow: 1 });
+    for (let i = 0; i < GLYPH_POOL; i++) {
+      const node = createNode({ visible: false, rotation: { x: -Math.PI / 2, y: ry, z: 0 }, geometry: hubModels.matrixGlyph(i % MATRIX_TYPES), glow: 1 });
       node.dockLife = 0;
+      node.dockStep = 0;
       addChild(root, node);
       placed.push(node);
       glyphs.push(node);
@@ -2205,18 +2207,29 @@
       const floor = floorAt(index);
       return floor <= y + maxStep + 1e-7 ? floor : -Infinity;
     };
-    const emit = (actor, index) => {
-      const node = glyphs[nextGlyph];
-      nextGlyph = (nextGlyph + 1) % glyphs.length;
-      const p = actor.root.position, across = acrossAt(p.x, p.z), along = START + (index - 0.5) * RUN;
-      node.position.x = dock.position.x + ux * along + vx * across;
+    const reveal = (index, distance) => {
+      if (index < 1 || index > count) return;
+      let node = null;
+      for (let i = 0; i < glyphs.length; i++) {
+        if (glyphs[i].dockLife > 0 && glyphs[i].dockStep === index) { node = glyphs[i]; break; }
+      }
+      if (!node) {
+        node = glyphs[nextGlyph];
+        nextGlyph = (nextGlyph + 1) % glyphs.length;
+      }
+      const along = START + (index - 0.5) * RUN;
+      node.position.x = dock.position.x + ux * along;
       node.position.y = floorAt(index) + 0.018;
-      node.position.z = dock.position.z + uz * along + vz * across;
-      node.scale.x = node.scale.y = 2.8;
+      node.position.z = dock.position.z + uz * along;
+      node.scale.x = node.scale.y = 4.4;
       node.scale.z = 1;
       node.glow = 1;
-      node.dockLife = EFFECT_TIME;
+      node.dockStep = index;
+      node.dockLife = Math.max(node.dockLife, EFFECT_TIME - distance * 0.18);
       node.visible = true;
+    };
+    const emit = (index) => {
+      for (let offset = -REVEAL_RADIUS; offset <= REVEAL_RADIUS; offset++) reveal(index + offset, Math.abs(offset));
       contacts++;
     };
     const update = (dt, actor) => {
@@ -2225,7 +2238,7 @@
         if (node.dockLife <= 0) continue;
         node.dockLife = Math.max(0, node.dockLife - dt);
         const k = node.dockLife / EFFECT_TIME;
-        node.scale.x = node.scale.y = 1.8 + k;
+        node.scale.x = node.scale.y = 3.5 + k * 0.9;
         node.glow = 0.35 + k * 0.65;
         if (!node.dockLife) node.visible = false;
       }
@@ -2239,7 +2252,7 @@
       const feet = p.y - actor.baseY;
       if (Math.abs(feet - floorAt(index)) < 0.08 && index !== lastStep) {
         lastStep = index;
-        emit(actor, index);
+        emit(index);
       }
     };
     return {
