@@ -832,6 +832,15 @@
       for (let i = 1; i < ammo.length; i++) if (ammo[i] > ammo[selected]) selected = i;
       return selected;
     };
+    const nextReloadMagazine = (cave) => {
+      const ammo = cave.weapon.spareAmmo;
+      let selected = -1, rounds = -1;
+      for (let i = 0; i < ammo.length; i++) if (ammo[i] < AMMO_MAX && ammo[i] > rounds) {
+        selected = i;
+        rounds = ammo[i];
+      }
+      return selected;
+    };
     const reloadingSpare = (cave) => hasMagazine(cave) && cave.weapon.reloadSpare;
     const syncMagazineSlot = (holder, index) => {
       if (index >= holder.weapon.spareAmmo.length) {
@@ -944,12 +953,12 @@
       const w = cave.weapon;
       let remaining = Math.max(0, Math.floor(amount));
       const supplied = remaining;
-      // Top off the fullest unfinished magazine first, then move to the next.
+      // Fill the AK first, then the fullest unfinished spare and the last spare.
       // The caller consumes the pickup even when all capacity is already full.
       for (let pass = 0; pass < 3 && remaining; pass++) {
-        let selected = -1, ammo = w.ammo < AMMO_MAX ? w.ammo : -1;
-        for (let i = 0; i < w.spareAmmo.length; i++) if (w.spareAmmo[i] < AMMO_MAX && w.spareAmmo[i] > ammo) { selected = i; ammo = w.spareAmmo[i]; }
-        if (ammo < 0) break;
+        const selected = w.ammo < AMMO_MAX ? -1 : nextReloadMagazine(cave);
+        const ammo = selected < 0 ? w.ammo : w.spareAmmo[selected];
+        if (ammo >= AMMO_MAX) break;
         const rounds = Math.min(remaining, AMMO_MAX - ammo);
         if (selected < 0) w.ammo += rounds;
         else w.spareAmmo[selected] += rounds;
@@ -1587,15 +1596,6 @@
       if (!cave || !cave.weapon.secondaryOwned || !cave.root.visible || cave.health.stunned || cave.state === "sleeping" || cave.camp.burning || cave.camp.rolling || cave.bedTravel.mode || cave.camp.seat) return false;
       const p = cave.root.position, feet = p.y - cave.baseY, reach = reloadRadius() + cave.bodyRadius;
       return p.x * p.x + p.z * p.z <= reach * reach && feet <= reloadHeight + 1.2 && feet + cave.bodyHeight >= reloadHeight - 0.2;
-    };
-    const nextReloadMagazine = (cave) => {
-      const ammo = cave.weapon.spareAmmo;
-      let selected = -1, rounds = -1;
-      for (let i = 0; i < ammo.length; i++) if (ammo[i] < AMMO_MAX && ammo[i] > rounds) {
-        selected = i;
-        rounds = ammo[i];
-      }
-      return selected;
     };
     const reloadMissing = (cave) => AMMO_MAX * (1 + magazineCount(cave)) - totalAmmo(cave);
     const reloadBite = (cave) => {
