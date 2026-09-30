@@ -17,7 +17,7 @@
   // the backend reports their commits they are busy in all of them, whatever the
   // clock says (explicit debug roster modes take precedence). Delete the flag once
   // real activity arrives and the dates take over again.
-  const roster = characters.map(({ handle, display, lastCommit, look }) => ({ name: handle, display: display || handle, lastCommitAt: lastCommit * 1e3, activity: new Map([[ENTROPY, lastCommit * 1e3]]), maintainer: !!(look && look.maintainer) }));
+  const roster = characters.map(({ handle, display, lastCommit, look }) => ({ name: handle, display: display || handle, lastCommitAt: lastCommit * 1e3, lastContributionAt: 0, activity: new Map([[ENTROPY, lastCommit * 1e3]]), maintainer: !!(look && look.maintainer) }));
   // Filter construction, not visibility: solo worlds do no work for absent Oogas.
   // Keep the canonical roster intact for activity, likenesses and stable indices.
   const params = new URLSearchParams(location.search);
@@ -70,23 +70,33 @@
     const seen = contributor.activity.get(repo);
     return seen > 0 && seen <= at && at - seen < WORK_WINDOW;
   };
+  const stateAt = (stamp, at) => {
+    const age = at - stamp;
+    if (!Number.isFinite(age) || stamp <= 0 || age < 0) return "sleeping";
+    if (age < WORK_WINDOW) return "working";
+    return age < CHILL_WINDOW ? "chilling" : "sleeping";
+  };
   const stateFor = (contributor, at = Date.now()) => {
     if (debugRoster) return debugModes.get(contributor)?.state || "sleeping";
     if (debugState) return debugState;
     if (contributor.maintainer) return "working";
-    const age = at - contributor.lastCommitAt;
-    if (!Number.isFinite(age) || contributor.lastCommitAt <= 0 || age < 0) return "sleeping";
-    if (age < WORK_WINDOW) return "working";
-    return age < CHILL_WINDOW ? "chilling" : "sleeping";
+    return stateAt(contributor.lastCommitAt, at);
   };
-  const ageLabel = (contributor, at = Date.now()) => {
-    if (contributor.maintainer) return "building";
-    if (!Number.isFinite(contributor.lastCommitAt) || contributor.lastCommitAt <= 0) return "no activity";
-    const minutes = Math.max(0, Math.floor((at - contributor.lastCommitAt) / MINUTE));
+  const contributionStateFor = (contributor, at = Date.now()) => stateAt(contributor.lastContributionAt, at);
+  const ageAt = (stamp, at) => {
+    if (!Number.isFinite(stamp) || stamp <= 0) return "no activity";
+    const minutes = Math.max(0, Math.floor((at - stamp) / MINUTE));
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
+  };
+  const ageLabel = (contributor, at = Date.now()) => contributor.maintainer ? "building" : ageAt(contributor.lastCommitAt, at);
+  const contributionAgeLabel = (contributor, at = Date.now()) => ageAt(contributor.lastContributionAt, at);
+  const recordContribution = (contributor, stamp) => {
+    if (stamp <= contributor.lastContributionAt) return false;
+    contributor.lastContributionAt = stamp;
+    return true;
   };
   // Rows: { name: GitHub handle, lastCommitAt: Unix milliseconds, repo? }.
   // Keep each repository's newest activity; delayed snapshots cannot rewind it.
@@ -97,6 +107,7 @@
       if (!row || typeof row.name !== "string" || !Number.isFinite(row.lastCommitAt) || row.lastCommitAt <= 0 || row.lastCommitAt > at) continue;
       const contributor = byName.get(row.name.toLowerCase()), repo = repositoryOf(row.repo === undefined ? ENTROPY : row.repo);
       if (!contributor || !repo) continue;
+      if (recordContribution(contributor, row.lastCommitAt)) changed.add(contributor);
       const previous = contributor.activity.get(repo);
       if (previous !== undefined ? row.lastCommitAt <= previous : contributor.activity.size >= MAX_REPOS) continue;
       contributor.activity.set(repo, row.lastCommitAt);
@@ -117,6 +128,7 @@
   // same org-wide wake/sleep state.
   const applySnapshot = (snapshots, at = Date.now()) => {
     const rows = [];
+    let sourceChanged = false;
     // One sub-snapshot per repository key, so the per-key first-snapshot
     // bookkeeping below stays uniform across all three intake shapes.
     const intakes = [];
@@ -130,6 +142,13 @@
       }
       if (version !== 2 && version !== 3) continue;
       if (typeof snapshot.meta.org !== "string" || snapshot.meta.org.toLowerCase() !== "oogaboogax") continue;
+      // The org's latest seen time is authoritative for the roster even when
+      // per-repository rows are used separately to route working characters.
+      if (Array.isArray(snapshot.contributors)) for (const contributor of snapshot.contributors) {
+        if (!contributor || typeof contributor.login !== "string" || typeof contributor.last_seen_at !== "string" || !ISO_TIME.test(contributor.last_seen_at)) continue;
+        const stamp = Date.parse(contributor.last_seen_at), entry = byName.get(contributor.login.toLowerCase());
+        if (entry && Number.isFinite(stamp) && stamp > 0 && stamp <= at && recordContribution(entry, stamp)) sourceChanged = true;
+      }
       const perRepo = version === 3 && Array.isArray(snapshot.repos)
         ? snapshot.repos.filter((r) => r && typeof r.name === "string" && Array.isArray(r.contributors))
         : [];
@@ -164,7 +183,9 @@
         for (const { name, lastCommitAt } of accepted) rows.push({ name, lastCommitAt, repo });
       }
     }
-    return applyActivity(rows, at);
+    const updated = applyActivity(rows, at);
+    if (sourceChanged && !updated) for (const notify of listeners) notify();
+    return updated;
   };
   const subscribe = (callback) => {
     listeners.add(callback);
@@ -214,5 +235,5 @@
     if (look.height) traits.height = look.height;
     return traits;
   };
-  BL.contributors = { roster, activeRoster, solo, debugState, debugRoster, stateFor, ageLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
+  BL.contributors = { roster, activeRoster, solo, debugState, debugRoster, stateFor, ageLabel, contributionStateFor, contributionAgeLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
 })();

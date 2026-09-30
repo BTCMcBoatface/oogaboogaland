@@ -1295,6 +1295,7 @@
   const addProp = (kind, node, x, z, radius) => {
     const owner = { kind: "prop", prop: kind, node, x, z, ripe: 0, pickRadius: radius, active: true };
     if (kind === "tree" || kind === "bush" || kind === "flower" || kind === "grass" || kind === "palm") owner.weaponType = "none";
+    if (kind === "tree" || kind === "palm") node.npcTreeSupport = true;
     addTarget(node, owner, { radius });
     props.push(owner);
     if (CLANKER_STEP_PROPS.has(kind)) {
@@ -3136,8 +3137,11 @@
       ? Math.max(rise, BL.clankers.WALK_HEIGHT) : rise;
     return clankerMeshes.supportAt(x, z, y, step, PLAYER_RADIUS, null, null, false, characterClankerSupportAllowed);
   };
+  // Tree tops are landing surfaces for the visitor, not resting floors for wandering Oogas.
+  const npcTreeSupportAllowed = (node) => !node.npcTreeSupport;
   const propSupportAt = (x, z, y, rise, actor) => {
-    let floor = solids ? solids.supportAt(x, z, y, rise, PLAYER_RADIUS) : -Infinity;
+    const npc = actor?.contributor && actor !== pilot?.player;
+    let floor = solids ? solids.supportAt(x, z, y, rise, PLAYER_RADIUS, null, null, false, npc ? npcTreeSupportAllowed : null) : -Infinity;
     floor = Math.max(floor, characterClankerSupportAt(x, z, y, rise, actor));
     if (altar && ALTAR_HEIGHT <= y + rise + 1e-7 && Math.hypot(x, z) < altar.platformRadius + PLAYER_RADIUS - 1e-7) floor = Math.max(floor, ALTAR_HEIGHT);
     if (crew) for (let i = 0; i < crew.list.length; i++) {
