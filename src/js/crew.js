@@ -3763,7 +3763,7 @@
       if (travel.mode === "walk") {
         if (cave.hop > 0 || cave.hopV > 0) { runPlayer(cave, dt, false); return; }
         // The architectural route ends at the meadow. Only workers continue to a live eating slot.
-        if (!travel.toBed && travel.index >= travel.route.length - 1) {
+        if (!travel.toBed && cave.state !== "chilling" && travel.index >= travel.route.length - 1) {
           travel.mode = ""; travel.route = null; travel.bed = null;
           if (cave.state === "working") { startMeal(cave); walkToSlot(cave, true); }
           else if (wanderSpot) startWander(cave);
@@ -3794,7 +3794,11 @@
         if (travel.index === travel.route.length) {
           standPose(cave);
           if (travel.toBed) lieDown(cave);
-          else { travel.mode = ""; travel.route = null; travel.bed = null; cave.root.rotation.y = Math.atan2(-p.x, -p.z); startMeal(cave); }
+          else {
+            travel.mode = ""; travel.route = null; travel.bed = null;
+            if (cave.state === "chilling" && wanderSpot) startWander(cave);
+            else { cave.root.rotation.y = Math.atan2(-p.x, -p.z); startMeal(cave); }
+          }
         } else {
           walkPose(cave, travel.phase);
           // Contact stays on the physical floor; gait motion lives in the limbs.

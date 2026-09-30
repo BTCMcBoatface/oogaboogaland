@@ -8093,8 +8093,14 @@
       const p = cave.root.position, feet = p.y - cave.baseY;
       return Math.abs(bedSupportAt(p.x, p.z, feet, 1e-4, 0) - feet) < 1e-4 ? island.supportAt(p.x, p.z, feet, STEP_MAX, -120, sleepNavigation.radius) : feet;
     };
-    shared.bedRoute = (cave, bed, toBed) => sleepNavigation.route(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, cave.slot?.x, cave.slot?.z);
-    shared.bedPlan = (cave, bed, toBed) => sleepNavigation.plan(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, cave.slot?.x, cave.slot?.z);
+    shared.bedRoute = (cave, bed, toBed) => {
+      const home = cave.slot || WALK_IN;
+      return sleepNavigation.route(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, home.x, home.z, !toBed && cave.state === "chilling");
+    };
+    shared.bedPlan = (cave, bed, toBed) => {
+      const home = cave.slot || WALK_IN;
+      return sleepNavigation.plan(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, home.x, home.z, !toBed && cave.state === "chilling");
+    };
     shared.bedRouteClear = (cave, to) => {
       const p = cave.root.position;
       sleepRouteFrom.x = p.x; sleepRouteFrom.y = p.y - cave.baseY; sleepRouteFrom.z = p.z;
