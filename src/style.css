@@ -440,7 +440,7 @@ body[data-active-scene="hub"] .home-link {
 
 .sheet {
   position: absolute;
-  top: calc(74px + var(--safe-top));
+  top: calc(62px + var(--safe-top));
   right: calc(16px + var(--safe-right));
   height: 520px;
   max-height: calc(100% - 90px - var(--safe-top) - var(--safe-bottom));
@@ -1490,7 +1490,7 @@ body[data-active-scene="arcade"] .magazine-hud {
 /* Carried equipment expands in place; the jetpack stays beside the character control. */
 .equipment-hud {
   position: absolute;
-  top: calc(74px + var(--safe-top));
+  top: calc(62px + var(--safe-top));
   left: calc(16px + var(--safe-left));
   display: grid;
   grid-template-columns: 218px;
@@ -1740,7 +1740,7 @@ body[data-active-scene="arcade"] .magazine-hud {
 
 .detached-destination-name {
   position: absolute;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   left: 50%;
   min-width: 78px;
   transform: translateX(-50%);
