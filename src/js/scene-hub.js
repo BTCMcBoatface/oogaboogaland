@@ -7959,22 +7959,23 @@
     // The arch's lanterns pool warm light on its stone, ranked right after the fire so every tier keeps the fires first;
     // its glass glows with the islet's lamps.
     if (archLamp) addLamp({ glow: 0, flare: 0, visible: true }, LAMP.arch, archLamp.pool.x, archLamp.pool.y, archLamp.pool.z, true, 1, "bifrost:arch");
-    // The jumbotron stands on the rim crest just west of the gate, turned to face the meadow center.
+    // The Oogatron arches gently over the path at the top of the south stairs.
     {
-      const jx = -7, jz = -27, jScale = 2.6;
+      const jx = 0, jz = 28.5, jScale = 2.6;
       const jry = Math.atan2(-jx, -jz);
-      claim(jx, jz, 3.4);
-      // legDrop is the stand's reach below the cabinet's middle; jSink is the part sunk into the rock.
-      const legDrop = BL.jumbotron.DROP, jSink = 0.06;
+      claim(jx, jz, 3.8);
+      // Lift the cabinet clear of the path while the posts remain buried beside it.
+      const legDrop = BL.jumbotron.DROP, jSink = 0.06, jLift = 1.62;
       jumbotron = BL.jumbotron.create({
         data: BL.jumbotronData,
-        position: { x: jx, y: island.surfaceAt(jx, jz) + (legDrop - jSink) * jScale, z: jz },
+        position: { x: jx, y: island.surfaceAt(jx, jz) + (legDrop - jSink) * jScale + jLift, z: jz },
         ry: jry,
-        scale: jScale
+        scale: jScale,
+        curved: true
       });
       addChild(root, jumbotron.node);
       placed.push(jumbotron.node);
-      addProp("jumbotron", jumbotron.node, jx, jz, 3.4);
+      addProp("jumbotron", jumbotron.node, jx, jz, 3.8).pickRay = ray => jumbotron.pickRay(ray);
       hud.restoreBoards(jumbotronBoard);
       // Shells launch from just above the cabinet's top rail.
       jumbotronSpot = { x: jx, y: jumbotron.node.position.y + 0.7 * jScale, z: jz };

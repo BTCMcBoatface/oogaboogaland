@@ -2681,10 +2681,11 @@ body[data-active-scene="arcade"] .magazine-hud {
   margin: 0;
   max-width: none;
   max-height: none;
-  padding: calc(8px * var(--board-scale)) calc(10px * var(--board-scale));
-  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 11px), repeating-linear-gradient(180deg, var(--plank) 0 34px, var(--wood-edge) 34px 36px, var(--wood) 36px 70px, var(--wood-edge) 70px 72px);
+  padding: calc(8px * var(--board-scale)) 0;
+  border: 0;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 11px), repeating-linear-gradient(180deg, var(--wood) 0 34px, var(--wood-edge) 34px 36px, var(--plank) 36px 70px, var(--wood-edge) 70px 72px);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: calc(8px * var(--board-scale));
   overflow: hidden;
   pointer-events: auto;
@@ -2693,28 +2694,26 @@ body[data-active-scene="arcade"] .magazine-hud {
 
 .board-floating .panel-head {
   display: grid;
-  grid-template-columns: calc(28px * var(--board-scale)) minmax(0, 1fr) calc(28px * var(--board-scale));
+  grid-template-columns: calc(36px * var(--board-scale)) minmax(0, 1fr) calc(36px * var(--board-scale));
   align-items: center;
+  padding-inline: calc(8px * var(--board-scale));
   cursor: move;
   touch-action: none;
   user-select: none;
 }
 
 .board-floating .panel-head h2 {
-  margin: 0;
-  font-size: calc(14px * var(--board-scale));
-  text-align: center;
+  display: none;
 }
 
 .board-filter[hidden], .board-filter-menu[hidden] { display: none; }
 .board-filter svg { display: block; width: 1em; height: 1em; margin: auto; pointer-events: none; }
-.board-filter[data-active="true"] { color: var(--accent); border-color: var(--accent); }
+.board-filter[data-active="true"] { color: var(--accent); }
 .board-filter-menu {
   position: absolute;
-  inset: calc(44px * var(--board-scale)) calc(10px * var(--board-scale)) calc(10px * var(--board-scale));
   z-index: 1;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: calc(8px * var(--board-scale));
   padding: calc(8px * var(--board-scale));
   border: 2px solid var(--wood-edge);
@@ -2722,6 +2721,8 @@ body[data-active-scene="arcade"] .magazine-hud {
   background: var(--tablet);
   font-size: calc(12px * var(--board-scale));
 }
+.board-rollup { display: flex; align-items: center; gap: calc(8px * var(--board-scale)); cursor: pointer; }
+.board-rollup input { flex: none; width: calc(15px * var(--board-scale)); height: calc(15px * var(--board-scale)); margin: 0; accent-color: var(--accent); }
 .board-filter-tabs { display: flex; gap: calc(6px * var(--board-scale)); }
 .board-filter-tabs button, .board-filter-done {
   padding: calc(6px * var(--board-scale)) calc(10px * var(--board-scale));
@@ -2740,21 +2741,27 @@ body[data-active-scene="arcade"] .magazine-hud {
 
 .board-floating .modal-close {
   margin: 0;
-  width: calc(28px * var(--board-scale));
-  height: calc(28px * var(--board-scale));
-  font-size: calc(18px * var(--board-scale));
+  width: calc(36px * var(--board-scale));
+  height: calc(32px * var(--board-scale));
+  background: var(--wood-edge);
+  font-size: calc(22px * var(--board-scale));
 }
 
 .board-floating .board-screen {
   height: 100%;
   min-height: 0;
   margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   object-fit: contain;
 }
 
 .board-floating .board-nav {
-  grid-template-columns: calc(36px * var(--board-scale)) minmax(0, 1fr) calc(36px * var(--board-scale));
-  gap: calc(8px * var(--board-scale));
+  width: max-content;
+  justify-self: center;
+  grid-template-columns: calc(36px * var(--board-scale)) calc(44px * var(--board-scale)) calc(36px * var(--board-scale));
+  gap: calc(10px * var(--board-scale));
 }
 
 .board-floating .board-page {
@@ -2788,7 +2795,7 @@ body[data-active-scene="arcade"] .magazine-hud {
   height: calc(20px * var(--board-scale));
   padding: 0;
   border: 0;
-  background: repeating-linear-gradient(135deg, transparent 0 4px, var(--paper) 4px 6px);
+  background: linear-gradient(135deg, transparent 0 56%, var(--wood-edge) 56% 62%, transparent 62% 70%, var(--wood-edge) 70% 76%, transparent 76% 84%, var(--wood-edge) 84% 90%, transparent 90%);
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
   cursor: nwse-resize;
   touch-action: none;
@@ -4619,7 +4626,7 @@ body.orbit-dragging #tooltip {
 
 @media (max-height: 500px) and (orientation: landscape) {
   .equipment-hud {
-    top: calc(74px + var(--safe-top));
+    top: calc(62px + var(--safe-top));
   }
 
   #equipment-hud:has(.weapon-hud:not([hidden]), .magazine-hud:not([hidden])):has(.jetpack-hud:not([hidden]))~.bottom-hud>.message-stack {

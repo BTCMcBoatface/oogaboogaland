@@ -1381,6 +1381,7 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
         <button type="button" class="modal-close" data-action="board-close" aria-label="Close">&times;</button>
       </div>
       <section class="board-filter-menu" id="board-filter-menu" aria-label="Oogatron filters" hidden>
+        <label class="board-rollup"><input type="checkbox" id="board-rollup">Roll up within 60 seconds</label>
         <div class="board-filter-tabs" role="tablist" aria-label="Filter by">
           <button type="button" id="board-filter-repos" role="tab" aria-selected="true" aria-controls="board-filter-list" data-filter-tab="repos">Repos</button>
           <button type="button" id="board-filter-users" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="users" tabindex="-1">Contributors</button>
@@ -1389,7 +1390,7 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
         <div class="board-filter-list" id="board-filter-list" role="tabpanel" aria-labelledby="board-filter-repos"></div>
         <button type="button" class="board-filter-done" data-action="board-filter-done">Done</button>
       </section>
-      <canvas class="board-screen" id="board-screen" width="192" height="108" aria-label="The board"></canvas>
+      <canvas class="board-screen" id="board-screen" width="240" height="108" aria-label="The board"></canvas>
       <div class="board-nav">
         <button type="button" class="board-page" id="board-prev" data-action="board-prev" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3"><path d="M15 6L9 12L15 18"/></svg></button>
         <div class="board-center">
