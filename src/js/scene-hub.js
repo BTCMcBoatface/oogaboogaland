@@ -1370,17 +1370,20 @@
     const lights = RENDER_OPTS.lights;
     const webgl = renderer.kind === "webgl2";
     const limit = webgl ? LIGHT_CAPACITY : 0;
+    const phaseNow = daylight.phaseAt(hour);
+    const lanternsOn = phaseNow === "dusk" || phaseNow === "night" || phaseNow === "midnight";
     let count = 0, approximated = 0, registered = 0;
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i], node = l.node;
       if (l.light) registered++;
-      const k = l.always ? 1 : Math.min(1, Math.max(0, (RENDER_OPTS.torch - l.order * LAMP_STAGGER) / LAMP_RAMP));
+      const k = l.always ? 1 : l.nightOnly ? (lanternsOn ? 1 : 0)
+        : Math.min(1, Math.max(0, (RENDER_OPTS.torch - l.order * LAMP_STAGGER) / LAMP_RAMP));
       const lit = k > 0.05;
       if (lit && !l.lit && spark) fx.burst(l.x, l.y, l.z, 5, [SPARK], 1.3);
       l.lit = lit;
       l.k = k;
       const flicker = Math.sin(elapsed * 11 + i * 2.3) * 0.15;
-      node.glow = LAMP_OFF + k * (l.kind.glow + flicker) + node.flare * 1.5;
+      node.glow = (l.nightOnly ? 0 : LAMP_OFF) + k * (l.kind.glow + flicker) + node.flare * 1.5;
       if (node.flare > 0) node.flare = Math.max(0, node.flare - dt * 2);
       // kind.hide: the node is hidden while unlit, so a cold fire shows no flame at all.
       if (l.kind.hide) node.visible = lit;
@@ -1540,7 +1543,8 @@
       addChild(parent, node);
       if (track) placed.push(node);
       if (node.geometry === baked.solid) solids.add(node);
-      else if (node.geometry === baked.glow || node.geometry === baked.swingGlow) addLamp(node, LAMP.lantern, x, y, z, false, lamps.length, `${id}:${lamps.length}`).always = true;
+      else if (node.geometry === baked.glow || node.geometry === baked.swingGlow) addLamp(node, LAMP.lantern, x, y, z, false, 0, `${id}:${lamps.length}`).always = true;
+      else if (node.geometry === baked.lampGlow || node.geometry === baked.swingLampGlow) addLamp(node, LAMP.lantern, x, y, z, false, 0, `${id}:${lamps.length}`).nightOnly = true;
     }
   };
   const CHALKBOARD_X = 6.75, CHALKBOARD_Z = 2.15, CHALKBOARD_YAW = -0.57;
@@ -1657,7 +1661,8 @@
     const lit = baked.lights;
     for (let i = 0; i < lit.length; i += 4) dressingLights.push(lit[i], lit[i + 1], lit[i + 2], lit[i + 3]);
     for (let i = 0; i < dressingLights.length; i += 4) {
-      addLamp({ glow: 0, flare: 0, visible: true }, DRESSING_LAMPS[dressingLights[i + 3]], dressingLights[i], dressingLights[i + 1], dressingLights[i + 2], true, (i / 4) % 5, `dressing:${i / 4}`);
+      const lamp = addLamp({ glow: 0, flare: 0, visible: true }, DRESSING_LAMPS[dressingLights[i + 3]], dressingLights[i], dressingLights[i + 1], dressingLights[i + 2], true, (i / 4) % 5, `dressing:${i / 4}`);
+      lamp.nightOnly = dressingLights[i + 3] !== 4;
     }
     dressingLights.length = 0;
     // These three meadow lanterns stand at the grass edge beside the growing pile path.
@@ -1676,11 +1681,11 @@
       for (const part of BL.dressing.nodes(postDressing, { living: true })) {
         addChild(node, part);
         if (part.geometry === postDressing.solid) solids.add(part);
-        if (part.geometry === postDressing.glow || part.geometry === postDressing.swingGlow) glow = part;
+        if (part.geometry === postDressing.lampGlow || part.geometry === postDressing.swingLampGlow) glow = part;
       }
       const light = postDressing.lights, pick = postDressing.picks;
-      const lamp = addLamp(glow, DRESSING_LAMPS[light[3]], 0, 0, 0, true, lamps.length, `pile-post:${i}`);
-      lamp.always = true;
+      const lamp = addLamp(glow, DRESSING_LAMPS[light[3]], 0, 0, 0, true, 0, `pile-post:${i}`);
+      lamp.nightOnly = true;
       const pickNode = createNode({ geometry: PICK_GEOMETRY });
       const owner = { kind: "piece", piece: "lanternPost", variant: 0, node: pickNode, x: 0, y: 0, z: 0, next: 0, weaponType: "none" };
       addTarget(pickNode, owner, { radius: Math.max(0.35, pick[5]) });
@@ -1988,6 +1993,7 @@
       const wz = m.z - Math.sin(m.ry) * lx + az * lz;
       const id = `${slot.id}:lantern:right`;
       const lamp = addLamp(lantern, LAMP.lantern, wx, wy, wz, !slot.glowOnly, 2, id);
+      lamp.nightOnly = true;
       const debug = { id, caveId: slot.id, kind: "lantern", side: "right", localPosition: [lx, ly, lz], worldPosition: [wx, wy, wz], registered: !slot.glowOnly, factor: 0, lit: false, selected: false, approximated: false, rimFront: null, fixtureBack: null, gap: null };
       lamp.debug = debug;
       entranceLights.push(debug);
@@ -2251,6 +2257,7 @@
     addTerrainSection(site.ground.geometry.cutawaySource, site.node, place.y);
     solids.add(site.ground);
     addProp("poolbridge", site.bridge, worldX(0, place.bridgeLocalZ + S.span / 2), worldZ(0, place.bridgeLocalZ + S.span / 2), S.width);
+    addLamp(site.bridge, LAMP.lantern, worldX(0, place.bridgeLocalZ), place.y + 3.4, worldZ(0, place.bridgeLocalZ), false, 0, "poolbridge:lanterns").nightOnly = true;
     atNode("poolstair", site.stair, SITE_SHAFT_REACH);
     atNode("poolsign", site.sign, 1.4);
     // The bridge arrives along local +z and the cave sign stands between it and the hole, so both boards
@@ -2431,8 +2438,9 @@
     const c = site.cloud, court = site.arrival, at = [[p.x, p.floorY + 2, p.z], [court.x, court.y + 1.5, court.z], [court.x, court.y + 1.5, court.z],
       [(c.head.x + c.end.x) / 2, c.y + 1.6, (c.head.z + c.end.z) / 2], [c.head.x, c.y + 1.6, c.head.z]];
     site.lamps.forEach((node, i) => {
-      addLamp(node, LAMP.lantern, at[i][0], at[i][1], at[i][2], false, i);
-      if (!i) addLamp(archLamp.node, LAMP.lantern, archLamp.spark.x, archLamp.spark.y, archLamp.spark.z, false, 1);
+      const lamp = addLamp(node, LAMP.lantern, at[i][0], at[i][1], at[i][2], false, i);
+      if (i === 1 || i === 3 || i === 4) lamp.nightOnly = true;
+      if (!i) addLamp(archLamp.node, LAMP.lantern, archLamp.spark.x, archLamp.spark.y, archLamp.spark.z, false, 1).nightOnly = true;
     });
     const group = createNode({ position: { x: p.x, y: p.floorY, z: p.z }, rotation: { x: 0, y: p.ry, z: 0 } });
     addChild(root, group);
