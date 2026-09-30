@@ -1606,7 +1606,7 @@ const { contributorActivityProbe } = (() => {
     const HOUR = 3600000, { roster, stateFor, ageLabel, applyActivity, applySnapshot, hasRecentActivity, subscribe } = contributors;
     const saved = roster.map((entry) => ({ at: entry.lastCommitAt, activity: [...entry.activity] }));
     const state = (age) => stateFor({ lastCommitAt: at - age }, at);
-    const boundaries = state(0) === "working" && state(HOUR) === "working" && state(2 * HOUR - 1) === "working" && state(2 * HOUR) === "chilling" &&
+    const boundaries = state(0) === "working" && state(HOUR - 1) === "working" && state(HOUR) === "chilling" &&
       state(24 * HOUR - 1) === "chilling" && state(24 * HOUR) === "sleeping" && state(8 * 24 * HOUR) === "sleeping";
     const invalidStates = [NaN, Infinity, 0, -1, at + 1].every((lastCommitAt) => stateFor({ lastCommitAt }, at) === "sleeping");
     const labels = ageLabel({ lastCommitAt: at }, at) === "0m ago" &&
@@ -1630,9 +1630,9 @@ const { contributorActivityProbe } = (() => {
         { name: "unknown-contributor", lastCommitAt: at }, { lastCommitAt: at }
       ], at) === 0 && applyActivity(null, at) === 0 && applyActivity([], NaN) === 0 &&
         first.lastCommitAt === firstAt && notifications === 1;
-      const expires = stateFor(first, firstAt + 2 * HOUR) === "chilling" && stateFor(first, firstAt + 24 * HOUR) === "sleeping"
-        && hasRecentActivity(first, "oogaboogax/entropylab", firstAt + 2 * HOUR - 1)
-        && !hasRecentActivity(first, "oogaboogax/entropylab", firstAt + 2 * HOUR);
+      const expires = stateFor(first, firstAt + HOUR) === "chilling" && stateFor(first, firstAt + 24 * HOUR) === "sleeping"
+        && hasRecentActivity(first, "oogaboogax/entropylab", firstAt + HOUR - 1)
+        && !hasRecentActivity(first, "oogaboogax/entropylab", firstAt + HOUR);
       const snapshot = (repo, login, age) => ({ meta: { repo, schema_version: 1, generated_at: new Date(at).toISOString() },
         contributors: [{ login, last_seen_at: new Date(at - age).toISOString() }] });
       const alias = roster.find((entry) => entry.name === "bc1gui");
