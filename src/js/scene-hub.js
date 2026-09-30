@@ -1511,7 +1511,9 @@
     const set = BL.dressing.set(), ground = [];
     // Ground pieces stand on the island itself; one whose spot is inside the cliff or over a drop is left out.
     const stand = (kind, lx, lz, turns = 0, variant = 0, lift = 0) => {
-      const y = island.surfaceAt(m.x + cr * lx + sr * lz, m.z - sr * lx + cr * lz) - m.floorY;
+      const x = m.x + cr * lx + sr * lz, z = m.z - sr * lx + cr * lz;
+      if ((kind === "barrel" || kind === "bench") && island.overlapsStairs(x, z, 1.7)) return;
+      const y = island.surfaceAt(x, z) - m.floorY;
       if (Math.abs(y) > 0.9) return;
       set.put(kind, lx, y + lift, lz, turns, variant);
       if (!lift) ground.push(lx, lz);
@@ -1746,7 +1748,7 @@
     let n = 0;
     const plant = (x, z) => {
       const y = island.surfaceAt(x, z);
-      if (nearPath(x, z, 1.1) || !free(x, z, 1.2)) return false;
+      if (nearPath(x, z, 1.1) || island.overlapsStairs(x, z, 2) || !free(x, z, 1.2)) return false;
       // Level ground only: every side within a quarter metre of the foot.
       for (let i = 0; i < 4; i++) if (Math.abs(island.surfaceAt(x + Math.cos(i * 1.571) * 0.6, z + Math.sin(i * 1.571) * 0.6) - y) > 0.26) return false;
       const node = createNode({ geometry: BL.dressing.palm(n++ % 3), position: { x, y, z }, rotation: { x: 0, y: rand() * Math.PI * 2, z: 0 }, sightHidden: true });
@@ -2525,10 +2527,12 @@
   // Rejection sampling: scatter props, keeping off paths and mouths.
   const scatter = () => {
     const rand = mulberry32(SEED);
+    const routeOverlaps = (x, z, radius) => island.path.overlaps(x, z, radius) || island.overlapsStairs(x, z, radius);
     const treeGroundClear = (geometry, x, z, y) => {
       // Scan every voxel column touched by the solid crown and a walking body's
       // radius. Four corner samples miss narrow, higher steps on cave roofs.
       const reach = geometry.treeSolidRadius + PLAYER_RADIUS, unit = island.unit, half = unit / 2;
+      if (island.overlapsStairs(x, z, reach)) return false;
       // Reserve a full voxel above two units for the tallest helmeted head-look envelope.
       const rootRadius = Math.hypot(0.5, 0.25), ceiling = y + geometry.treeSolidCanopyFloor - 2.25;
       const grid = island.sightGrid, minX = Math.floor((x - reach - grid[1]) / unit), maxX = Math.floor((x + reach - grid[1]) / unit);
@@ -2569,7 +2573,7 @@
     const meadow = (count, radius, kind, geometryAt, square = false) => {
       for (let n = 0, tries = 0; n < count && tries < 1500; tries++) {
         const { x, z } = polar(rand() * 360, Math.sqrt(lerp(MEADOW_INNER * MEADOW_INNER, MEADOW_OUTER * MEADOW_OUTER, rand())));
-        if (island.surfaceAt(x, z) > 0 || nearMouth(x, z, 3.5) || !workSceneryClear(x, z, radius) || !candidateFree(x, z, radius) || !free(x, z, radius) || island.path.overlaps(x, z, radius)) continue;
+        if (island.surfaceAt(x, z) > 0 || nearMouth(x, z, 3.5) || !workSceneryClear(x, z, radius) || !candidateFree(x, z, radius) || !free(x, z, radius) || routeOverlaps(x, z, radius)) continue;
         addScenery(geometryAt(n), x, z, square ? Math.floor(rand() * 4) * Math.PI / 2 + (rand() - 0.5) * 0.4 : rand() * Math.PI * 2, 0, kind, radius);
         n++;
       }
@@ -2580,7 +2584,7 @@
       let n = 0;
       const tryAt = (x, z) => {
         const h = island.surfaceAt(x, z);
-        if (h < minHeight || !free(x, z, radius)) return false;
+        if (h < minHeight || !free(x, z, radius) || routeOverlaps(x, z, radius)) return false;
         let clear = true;
         for (let i = 0; i < 4 && clear; i++) {
           const a = (i + 0.5) * Math.PI / 2;
@@ -2628,7 +2632,7 @@
     const clearance = island.path.debug.ringOuterRadius + SCENERY_CLEARANCE;
     if (o.node.position.y < 2 && !workSceneryClear(o.x, o.z, o.footprint)) return 3;
     if (Math.hypot(o.x, o.z) - o.footprint < clearance - 1e-9) return 1;
-    if (island.path.overlaps(o.x, o.z, o.footprint)) return 2;
+    if (island.path.overlaps(o.x, o.z, o.footprint) || island.overlapsStairs(o.x, o.z, o.footprint)) return 2;
     for (let i = 0; i < claimed.length; i++) {
       const c = claimed[i];
       if (!c.scenery && Math.hypot(c.x - o.x, c.z - o.z) < c.r + o.footprint) return 3;

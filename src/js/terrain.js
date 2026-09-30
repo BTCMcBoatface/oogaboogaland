@@ -1908,6 +1908,16 @@
       }
       return false;
     };
+    // The rainforest approach has no painted path, but all three terrace cuts must stay clear of scenery.
+    const overlapsStairs = (x, z, radius) => {
+      if (z + radius >= STAIR_TERRACE.from - 1 && Math.abs(x) <= STAIR_TERRACE.halfWidth + STAIR_TERRACE.blend + radius) return true;
+      const timechainAlong = x * TIMECHAIN_X + z * TIMECHAIN_Z;
+      if (timechainAlong + radius >= TIMECHAIN.from - 1
+        && Math.abs(x * TIMECHAIN_Z - z * TIMECHAIN_X) <= TIMECHAIN.halfWidth + TIMECHAIN.blend + radius) return true;
+      const poolAlong = x * POOL_X + z * POOL_Z;
+      return poolAlong + radius >= POOL_APPROACH.from - 1 && poolAlong - radius <= POOL_APPROACH.to + 0.5
+        && Math.abs(x * POOL_Z - z * POOL_X) <= POOL_APPROACH.halfWidth + POOL_APPROACH.blend + radius;
+    };
     // Walking centerlines reuse the rendered path mask's bends; master curves stay fixed and navigation clips
     // them to the growing ring.
     const centerlines = spokes.map((s) => {
@@ -2360,6 +2370,7 @@
       sightBytes: rampSight.byteLength + windowSightPlanes.byteLength + windowSightRefs.byteLength,
       windowPiecesAt: (x, z) => windowColumns[column(x, z)],
       isPath,
+      overlapsStairs,
       isGrassAt,
       onLand,
       mouths,
