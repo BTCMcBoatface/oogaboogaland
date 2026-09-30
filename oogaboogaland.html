@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; script-src 'sha256-NOrlITfIMWbw+yokOgJVUQx3QRcUgJyO/6rKIEtHw+c='; style-src 'sha256-GbA2XbgbQxGZ/ME5embFJeNJ71Z+n+FQfQkD5W9yjRQ='; img-src 'self' data:; media-src https://stream.noderunnersradio.com; connect-src https: wss:; base-uri 'none'; form-action 'none'">
+    content="default-src 'none'; script-src 'sha256-qIkXcIy6HN7HejvSwlxpa+T5dhsdP0sd6IIw38vozoE='; style-src 'sha256-GbA2XbgbQxGZ/ME5embFJeNJ71Z+n+FQfQkD5W9yjRQ='; img-src 'self' data:; media-src https://stream.noderunnersradio.com; connect-src https: wss:; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0a0a0b">
@@ -8412,14 +8412,15 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
     </dialog>
     <dialog class="modal board-modal" id="board-modal" aria-labelledby="board-title">
       <div class="panel-head" id="board-head">
-        <button type="button" class="modal-close board-filter" id="board-filter" data-action="board-filter" aria-label="Filter repos and users" aria-expanded="false" aria-controls="board-filter-menu" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4H21L14 12V19L10 21V12Z"/></svg></button>
+        <button type="button" class="modal-close board-filter" id="board-filter" data-action="board-filter" aria-label="Filter repos, contributors, and contribution types" aria-expanded="false" aria-controls="board-filter-menu" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4H21L14 12V19L10 21V12Z"/></svg></button>
         <h2><span data-sign id="board-title">Board</span></h2>
         <button type="button" class="modal-close" data-action="board-close" aria-label="Close">&times;</button>
       </div>
       <section class="board-filter-menu" id="board-filter-menu" aria-label="Oogatron filters" hidden>
         <div class="board-filter-tabs" role="tablist" aria-label="Filter by">
           <button type="button" id="board-filter-repos" role="tab" aria-selected="true" aria-controls="board-filter-list" data-filter-tab="repos">Repos</button>
-          <button type="button" id="board-filter-users" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="users" tabindex="-1">Users</button>
+          <button type="button" id="board-filter-users" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="users" tabindex="-1">Contributors</button>
+          <button type="button" id="board-filter-types" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="types" tabindex="-1">Type</button>
         </div>
         <div class="board-filter-list" id="board-filter-list" role="tabpanel" aria-labelledby="board-filter-repos"></div>
         <button type="button" class="board-filter-done" data-action="board-filter-done">Done</button>
@@ -23817,7 +23818,7 @@ void main() {
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  BL.jumbotronData = {"meta":{"generated_at":"2026-09-30T02:16:50.578Z","org":"OogaBoogaX","schema_version":3},"totals":{"contributors":53,"commits":1747,"prs":531,"reviews":65,"issues":41,"comments":462},"leaderboards":{"commits":[{"login":"portlandhodl","count":437},{"login":"w-s-bitcoin","count":420},{"login":"MrHodlX","count":254},{"login":"timechainb","count":100},{"login":"Hero-Gamer","count":94},{"login":"2140data","count":69},{"login":"dplusplus1024","count":63},{"login":"ottoz0r","count":33},{"login":"drneski","count":27},{"login":"pdubl22","count":23},{"login":"YellowBrokeIt","count":20},{"login":"J25dunn","count":18},{"login":"rules-without-rulers","count":17},{"login":"itme-brain","count":16},{"login":"claude","count":14},{"login":"knorrium","count":14},{"login":"Shitnobi","count":13},{"login":"RandyMcMillan","count":11},{"login":"tmmmemcee","count":9},{"login":"Rob1Ham","count":8},{"login":"dani69654","count":8},{"login":"unclejim7","count":8},{"login":"MHODL","count":7},{"login":"Jdelg718","count":6},{"login":"SaniExp","count":5},{"login":"Holo-Elfstone","count":4},{"login":"Korg1970","count":4},{"login":"csuwildcat","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"hotpixelgroup","count":4},{"login":"BTCMcBoatface","count":3},{"login":"MiguelMedeiros","count":3},{"login":"codex","count":3},{"login":"doggyballs","count":3},{"login":"email:0ca1dda35e422a0f","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"zmeyer44","count":3},{"login":"HodlDee","count":2},{"login":"mikeinspace","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"fabu-rex","count":1},{"login":"ibrihamturay-coder","count":1},{"login":"kaloudis","count":1}],"prs":[{"login":"MrHodlX","count":132},{"login":"portlandhodl","count":88},{"login":"w-s-bitcoin","count":73},{"login":"timechainb","count":38},{"login":"2140data","count":34},{"login":"ottoz0r","count":19},{"login":"J25dunn","count":16},{"login":"rules-without-rulers","count":14},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"drneski","count":9},{"login":"tmmmemcee","count":6},{"login":"Jdelg718","count":5},{"login":"knorrium","count":5},{"login":"RandyMcMillan","count":4},{"login":"SaniExp","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"YellowBrokeIt","count":3},{"login":"dani69654","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"ibrihamturay-coder","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":32},{"login":"J25dunn","count":14},{"login":"w-s-bitcoin","count":11},{"login":"portlandhodl","count":7},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":141},{"login":"portlandhodl","count":94},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":49},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"rules-without-rulers","count":8},{"login":"timechainb","count":8},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"Jdelg718","count":2},{"login":"drneski","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"YellowBrokeIt","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":21},{"login":"rules-without-rulers","count":14},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"NEEDcreations","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"repos":[{"name":"entropylab","totals":{"contributors":48,"commits":1394,"prs":432,"reviews":57,"issues":27,"comments":449},"weekly":[{"week":"2026-W35","commits":378,"prs":134,"reviews":2,"issues":1,"comments":69},{"week":"2026-W36","commits":502,"prs":136,"reviews":16,"issues":0,"comments":130},{"week":"2026-W37","commits":136,"prs":36,"reviews":18,"issues":3,"comments":76},{"week":"2026-W38","commits":157,"prs":51,"reviews":5,"issues":2,"comments":39},{"week":"2026-W39","commits":140,"prs":53,"reviews":11,"issues":15,"comments":79},{"week":"2026-W40","commits":81,"prs":22,"reviews":5,"issues":6,"comments":56}],"last_activity_at":"2026-09-30T02:09:29Z","leaderboards":{"commits":[{"login":"portlandhodl","count":437},{"login":"MrHodlX","count":244},{"login":"w-s-bitcoin","count":228},{"login":"timechainb","count":100},{"login":"Hero-Gamer","count":94},{"login":"dplusplus1024","count":63},{"login":"ottoz0r","count":25},{"login":"pdubl22","count":23},{"login":"J25dunn","count":18},{"login":"itme-brain","count":16},{"login":"claude","count":14},{"login":"Shitnobi","count":13},{"login":"2140data","count":11},{"login":"RandyMcMillan","count":11},{"login":"Rob1Ham","count":8},{"login":"dani69654","count":8},{"login":"unclejim7","count":8},{"login":"MHODL","count":7},{"login":"Jdelg718","count":6},{"login":"tmmmemcee","count":6},{"login":"Korg1970","count":4},{"login":"SaniExp","count":4},{"login":"csuwildcat","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"hotpixelgroup","count":4},{"login":"BTCMcBoatface","count":3},{"login":"MiguelMedeiros","count":3},{"login":"codex","count":3},{"login":"doggyballs","count":3},{"login":"email:0ca1dda35e422a0f","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"zmeyer44","count":3},{"login":"HodlDee","count":2},{"login":"mikeinspace","count":2},{"login":"rules-without-rulers","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"fabu-rex","count":1},{"login":"kaloudis","count":1}],"prs":[{"login":"MrHodlX","count":128},{"login":"portlandhodl","count":88},{"login":"w-s-bitcoin","count":39},{"login":"timechainb","count":38},{"login":"ottoz0r","count":18},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"2140data","count":10},{"login":"Jdelg718","count":5},{"login":"RandyMcMillan","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"SaniExp","count":3},{"login":"dani69654","count":3},{"login":"tmmmemcee","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"rules-without-rulers","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":32},{"login":"J25dunn","count":14},{"login":"portlandhodl","count":7},{"login":"w-s-bitcoin","count":3},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":141},{"login":"portlandhodl","count":94},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":47},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"timechainb","count":8},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Jdelg718","count":2},{"login":"rules-without-rulers","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":21},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"NEEDcreations","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T19:25:22Z"},{"login":"timechainb","last_seen_at":"2026-09-30T02:09:29Z"},{"login":"portlandhodl","last_seen_at":"2026-09-29T17:08:54Z"},{"login":"MrHodlX","last_seen_at":"2026-09-29T23:40:26Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T00:52:02Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-02T02:19:20Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"SaniExp","last_seen_at":"2026-09-02T16:47:02Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"2140data","last_seen_at":"2026-08-31T04:54:04Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:28:21Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:10:23Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-12T17:11:11Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-17T00:58:54Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"},{"login":"Korg1970","last_seen_at":"2026-09-13T01:20:47Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"},{"login":"NEEDcreations","last_seen_at":"2026-09-29T05:36:21Z"},{"login":"fabu-rex","last_seen_at":"2026-09-16T12:13:45Z"}]},{"name":"oogaboogaland","totals":{"contributors":12,"commits":332,"prs":93,"reviews":8,"issues":14,"comments":13},"weekly":[{"week":"2026-W37","commits":47,"prs":19,"reviews":0,"issues":0,"comments":1},{"week":"2026-W38","commits":87,"prs":30,"reviews":3,"issues":0,"comments":0},{"week":"2026-W39","commits":150,"prs":31,"reviews":3,"issues":11,"comments":11},{"week":"2026-W40","commits":48,"prs":13,"reviews":2,"issues":3,"comments":1}],"last_activity_at":"2026-09-30T02:11:37Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":177},{"login":"2140data","count":58},{"login":"drneski","count":27},{"login":"YellowBrokeIt","count":20},{"login":"rules-without-rulers","count":15},{"login":"knorrium","count":14},{"login":"MrHodlX","count":10},{"login":"Holo-Elfstone","count":4},{"login":"tmmmemcee","count":3},{"login":"ottoz0r","count":2},{"login":"SaniExp","count":1},{"login":"ibrihamturay-coder","count":1}],"prs":[{"login":"w-s-bitcoin","count":28},{"login":"2140data","count":24},{"login":"rules-without-rulers","count":12},{"login":"drneski","count":9},{"login":"knorrium","count":5},{"login":"MrHodlX","count":4},{"login":"YellowBrokeIt","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ibrihamturay-coder","count":1},{"login":"ottoz0r","count":1}],"reviews":[{"login":"w-s-bitcoin","count":8}],"comments":[{"login":"rules-without-rulers","count":6},{"login":"Holo-Elfstone","count":2},{"login":"drneski","count":2},{"login":"w-s-bitcoin","count":2},{"login":"YellowBrokeIt","count":1}],"issues":[{"login":"rules-without-rulers","count":14}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T16:43:09Z"},{"login":"MrHodlX","last_seen_at":"2026-09-27T14:18:00Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"2140data","last_seen_at":"2026-09-30T02:11:37Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-29T15:43:44Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:44:43Z"},{"login":"drneski","last_seen_at":"2026-09-29T07:34:02Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"ibrihamturay-coder","last_seen_at":"2026-09-28T23:04:50Z"}]},{"name":"bedrock","totals":{"contributors":2,"commits":19,"prs":6,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W36","commits":16,"prs":6,"reviews":0,"issues":0,"comments":0},{"week":"2026-W37","commits":3,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-07T05:21:02Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":13},{"login":"ottoz0r","count":6}],"prs":[{"login":"w-s-bitcoin","count":6}],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-07T05:21:02Z"},{"login":"ottoz0r","last_seen_at":"2026-09-04T21:29:31Z"}]},{"name":"lightningfactory","totals":{"contributors":1,"commits":1,"prs":0,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W40","commits":1,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-29T14:25:47Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":1}],"prs":[],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T14:25:47Z"}]},{"name":"oogaarcade","totals":{"contributors":1,"commits":1,"prs":0,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W40","commits":1,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-29T17:56:27Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":1}],"prs":[],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T17:56:27Z"}]}],"recent":[{"login":"2140data","repo":"oogaboogaland","type":"merge","occurred_at":"2026-09-30T02:11:37Z"},{"login":"2140data","repo":"oogaboogaland","type":"pr","occurred_at":"2026-09-30T02:11:25Z"},{"login":"timechainb","repo":"entropylab","type":"pr","occurred_at":"2026-09-30T02:09:29Z"},{"login":"2140data","repo":"oogaboogaland","type":"commit","occurred_at":"2026-09-30T02:07:56Z"},{"login":"timechainb","repo":"entropylab","type":"commit","occurred_at":"2026-09-30T02:06:43Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-29T23:40:26Z"},{"login":"MrHodlX","repo":"entropylab","type":"issue","occurred_at":"2026-09-29T23:40:22Z"},{"login":"timechainb","repo":"entropylab","type":"merge","occurred_at":"2026-09-29T22:09:20Z"},{"login":"w-s-bitcoin","repo":"entropylab","type":"commit","occurred_at":"2026-09-29T19:25:22Z"},{"login":"w-s-bitcoin","repo":"entropylab","type":"commit","occurred_at":"2026-09-29T18:38:59Z"},{"login":"w-s-bitcoin","repo":"entropylab","type":"commit","occurred_at":"2026-09-29T18:22:44Z"},{"login":"2140data","repo":"oogaboogaland","type":"merge","occurred_at":"2026-09-29T18:14:20Z"}],"contributors":[{"login":"portlandhodl","last_seen_at":"2026-09-29T17:08:54Z"},{"login":"MrHodlX","last_seen_at":"2026-09-29T23:40:26Z"},{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T19:25:22Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"timechainb","last_seen_at":"2026-09-30T02:09:29Z"},{"login":"2140data","last_seen_at":"2026-09-30T02:11:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T12:31:24Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-29T15:43:44Z"},{"login":"drneski","last_seen_at":"2026-09-29T07:34:02Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:28:21Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:44:43Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"Korg1970","last_seen_at":"2026-09-13T01:20:47Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:10:23Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"ibrihamturay-coder","last_seen_at":"2026-09-28T23:04:50Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"},{"login":"NEEDcreations","last_seen_at":"2026-09-29T05:36:21Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"fabu-rex","last_seen_at":"2026-09-16T12:13:45Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"}]};
+  BL.jumbotronData = {"meta":{"generated_at":"2026-09-30T03:44:21.769Z","org":"OogaBoogaX","schema_version":3},"totals":{"contributors":53,"commits":1753,"prs":531,"reviews":65,"issues":41,"comments":462},"leaderboards":{"commits":[{"login":"portlandhodl","count":437},{"login":"w-s-bitcoin","count":420},{"login":"MrHodlX","count":254},{"login":"timechainb","count":102},{"login":"Hero-Gamer","count":94},{"login":"2140data","count":69},{"login":"dplusplus1024","count":63},{"login":"ottoz0r","count":33},{"login":"drneski","count":31},{"login":"pdubl22","count":23},{"login":"YellowBrokeIt","count":20},{"login":"J25dunn","count":18},{"login":"rules-without-rulers","count":17},{"login":"itme-brain","count":16},{"login":"claude","count":14},{"login":"knorrium","count":14},{"login":"Shitnobi","count":13},{"login":"RandyMcMillan","count":11},{"login":"tmmmemcee","count":9},{"login":"Rob1Ham","count":8},{"login":"dani69654","count":8},{"login":"unclejim7","count":8},{"login":"MHODL","count":7},{"login":"Jdelg718","count":6},{"login":"SaniExp","count":5},{"login":"Holo-Elfstone","count":4},{"login":"Korg1970","count":4},{"login":"csuwildcat","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"hotpixelgroup","count":4},{"login":"BTCMcBoatface","count":3},{"login":"MiguelMedeiros","count":3},{"login":"codex","count":3},{"login":"doggyballs","count":3},{"login":"email:0ca1dda35e422a0f","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"zmeyer44","count":3},{"login":"HodlDee","count":2},{"login":"mikeinspace","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"fabu-rex","count":1},{"login":"ibrihamturay-coder","count":1},{"login":"kaloudis","count":1}],"prs":[{"login":"MrHodlX","count":132},{"login":"portlandhodl","count":88},{"login":"w-s-bitcoin","count":73},{"login":"timechainb","count":38},{"login":"2140data","count":34},{"login":"ottoz0r","count":19},{"login":"J25dunn","count":16},{"login":"rules-without-rulers","count":14},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"drneski","count":9},{"login":"tmmmemcee","count":6},{"login":"Jdelg718","count":5},{"login":"knorrium","count":5},{"login":"RandyMcMillan","count":4},{"login":"SaniExp","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"YellowBrokeIt","count":3},{"login":"dani69654","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"ibrihamturay-coder","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":32},{"login":"J25dunn","count":14},{"login":"w-s-bitcoin","count":11},{"login":"portlandhodl","count":7},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":141},{"login":"portlandhodl","count":94},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":49},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"rules-without-rulers","count":8},{"login":"timechainb","count":8},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Holo-Elfstone","count":2},{"login":"Jdelg718","count":2},{"login":"drneski","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"YellowBrokeIt","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":21},{"login":"rules-without-rulers","count":14},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"NEEDcreations","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"repos":[{"name":"entropylab","totals":{"contributors":48,"commits":1396,"prs":432,"reviews":57,"issues":27,"comments":449},"weekly":[{"week":"2026-W35","commits":378,"prs":134,"reviews":2,"issues":1,"comments":69},{"week":"2026-W36","commits":502,"prs":136,"reviews":16,"issues":0,"comments":130},{"week":"2026-W37","commits":136,"prs":36,"reviews":18,"issues":3,"comments":76},{"week":"2026-W38","commits":157,"prs":51,"reviews":5,"issues":2,"comments":39},{"week":"2026-W39","commits":140,"prs":53,"reviews":11,"issues":15,"comments":79},{"week":"2026-W40","commits":83,"prs":22,"reviews":5,"issues":6,"comments":56}],"last_activity_at":"2026-09-30T02:47:27Z","leaderboards":{"commits":[{"login":"portlandhodl","count":437},{"login":"MrHodlX","count":244},{"login":"w-s-bitcoin","count":228},{"login":"timechainb","count":102},{"login":"Hero-Gamer","count":94},{"login":"dplusplus1024","count":63},{"login":"ottoz0r","count":25},{"login":"pdubl22","count":23},{"login":"J25dunn","count":18},{"login":"itme-brain","count":16},{"login":"claude","count":14},{"login":"Shitnobi","count":13},{"login":"2140data","count":11},{"login":"RandyMcMillan","count":11},{"login":"Rob1Ham","count":8},{"login":"dani69654","count":8},{"login":"unclejim7","count":8},{"login":"MHODL","count":7},{"login":"Jdelg718","count":6},{"login":"tmmmemcee","count":6},{"login":"Korg1970","count":4},{"login":"SaniExp","count":4},{"login":"csuwildcat","count":4},{"login":"email:bdb4923572c8ac13","count":4},{"login":"hotpixelgroup","count":4},{"login":"BTCMcBoatface","count":3},{"login":"MiguelMedeiros","count":3},{"login":"codex","count":3},{"login":"doggyballs","count":3},{"login":"email:0ca1dda35e422a0f","count":3},{"login":"email:bed3af55053c78f6","count":3},{"login":"zmeyer44","count":3},{"login":"HodlDee","count":2},{"login":"mikeinspace","count":2},{"login":"rules-without-rulers","count":2},{"login":"CypherBoxLLC","count":1},{"login":"FNBIP","count":1},{"login":"email:56537ddd43347582","count":1},{"login":"email:78da113009979a72","count":1},{"login":"email:93964419ae80c511","count":1},{"login":"fabu-rex","count":1},{"login":"kaloudis","count":1}],"prs":[{"login":"MrHodlX","count":128},{"login":"portlandhodl","count":88},{"login":"w-s-bitcoin","count":39},{"login":"timechainb","count":38},{"login":"ottoz0r","count":18},{"login":"J25dunn","count":16},{"login":"dplusplus1024","count":13},{"login":"Hero-Gamer","count":12},{"login":"Rob1Ham","count":11},{"login":"itme-brain","count":11},{"login":"2140data","count":10},{"login":"Jdelg718","count":5},{"login":"RandyMcMillan","count":4},{"login":"hotpixelgroup","count":4},{"login":"FNBIP","count":3},{"login":"MiguelMedeiros","count":3},{"login":"SaniExp","count":3},{"login":"dani69654","count":3},{"login":"tmmmemcee","count":3},{"login":"BTCMcBoatface","count":2},{"login":"HodlDee","count":2},{"login":"csuwildcat","count":2},{"login":"doggyballs","count":2},{"login":"pdubl22","count":2},{"login":"rules-without-rulers","count":2},{"login":"zmeyer44","count":2},{"login":"CypherBoxLLC","count":1},{"login":"Korg1970","count":1},{"login":"Shitnobi","count":1},{"login":"kaloudis","count":1},{"login":"mikeinspace","count":1},{"login":"unclejim7","count":1}],"reviews":[{"login":"MrHodlX","count":32},{"login":"J25dunn","count":14},{"login":"portlandhodl","count":7},{"login":"w-s-bitcoin","count":3},{"login":"Hero-Gamer","count":1}],"comments":[{"login":"MrHodlX","count":141},{"login":"portlandhodl","count":94},{"login":"Hero-Gamer","count":53},{"login":"w-s-bitcoin","count":47},{"login":"RandyMcMillan","count":19},{"login":"J25dunn","count":18},{"login":"BTCMcBoatface","count":14},{"login":"dplusplus1024","count":11},{"login":"itme-brain","count":9},{"login":"timechainb","count":8},{"login":"dani69654","count":7},{"login":"ottoz0r","count":6},{"login":"hotpixelgroup","count":4},{"login":"tmmmemcee","count":3},{"login":"HodlDee","count":2},{"login":"Jdelg718","count":2},{"login":"rules-without-rulers","count":2},{"login":"100megasats","count":1},{"login":"2140data","count":1},{"login":"Bitcoin-Bill","count":1},{"login":"BitcoinUbuntu","count":1},{"login":"Jakob-997","count":1},{"login":"csuwildcat","count":1},{"login":"doggyballs","count":1},{"login":"remcoros","count":1},{"login":"unclejim7","count":1}],"issues":[{"login":"MrHodlX","count":21},{"login":"BitcoinUbuntu","count":2},{"login":"Hero-Gamer","count":1},{"login":"NEEDcreations","count":1},{"login":"portlandhodl","count":1},{"login":"timechainb","count":1}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T19:25:22Z"},{"login":"timechainb","last_seen_at":"2026-09-30T02:47:27Z"},{"login":"portlandhodl","last_seen_at":"2026-09-29T17:08:54Z"},{"login":"MrHodlX","last_seen_at":"2026-09-29T23:40:26Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T00:52:02Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"ottoz0r","last_seen_at":"2026-09-02T02:19:20Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"SaniExp","last_seen_at":"2026-09-02T16:47:02Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"2140data","last_seen_at":"2026-08-31T04:54:04Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:28:21Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:10:23Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-12T17:11:11Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-17T00:58:54Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"},{"login":"Korg1970","last_seen_at":"2026-09-13T01:20:47Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"},{"login":"NEEDcreations","last_seen_at":"2026-09-29T05:36:21Z"},{"login":"fabu-rex","last_seen_at":"2026-09-16T12:13:45Z"}]},{"name":"oogaboogaland","totals":{"contributors":12,"commits":332,"prs":93,"reviews":8,"issues":14,"comments":13},"weekly":[{"week":"2026-W37","commits":47,"prs":19,"reviews":0,"issues":0,"comments":1},{"week":"2026-W38","commits":87,"prs":30,"reviews":3,"issues":0,"comments":0},{"week":"2026-W39","commits":150,"prs":31,"reviews":3,"issues":11,"comments":11},{"week":"2026-W40","commits":48,"prs":13,"reviews":2,"issues":3,"comments":1}],"last_activity_at":"2026-09-30T02:11:37Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":177},{"login":"2140data","count":58},{"login":"drneski","count":27},{"login":"YellowBrokeIt","count":20},{"login":"rules-without-rulers","count":15},{"login":"knorrium","count":14},{"login":"MrHodlX","count":10},{"login":"Holo-Elfstone","count":4},{"login":"tmmmemcee","count":3},{"login":"ottoz0r","count":2},{"login":"SaniExp","count":1},{"login":"ibrihamturay-coder","count":1}],"prs":[{"login":"w-s-bitcoin","count":28},{"login":"2140data","count":24},{"login":"rules-without-rulers","count":12},{"login":"drneski","count":9},{"login":"knorrium","count":5},{"login":"MrHodlX","count":4},{"login":"YellowBrokeIt","count":3},{"login":"tmmmemcee","count":3},{"login":"Holo-Elfstone","count":2},{"login":"SaniExp","count":1},{"login":"ibrihamturay-coder","count":1},{"login":"ottoz0r","count":1}],"reviews":[{"login":"w-s-bitcoin","count":8}],"comments":[{"login":"rules-without-rulers","count":6},{"login":"Holo-Elfstone","count":2},{"login":"drneski","count":2},{"login":"w-s-bitcoin","count":2},{"login":"YellowBrokeIt","count":1}],"issues":[{"login":"rules-without-rulers","count":14}]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T16:43:09Z"},{"login":"MrHodlX","last_seen_at":"2026-09-27T14:18:00Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"2140data","last_seen_at":"2026-09-30T02:11:37Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-29T15:43:44Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:44:43Z"},{"login":"drneski","last_seen_at":"2026-09-29T07:34:02Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"ibrihamturay-coder","last_seen_at":"2026-09-28T23:04:50Z"}]},{"name":"bedrock","totals":{"contributors":2,"commits":19,"prs":6,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W36","commits":16,"prs":6,"reviews":0,"issues":0,"comments":0},{"week":"2026-W37","commits":3,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-07T05:21:02Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":13},{"login":"ottoz0r","count":6}],"prs":[{"login":"w-s-bitcoin","count":6}],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-07T05:21:02Z"},{"login":"ottoz0r","last_seen_at":"2026-09-04T21:29:31Z"}]},{"name":"lightning-foundry","totals":{"contributors":1,"commits":4,"prs":0,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W39","commits":4,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-24T04:12:47Z","leaderboards":{"commits":[{"login":"drneski","count":4}],"prs":[],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"drneski","last_seen_at":"2026-09-24T04:12:47Z"}]},{"name":"lightningfactory","totals":{"contributors":1,"commits":1,"prs":0,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W40","commits":1,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-29T14:25:47Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":1}],"prs":[],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T14:25:47Z"}]},{"name":"oogaarcade","totals":{"contributors":1,"commits":1,"prs":0,"reviews":0,"issues":0,"comments":0},"weekly":[{"week":"2026-W40","commits":1,"prs":0,"reviews":0,"issues":0,"comments":0}],"last_activity_at":"2026-09-29T17:56:27Z","leaderboards":{"commits":[{"login":"w-s-bitcoin","count":1}],"prs":[],"reviews":[],"comments":[],"issues":[]},"contributors":[{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T17:56:27Z"}]}],"recent":[{"login":"timechainb","repo":"entropylab","type":"merge","occurred_at":"2026-09-30T02:47:27Z"},{"login":"timechainb","repo":"entropylab","type":"commit","occurred_at":"2026-09-30T02:38:58Z"},{"login":"2140data","repo":"oogaboogaland","type":"merge","occurred_at":"2026-09-30T02:11:37Z"},{"login":"2140data","repo":"oogaboogaland","type":"pr","occurred_at":"2026-09-30T02:11:25Z"},{"login":"timechainb","repo":"entropylab","type":"pr","occurred_at":"2026-09-30T02:09:29Z"},{"login":"2140data","repo":"oogaboogaland","type":"commit","occurred_at":"2026-09-30T02:07:56Z"},{"login":"timechainb","repo":"entropylab","type":"commit","occurred_at":"2026-09-30T02:06:43Z"},{"login":"MrHodlX","repo":"entropylab","type":"comment","occurred_at":"2026-09-29T23:40:26Z"},{"login":"MrHodlX","repo":"entropylab","type":"issue","occurred_at":"2026-09-29T23:40:22Z"},{"login":"timechainb","repo":"entropylab","type":"merge","occurred_at":"2026-09-29T22:09:20Z"},{"login":"w-s-bitcoin","repo":"entropylab","type":"commit","occurred_at":"2026-09-29T19:25:22Z"},{"login":"w-s-bitcoin","repo":"entropylab","type":"commit","occurred_at":"2026-09-29T18:38:59Z"}],"contributors":[{"login":"portlandhodl","last_seen_at":"2026-09-29T17:08:54Z"},{"login":"MrHodlX","last_seen_at":"2026-09-29T23:40:26Z"},{"login":"w-s-bitcoin","last_seen_at":"2026-09-29T19:25:22Z"},{"login":"Hero-Gamer","last_seen_at":"2026-09-16T23:19:21Z"},{"login":"timechainb","last_seen_at":"2026-09-30T02:47:27Z"},{"login":"2140data","last_seen_at":"2026-09-30T02:11:37Z"},{"login":"dplusplus1024","last_seen_at":"2026-09-04T16:46:04Z"},{"login":"J25dunn","last_seen_at":"2026-09-14T12:31:24Z"},{"login":"ottoz0r","last_seen_at":"2026-09-07T21:41:44Z"},{"login":"rules-without-rulers","last_seen_at":"2026-09-29T15:43:44Z"},{"login":"drneski","last_seen_at":"2026-09-29T07:34:02Z"},{"login":"itme-brain","last_seen_at":"2026-09-05T00:28:21Z"},{"login":"RandyMcMillan","last_seen_at":"2026-08-31T09:57:39Z"},{"login":"pdubl22","last_seen_at":"2026-09-02T04:06:43Z"},{"login":"YellowBrokeIt","last_seen_at":"2026-09-23T22:46:53Z"},{"login":"BTCMcBoatface","last_seen_at":"2026-09-12T22:51:09Z"},{"login":"Rob1Ham","last_seen_at":"2026-09-05T04:49:37Z"},{"login":"knorrium","last_seen_at":"2026-09-20T21:44:43Z"},{"login":"dani69654","last_seen_at":"2026-09-09T10:02:14Z"},{"login":"tmmmemcee","last_seen_at":"2026-09-24T22:34:07Z"},{"login":"Shitnobi","last_seen_at":"2026-08-26T23:09:24Z"},{"login":"claude","last_seen_at":"2026-09-23T23:41:13Z"},{"login":"Jdelg718","last_seen_at":"2026-08-31T15:06:08Z"},{"login":"hotpixelgroup","last_seen_at":"2026-09-17T16:15:09Z"},{"login":"unclejim7","last_seen_at":"2026-09-05T04:37:51Z"},{"login":"SaniExp","last_seen_at":"2026-09-25T19:35:29Z"},{"login":"Holo-Elfstone","last_seen_at":"2026-09-21T20:29:14Z"},{"login":"MHODL","last_seen_at":"2026-08-30T19:00:46Z"},{"login":"csuwildcat","last_seen_at":"2026-08-30T20:04:05Z"},{"login":"HodlDee","last_seen_at":"2026-09-02T15:19:10Z"},{"login":"MiguelMedeiros","last_seen_at":"2026-08-27T21:47:11Z"},{"login":"doggyballs","last_seen_at":"2026-09-21T00:35:15Z"},{"login":"Korg1970","last_seen_at":"2026-09-13T01:20:47Z"},{"login":"zmeyer44","last_seen_at":"2026-08-31T14:10:23Z"},{"login":"FNBIP","last_seen_at":"2026-09-02T00:55:23Z"},{"login":"email:bdb4923572c8ac13","last_seen_at":"2026-08-29T03:53:33Z"},{"login":"BitcoinUbuntu","last_seen_at":"2026-09-25T18:06:38Z"},{"login":"codex","last_seen_at":"2026-09-21T01:04:42Z"},{"login":"email:0ca1dda35e422a0f","last_seen_at":"2026-09-05T16:17:09Z"},{"login":"email:bed3af55053c78f6","last_seen_at":"2026-09-10T22:41:09Z"},{"login":"mikeinspace","last_seen_at":"2026-09-10T05:25:42Z"},{"login":"CypherBoxLLC","last_seen_at":"2026-09-19T22:44:16Z"},{"login":"ibrihamturay-coder","last_seen_at":"2026-09-28T23:04:50Z"},{"login":"kaloudis","last_seen_at":"2026-09-11T03:10:01Z"},{"login":"100megasats","last_seen_at":"2026-08-30T20:53:53Z"},{"login":"Bitcoin-Bill","last_seen_at":"2026-09-02T01:00:57Z"},{"login":"Jakob-997","last_seen_at":"2026-09-26T19:08:38Z"},{"login":"NEEDcreations","last_seen_at":"2026-09-29T05:36:21Z"},{"login":"email:56537ddd43347582","last_seen_at":"2026-08-25T19:35:57Z"},{"login":"email:78da113009979a72","last_seen_at":"2026-08-30T03:08:17Z"},{"login":"email:93964419ae80c511","last_seen_at":"2026-09-20T10:42:49Z"},{"login":"fabu-rex","last_seen_at":"2026-09-16T12:13:45Z"},{"login":"remcoros","last_seen_at":"2026-09-12T15:11:21Z"}]};
 })();
 
 // ---- js/jumbotron.js ----
@@ -24100,6 +24101,7 @@ void main() {
   };
 
   const TYPE_COLOR = { commit: "commits", pr: "prs", review: "reviews", merge: "accent", issue: "issues", comment: "comments" };
+  const RECENT_TYPES = ["commit", "pr", "review", "merge", "issue", "comment"];
   // Short relative age for the recent feed, against wall-clock now.
   const recentAge = (iso, nowMs) => {
     const ms = nowMs - Date.parse(iso);
@@ -24328,6 +24330,7 @@ void main() {
     const BOARD_TYPES = ["commits", "prs", "reviews", "comments", "issues"];
     const buildCycle = (source = model, filtered = false, explicitRepos = false, mainBoard = false) => {
       const c = [{ name: "recent" }, { name: "totals" }];
+      if (source?.typeFiltered) return c.slice(0, 1);
       for (const type of BOARD_TYPES) {
         if (!filtered || source.leaderboards[type].length) c.push({ name: "leaderboard", params: { type } });
       }
@@ -24346,9 +24349,10 @@ void main() {
 
     // Build a reader's projection only on a filter edit or a new feed, never per frame.
     const filteredModel = (source, filters) => {
-      if (!source || filters.repos === null && filters.users === null) return source;
+      if (!source || filters.repos === null && filters.users === null && filters.types === null) return source;
       const users = filters.users === null ? null : new Set(filters.users);
       const repos = filters.repos === null ? null : new Set(filters.repos);
+      const types = filters.types === null ? null : new Set(filters.types);
       const pickBoards = (boards) => Object.fromEntries(BOARD_TYPES.map((type) =>
         [type, users ? boards[type].filter((row) => users.has(row.login)) : boards[type]]));
       const totalsOf = (boards) => {
@@ -24384,8 +24388,8 @@ void main() {
         for (const repo of selectedRepos) for (const week of repo.weeklyTotals) weeks.set(week.week, (weeks.get(week.week) || 0) + week.total);
         weeklyTotals = [...weeks].map(([week, total]) => ({ week, total })).sort((a, b) => a.week < b.week ? -1 : a.week > b.week ? 1 : 0);
       }
-      return { ...source, filtered: true, repos: selectedRepos, leaderboards, totals, weeklyTotals,
-        recent: source.recent.filter((row) => (!repos || repos.has(row.repo)) && (!users || users.has(row.login))) };
+      return { ...source, filtered: true, typeFiltered: types !== null, repos: selectedRepos, leaderboards, totals, weeklyTotals,
+        recent: source.recent.filter((row) => (!repos || repos.has(row.repo)) && (!users || users.has(row.login)) && (!types || types.has(row.type))) };
     };
 
     const renderBoard = () => {
@@ -24487,7 +24491,7 @@ void main() {
         const canvas = document.createElement("canvas");
         canvas.width = BOARD_W; canvas.height = BOARD_H;
         const context = canvas.getContext("2d", { alpha: false });
-        let filters = { repos: state?.filters?.repos ?? null, users: state?.filters?.users ?? null };
+        let filters = { repos: state?.filters?.repos ?? null, users: state?.filters?.users ?? null, types: state?.filters?.types ?? null };
         let source = filteredModel(model, filters), pages = buildCycle(source, source !== model, filters.repos !== null);
         let index = indexOfView(state ? state.screen : view, pages), selected = pages[index], seenModel = model;
         let filterVersion = 0;
@@ -24505,6 +24509,7 @@ void main() {
           get filterVersion() { return filterVersion; },
           get repos() { return model ? model.repos : []; },
           get users() { return model ? model.contributors : []; },
+          get types() { return RECENT_TYPES; },
           setFilter(kind, values) {
             filters = { ...filters, [kind]: values };
             source = filteredModel(model, filters);
@@ -36394,9 +36399,11 @@ void main() {
         if (!valid || screen.name === "repo" && !params.name
           || screen.name === "leaderboard" && !["commits", "prs", "reviews", "issues", "comments"].includes(params.type)) continue;
         const filters = {};
-        for (const kind of ["repos", "users"]) {
+        for (const kind of ["repos", "users", "types"]) {
           const values = entry.filters?.[kind];
-          filters[kind] = Array.isArray(values) ? [...new Set(values.slice(0, 512).filter((value) => typeof value === "string" && value.length <= 256))] : null;
+          filters[kind] = Array.isArray(values) ? [...new Set(values.slice(0, kind === "types" ? 6 : 512)
+            .filter((value) => typeof value === "string" && value.length <= 256
+              && (kind !== "types" || ["commit", "pr", "review", "merge", "issue", "comment"].includes(value))))] : null;
         }
         windows.push({ x: entry.x, y: entry.y, width: entry.width, paused: entry.paused, screen: { name: screen.name, params }, filters });
       }
@@ -36936,7 +36943,7 @@ void main() {
         el.weapon.dataset.reloading = String(reloading);
         el.weapon.dataset.canReload = String(canReload);
         el.weaponLabel.firstChild.data = reloading ? "Reloading" : "Ammo";
-        el.weaponMagazine.title = unlimited ? "Unlimited ammunition; firing does not consume rounds" : reloading ? "Stay near the pile to keep reloading; leave its range to stop" : canReload ? "Press Space to reload; two bananas load 6 rounds" : "Each slot is 1 round. Press Space beside the pile to reload.";
+        el.weaponMagazine.title = unlimited ? "Unlimited ammunition; firing does not consume rounds" : reloading ? "Stay near the pile to keep reloading; leave its range to stop" : canReload ? "Press Space to reload beside the pile; its level stays the same" : "Each slot is 1 round. Press Space beside the pile to reload.";
       }
       if (ammo === weaponAmmo) {
         if (modeChanged || !available || !equipped || reducedMotion.matches) showWeaponAmmo(ammo);
@@ -37085,7 +37092,7 @@ void main() {
         boardDots: "board-dots", boardPrev: "board-prev", boardNext: "board-next", boardHelp: "board-help",
         boardHead: "board-head", boardPause: "board-pause", boardResize: "board-resize",
         boardFilter: "board-filter", boardFilterMenu: "board-filter-menu", boardFilterList: "board-filter-list",
-        boardFilterRepos: "board-filter-repos", boardFilterUsers: "board-filter-users"
+        boardFilterRepos: "board-filter-repos", boardFilterUsers: "board-filter-users", boardFilterTypes: "board-filter-types"
       };
       for (const key in ids) el[key] = node.querySelector(`[id="${ids[key]}"]`);
       if (floatingId) {
@@ -37096,6 +37103,7 @@ void main() {
       el.boardFilter.setAttribute("aria-controls", el.boardFilterMenu.id);
       el.boardFilterRepos.setAttribute("aria-controls", el.boardFilterList.id);
       el.boardFilterUsers.setAttribute("aria-controls", el.boardFilterList.id);
+      el.boardFilterTypes.setAttribute("aria-controls", el.boardFilterList.id);
       const boardListeners = [];
       const on = (target, type, fn, options) => {
         target.addEventListener(type, fn, options);
@@ -37109,8 +37117,10 @@ void main() {
       // A `floating` board also supplies `paused` and `setPaused`, and keeps island input available.
       let board = null, boardShown = -1, boardDots = -1;
       let filterTab = "repos", filterShown = -1;
-      const filterOptions = () => filterTab === "repos" ? board.repos : board.users;
-      const filterKey = (entry) => filterTab === "repos" ? entry.name : entry.login;
+      const filterTabs = [el.boardFilterRepos, el.boardFilterUsers, el.boardFilterTypes];
+      const typeLabels = { commit: "Commits", pr: "Pull requests", review: "Reviews", merge: "Merges", issue: "Issues", comment: "Comments" };
+      const filterOptions = () => filterTab === "repos" ? board.repos : filterTab === "users" ? board.users : board.types;
+      const filterKey = (entry) => filterTab === "repos" ? entry.name : filterTab === "users" ? entry.login : entry;
       const paintFilters = () => {
         filterShown = board.filterVersion;
         const selected = board.filters[filterTab];
@@ -37125,10 +37135,11 @@ void main() {
           caption.textContent = text;
           label.append(input, caption); rows.push(label);
         };
-        row("", filterTab === "repos" ? "All repos" : "All users", selected === null, true);
+        row("", filterTab === "repos" ? "All repos" : filterTab === "users" ? "All contributors" : "All types", selected === null, true);
         for (const entry of filterOptions()) {
           const key = filterKey(entry);
-          const label = filterTab === "repos" ? key === "oogaboogaland" ? "OBL (oogaboogaland)" : key : BL.characters.displayOf(key);
+          const label = filterTab === "repos" ? key
+            : filterTab === "users" ? BL.characters.displayOf(key) : typeLabels[key];
           row(key, label, selected === null || selected.includes(key));
         }
         const scroll = el.boardFilterList.scrollTop;
@@ -37137,8 +37148,8 @@ void main() {
         if (focusedChoice) for (const input of el.boardFilterList.querySelectorAll("input")) {
           if (input.dataset.filterChoice === focusedChoice && input.value === focusedValue) { input.focus({ preventScroll: true }); break; }
         }
-        el.boardFilterList.setAttribute("aria-labelledby", filterTab === "repos" ? el.boardFilterRepos.id : el.boardFilterUsers.id);
-        for (const tab of [el.boardFilterRepos, el.boardFilterUsers]) {
+        el.boardFilterList.setAttribute("aria-labelledby", filterTabs.find((tab) => tab.dataset.filterTab === filterTab).id);
+        for (const tab of filterTabs) {
           const active = tab.dataset.filterTab === filterTab;
           tab.setAttribute("aria-selected", String(active)); tab.tabIndex = active ? 0 : -1;
         }
@@ -37269,7 +37280,7 @@ void main() {
         el.boardNote.hidden = !!board.floating || !board.note;
         if (board.floating) {
           paintBoardPause();
-          el.boardFilter.dataset.active = String(board.filters.repos !== null || board.filters.users !== null);
+          el.boardFilter.dataset.active = String(board.filters.repos !== null || board.filters.users !== null || board.filters.types !== null);
           if (!el.boardFilterMenu.hidden && filterShown !== board.filterVersion) paintFilters();
         }
         if (boardDots !== board.count) {
@@ -37376,9 +37387,12 @@ void main() {
       on(el.boardFilterMenu, "keydown", (e) => {
         if (!e.target.closest("[data-filter-tab]") || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
         e.preventDefault(); e.stopPropagation();
-        filterTab = e.key === "Home" ? "repos" : e.key === "End" ? "users" : filterTab === "repos" ? "users" : "repos";
+        const current = filterTabs.findIndex((tab) => tab.dataset.filterTab === filterTab);
+        const next = e.key === "Home" ? 0 : e.key === "End" ? filterTabs.length - 1
+          : (current + (e.key === "ArrowRight" ? 1 : filterTabs.length - 1)) % filterTabs.length;
+        filterTab = filterTabs[next].dataset.filterTab;
         paintFilters();
-        (filterTab === "repos" ? el.boardFilterRepos : el.boardFilterUsers).focus();
+        filterTabs[next].focus();
       });
       on(el.boardFilterList, "change", (e) => {
         const input = e.target.closest("[data-filter-choice]");
@@ -41569,18 +41583,17 @@ void main() {
       if (w.reloadHandoff || w.reloadHandoffFrame) { parts.snack.visible = false; return true; }
       if (w.ammo === AMMO_MAX && (!w.reloadSpare || w.spareAmmo[w.reloadMagazine] === AMMO_MAX)) { handoffToSpare(cave); return true; }
       w.reloadTime += dt;
-      // Fill the AK before both spares. A partial final bite pays only for the
-      // rounds loaded. Finish showing that magazine before touching the next.
+      // Fill the AK before both spares without depleting the pile.
+      // Finish showing that magazine before touching the next.
       let missing = reloadMissing(cave);
       while (w.reloadTime >= RELOAD_PERIOD / 2 && missing > 0) {
-        const rounds = reloadBite(cave), cost = rounds / AMMO_PER_BANANA;
-        if (ctx.reloadPolicy ? !ctx.reloadPolicy.available(cave, rounds) : world.level < cost) break;
+        const rounds = reloadBite(cave);
+        if (ctx.reloadPolicy ? !ctx.reloadPolicy.available(cave, rounds) : world.level < rounds / AMMO_PER_BANANA) break;
         w.reloadTime -= RELOAD_PERIOD / 2;
         w.reloadStep = 1 - w.reloadStep;
         if (w.reloadSpare) w.spareAmmo[w.reloadMagazine] += rounds;
         else w.ammo += rounds;
         if (ctx.reloadPolicy) ctx.reloadPolicy.consume(cave, rounds);
-        else world.level = Math.max(0, world.level - cost);
         missing -= rounds;
         if (missing && (w.reloadSpare ? w.spareAmmo[w.reloadMagazine] === AMMO_MAX : w.ammo === AMMO_MAX)) { handoffToSpare(cave); return true; }
       }
@@ -62727,7 +62740,7 @@ void main() {
         posts.push(p);
         stand("lanternPost", p.x, p.z, turns, 0, 0.7);
       }
-      const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["banner", 0.6, 3], ["rubble", 0.8]];
+      const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["rubble", 0.8]];
       let placed = 0;
       for (let k = 0; k < 16 && placed < CAMP.length; k++) {
         const a = k / 16 * Math.PI * 2 + 0.3, x = fire.x + Math.cos(a) * 3.1, z = fire.z + Math.sin(a) * 3.1;
@@ -63990,7 +64003,7 @@ void main() {
         const z = ramp.from.z - ramp.axis.z * along - ramp.axis.x * side * across;
         if (island.surfaceAt(x, z) !== 0 || !island.isGrassAt(x, z) || island.path.overlaps(x, z, 0.8)
           || Math.hypot(x, z) < island.path.debug.ringOuterRadius + 1.5 || !free(x, z, 0.9)) continue;
-        chillSpots.push({ x, z, ry: Math.atan2(ramp.from.x - x, ramp.from.z - z), sit: true });
+        chillSpots.push({ x, z, ry: Math.atan2(-x, -z), sit: true });
       }
     }
     spots.push({ x: 0, z: -(MEADOW + 2.5), ry: Math.PI });
@@ -64073,7 +64086,7 @@ void main() {
     if (!s) return false;
     out.x = s.x;
     out.z = s.z;
-    out.ry = s.ry;
+    out.ry = chilling && Number.isNaN(s.ry) ? Math.atan2(-s.x, -s.z) : s.ry;
     out.sit = !!s.sit;
     return true;
   };
@@ -67136,7 +67149,7 @@ void main() {
   const updateMeter = () => {
     let reloading = 0;
     for (let i = 0; i < crew.list.length; i++) if (crew.list[i].weapon.reloading) reloading++;
-    hud.setMeter(world.level, METER_CAPACITY, reloading ? `${reloading} reloading · 6 shots per banana` : world.level < 1 ? "Waiting for bananas" : "Ready for reloads");
+    hud.setMeter(world.level, METER_CAPACITY, reloading ? `${reloading} reloading · pile unchanged` : world.level < 1 ? "Waiting for bananas" : "Ready for reloads");
   };
   const setPhase = (next) => {
     const first = phase === null;
@@ -70133,7 +70146,7 @@ void main() {
   const updateMeter = () => {
     let reloading = 0;
     for (let i = 0; i < crew.list.length; i++) if (crew.list[i].weapon.reloading) reloading++;
-    hud.setMeter(world.level, METER_CAPACITY, reloading ? `${reloading} reloading · 6 shots per banana` : world.level < 1 ? "Waiting for bananas" : "Ready for reloads");
+    hud.setMeter(world.level, METER_CAPACITY, reloading ? `${reloading} reloading · pile unchanged` : world.level < 1 ? "Waiting for bananas" : "Ready for reloads");
   };
   const update = (dt, elapsed) => {
     pilot.readInput(dt);
@@ -71328,8 +71341,8 @@ void main() {
   const BRONZE = "#a86a34", BRONZE_DK = "#6e4222", COPPER = "#c0703a", COPPER_DK = "#7e4220";
 
   const LEVEL = { pit: 0, low: 2.5, main: 5, high: 10, top: 15.5 };
-  // Rock outcrops either side of the front of the pit: [x, z, size].
-  const OUTCROPS = [[-11, 21, 1.3], [-16, 25, 1.6], [14.5, 20, 1]];
+  // Rock outcrops on the left of the front of the pit: [x, z, size].
+  const OUTCROPS = [[-11, 21, 1.3], [-16, 25, 1.6]];
   const HALL = { halfW: 23, back: -22, front: 30, h: 26 };
   // The walls' stone comes in cells this big and leans this far in over the hall's height.
   const WALL_CELL = 0.75, WALL_LEAN = 3.5, STATION_BACK = 0.8;
@@ -71363,7 +71376,7 @@ void main() {
     ],
     switchboard: { x: -12, y: LEVEL.low, z: 6, w: 7, d: 5 },
     rebalancer: { x: 14, y: LEVEL.low, z: 4.2, w: 8, d: 10 },
-    treasury: { x: 12, y: LEVEL.low, z: 12.5, w: 7, d: 5 },
+    treasury: { x: 13.5, y: LEVEL.low, z: 20, w: 7, d: 5 },
     // In front of the core's stone foot, whose face is at z 0.2 there.
     forge: { x: 0, z: 0.7 },
     lookout: { x: -16, y: LEVEL.top, z: -14, w: 6, d: 6, tower: 5.5 },
@@ -71371,8 +71384,10 @@ void main() {
     lookoutApproach: { x: -16, y: LEVEL.top, z: -10.8, w: 2, d: 1.5 },
     // Vertical climbing planes; normals point out from the upper landing.
     ladders: [
+      { x: -10, z: 8.4, bottom: 0, top: LEVEL.low, nx: 0, nz: 1, width: 1.4, inset: 0.3 },
       { x: 10.1, z: 6.8, bottom: 0, top: LEVEL.low, nx: -1, nz: 0, width: 1.4, inset: 0.3 },
-      { x: -16, z: -11.6, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: 1, width: 1.4, inset: 0.3 }
+      { x: 12, z: 22.4, bottom: 0, top: LEVEL.low, nx: 0, nz: 1, width: 1.4, inset: 0.3 },
+      { x: -17.2, z: -16, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: -1, width: 1.4, inset: 0.3 }
     ],
     study: { x: 21.4, y: LEVEL.main, z: 12, w: 4, d: 7 },
     // Level 2, the balcony's level: the walkway from the balcony's right side round the right wall, past the study
@@ -71380,12 +71395,11 @@ void main() {
     // from the line and the tunnel (`porchOf`).
     walk: [[2.5, 17.6, 23.7, 26.3], [17.6, 20.2, 0, 26.3]],
     // Every other flight of stairs, [x, y, z] at the bottom and at the top and its width, read by the scaffold that
-    // builds them (cutting the rail wherever one lands) and by the floor an Ooga walks: pit to the switchboard, the
-    // treasury and the core's walkway, the main level to the high lines up the lines' inner sides, and the high
+    // builds them (cutting the rail wherever one lands) and by the floor an Ooga walks: pit to the
+    // core's walkway, the main level to the high lines up the lines' inner sides, and the high
     // lines to the landing in front of the first gallery, one flight from each. An end on a deck's edge stands on that
     // edge's rail line and crosses it square, so its rails meet the ends of the deck's.
     stairs: [
-      [-10, 0, 12.4, -10, LEVEL.low, 8.4, 1.6], [10.5, 0, 19, 10.5, LEVEL.low, 14.9, 1.6],
       [-4.8, 0, 7.5, -4.8, LEVEL.main, 1.3, 1.6], [4.8, 0, 7.5, 4.8, LEVEL.main, 1.3, 1.6],
       [-9.2, LEVEL.main, -4.4, -9.2, LEVEL.high, -9.6, 1.6], [9.2, LEVEL.main, -4.4, 9.2, LEVEL.high, -9.6, 1.6],
       [-6.4, LEVEL.high, -14.05, -0.8, LEVEL.top, -14.05, 1.6], [6.4, LEVEL.high, -14.05, 0.8, LEVEL.top, -14.05, 1.6]
@@ -71532,11 +71546,12 @@ void main() {
     let out = keep ? labelCache.get(key) : null;
     if (out) return out;
     const S = LABEL_STYLES[style], canvas = document.createElement("canvas"), g = canvas.getContext("2d");
-    const titleFont = `bold 50px ${LABEL_FONT}`, subFont = `37px ${LABEL_FONT}`;
+    const titleFont = `bold 50px ${LABEL_FONT}`, subFont = `37px ${LABEL_FONT}`, lines = title.split("\n");
     g.font = titleFont;
-    const tw = g.measureText(title).width;
+    let tw = 0;
+    for (const line of lines) tw = Math.max(tw, g.measureText(line).width);
     g.font = subFont;
-    const sw = sub ? g.measureText(sub).width : 0, w = Math.ceil(Math.max(tw, sw) + 56), h = sub ? 124 : 80;
+    const sw = sub ? g.measureText(sub).width : 0, w = Math.ceil(Math.max(tw, sw) + 56), h = (sub ? 124 : 80) + (lines.length - 1) * 44;
     canvas.width = w;
     canvas.height = h;
     g.fillStyle = S.board;
@@ -71548,11 +71563,12 @@ void main() {
     g.textBaseline = "middle";
     g.fillStyle = S.title;
     g.font = titleFont;
-    g.fillText(title, w / 2, sub ? 45 : h / 2 + 2);
+    const titleY = sub ? 45 : h / 2 + 2 - (lines.length - 1) * 22;
+    for (let i = 0; i < lines.length; i++) g.fillText(lines[i], w / 2, titleY + i * 44);
     if (sub) {
       g.fillStyle = S.sub;
       g.font = subFont;
-      g.fillText(sub, w / 2, 90);
+      g.fillText(sub, w / 2, 90 + (lines.length - 1) * 44);
     }
     const image = new Image();
     image.src = canvas.toDataURL("image/png");
@@ -71729,7 +71745,7 @@ void main() {
       else crystal(-W + 4 + t * (2 * W - 8), 0, B + 1.8, 0.9 + rand());
     }
     for (const t of LAYOUT.tunnels) crystal(t.x + (t.turn ? 0 : 3.6), t.y, t.z + (t.turn ? 3.4 : 1.4), 0.7);
-    // Outcrops either side of the front of the pit, framing the view from the balcony.
+    // Outcrops on the left of the front of the pit, framing the view from the balcony.
     for (const [x, z, s] of OUTCROPS) {
       for (let k = 0; k < 4; k++) {
         const w = (3.6 - k * 0.7) * s, h = 1.4 * s;
@@ -73826,7 +73842,7 @@ void main() {
     forge: view(0, 2.2, 1.5, 0.75, 0.22, 10),
     switchboard: view(-12, 4, 6, 0.55, 0.22, 9),
     rebalancer: view(14, 4.6, 4.2, -0.8, 0.3, 10),
-    treasury: view(12, 5, 12.5, -0.3, 0.25, 10),
+    treasury: view(13.5, 5, 20, -0.3, 0.25, 10),
     lookout: view(-16, 19, -14, 0.7, 0.15, 14),
     study: view(19, 8.6, 12, -Math.PI / 2 + 0.2, 0.2, 11),
     galleries: view(4, 17, -16, 0, 0.14, 17)
@@ -74136,7 +74152,7 @@ void main() {
   const sats = (n) => n.toLocaleString("en-US");
   const refreshBoards = (s) => {
     const r = feed.reading, signal = feed.signal;
-    setBoard(s.lookoutLabel, "WATCHTOWER OUTPOST", signal === "live" ? (r.stream === "replay" ? "(Catching Up)" : "(Signal: Live)") : signal === "silent" ? "(No Signal)" : "(Waiting)", true);
+    setBoard(s.lookoutLabel, "WATCHTOWER\nOUTPOST", signal === "live" ? (r.stream === "replay" ? "(Catching Up)" : "(Signal: Live)") : signal === "silent" ? "(No Signal)" : "(Waiting)", true);
     const snap = mock.snapshot;
     // The rebalancer's boards never name a line: a rebalance says only its size and its hour.
     setData(s.rebBoards[0], "LAST REBALANCE", [["Size", s.rebScale ? SIZES[s.rebScale] : "None yet", "count"], ["Hour", s.rebHour ? `${s.rebHour} UTC` : "None yet", "count"], ["Lines", "Private", "plain"]], 1.6);
@@ -74272,7 +74288,7 @@ void main() {
         s.gallery.push({ bay: false, index: s.gallery.length, node, stand, caps: caps2, line: null, flashL: 0, sputter: 0 });
       }
     }
-    s.galleryLabel = labelNode(root, L.galleries[0].x, L.galleries[0].y + 2.6, L.galleries[0].z + 1.6);
+    s.galleryLabel = labelNode(root, 0, L.LEVEL.top + 4.5, L.HALL.back + 4.9);
     // The switchboard, the rebalancer and the treasury on their decks.
     const sw = L.switchboard, rb = L.rebalancer, tr = L.treasury, lk = L.lookout, st = L.study;
     const switchNode = createNode({ position: { x: sw.x, y: sw.y, z: sw.z } });
@@ -74319,7 +74335,7 @@ void main() {
     addChild(s.lamp, createNode({ geometry: optics.frame }), createNode({ geometry: optics.lens }), s.beam);
     const lkBody = createNode({ geometry: FM.lookoutTower() });
     addChild(lkNode, lkBody, s.lamp);
-    s.lookoutLabel = labelNode(lkNode, 2.2, 2.6, 2.3);
+    s.lookoutLabel = labelNode(lkNode, 0, 2.6, 2.3);
     // The study hall in the right wall, facing into the hall: locked for now.
     const stNode = createNode({ position: { x: st.x, y: st.y, z: st.z }, rotation: { x: 0, y: -Math.PI / 2, z: 0 } });
     const hallGeo = FM.studyHall();
