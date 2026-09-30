@@ -2610,9 +2610,14 @@ body[data-active-scene="arcade"] .magazine-hud {
 .board-nav {
   display: grid;
   grid-template-columns: 36px 1fr 36px;
+  grid-template-areas: "prev center next";
   align-items: center;
   gap: 8px;
 }
+
+.board-nav > .board-page:first-child { grid-area: prev; }
+.board-nav > .board-center { grid-area: center; }
+.board-nav > .board-page:last-child { grid-area: next; }
 
 .board-page {
   display: grid;

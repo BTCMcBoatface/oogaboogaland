@@ -285,7 +285,7 @@
     };
     let toastTimer = 0, toastHideTimer = 0, hintTimer = 0, hintHideTimer = 0, copyTimer = 0;
     const rosterRows = new Map();
-    const orderedRoster = [...roster].sort((a, b) => b.lastCommitAt - a.lastCommitAt);
+    const orderedRoster = [...roster].sort((a, b) => b.lastContributionAt - a.lastContributionAt);
     for (let rosterIndex = 0; rosterIndex < orderedRoster.length; rosterIndex++) {
       const contributor = orderedRoster[rosterIndex];
       const li = document.createElement("li");
@@ -301,10 +301,12 @@
       name.textContent = contributor.display;
       const age = document.createElement("span");
       age.className = "roster-age";
-      age.append("");
+      age.append(BL.contributors.contributionAgeLabel(contributor));
       const state = document.createElement("span");
       state.className = "roster-state";
-      state.append("");
+      const activity = BL.contributors.contributionStateFor(contributor);
+      state.dataset.state = activity;
+      state.append(STATE_LABELS[activity]);
       li.append(presence, name, age, state);
       el.roster.append(li);
       rosterRows.set(contributor.name, { li, presence, state, age, contributor, rosterIndex, online: false });
@@ -314,22 +316,25 @@
       for (const sibling of el.roster.children) {
         if (sibling === row.li) continue;
         const other = rosterRows.get(sibling.dataset.name);
-        if (other.contributor.lastCommitAt < row.contributor.lastCommitAt ||
-          other.contributor.lastCommitAt === row.contributor.lastCommitAt && other.rosterIndex > row.rosterIndex) { before = sibling; break; }
+        if (other.contributor.lastContributionAt < row.contributor.lastContributionAt ||
+          other.contributor.lastContributionAt === row.contributor.lastContributionAt && other.rosterIndex > row.rosterIndex) { before = sibling; break; }
       }
       if (before) {
         if (row.li.nextElementSibling !== before) el.roster.insertBefore(row.li, before);
       } else if (el.roster.lastElementChild !== row.li) el.roster.append(row.li);
     };
-    const setRosterRow = (name, stateKey, ageText, online = false) => {
+    const setRosterRow = (name, _stateKey, _ageText, online = false) => {
       const row = rosterRows.get(name);
       if (!row) return;
-      const activity = stateKey === "away" ? "chilling" : stateKey;
+      // Gameplay can put an Ooga to work or sleep; this board follows the
+      // contributor's latest recorded activity instead.
+      const activity = BL.contributors.contributionStateFor(row.contributor);
+      const ageText = BL.contributors.contributionAgeLabel(row.contributor);
       if (row.state.dataset.state !== activity) {
         row.state.dataset.state = activity;
         row.state.firstChild.data = STATE_LABELS[activity] || activity;
       }
-      if (ageText != null && row.age.firstChild.data !== ageText) row.age.firstChild.data = ageText;
+      if (row.age.firstChild.data !== ageText) row.age.firstChild.data = ageText;
       if (row.online !== online) {
         row.online = online;
         row.presence.dataset.online = online ? "true" : "false";
@@ -934,7 +939,8 @@
             dots.push(dot);
           }
           el.boardDots.replaceChildren(...dots);
-          el.boardDots.hidden = el.boardPrev.hidden = el.boardNext.hidden = board.count < 2;
+          el.boardDots.hidden = el.boardPrev.hidden = el.boardNext.hidden = !board.floating && board.count < 2;
+          el.boardPrev.disabled = el.boardNext.disabled = board.count < 2;
         }
         for (const dot of el.boardDots.children) dot.setAttribute("aria-current", String(+dot.dataset.page === board.index));
         if (floatingId) scheduleBoardSave();

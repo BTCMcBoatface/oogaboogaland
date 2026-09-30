@@ -504,16 +504,18 @@
     // Rebuilt per model: recent feed, org totals and org leaderboards, then
     // each active repo's summary followed by its leaderboards.
     const BOARD_TYPES = ["commits", "prs", "reviews", "comments", "issues"];
+    const BOARD_EVENT_TYPES = { commits: "commit", prs: "pr", reviews: "review", comments: "comment", issues: "issue" };
     const buildCycle = (source = model, filtered = false, explicitRepos = false, mainBoard = false) => {
-      const c = [{ name: "recent" }, { name: "totals" }];
-      if (source?.typeFiltered) return c.slice(0, 1);
-      for (const type of BOARD_TYPES) {
+      const types = source?.boardTypes || BOARD_TYPES;
+      const c = [{ name: "recent" }];
+      if (!source?.typeFiltered) c.push({ name: "totals" });
+      for (const type of types) {
         if (!filtered || source.leaderboards[type].length) c.push({ name: "leaderboard", params: { type } });
       }
       for (const repo of explicitRepos ? source.repos : activeRepos(source, mainBoard)) {
-        if (filtered && !BOARD_TYPES.some((type) => repo.leaderboards[type].length)) continue;
-        c.push({ name: "repo", params: { name: repo.name } });
-        for (const type of BOARD_TYPES) {
+        if (filtered && !types.some((type) => repo.leaderboards[type].length)) continue;
+        if (!source?.typeFiltered) c.push({ name: "repo", params: { name: repo.name } });
+        for (const type of types) {
           if (filtered && !repo.leaderboards[type].length) continue;
           c.push({ name: "leaderboard", params: { type, repo: repo.name } });
         }
@@ -564,7 +566,8 @@
         for (const repo of selectedRepos) for (const week of repo.weeklyTotals) weeks.set(week.week, (weeks.get(week.week) || 0) + week.total);
         weeklyTotals = [...weeks].map(([week, total]) => ({ week, total })).sort((a, b) => a.week < b.week ? -1 : a.week > b.week ? 1 : 0);
       }
-      return { ...source, filtered: true, typeFiltered: types !== null, repos: selectedRepos, leaderboards, totals, weeklyTotals,
+      const boardTypes = types === null ? null : BOARD_TYPES.filter((type) => types.has(BOARD_EVENT_TYPES[type]));
+      return { ...source, filtered: true, typeFiltered: types !== null, boardTypes, repos: selectedRepos, leaderboards, totals, weeklyTotals,
         recent: source.recent.filter((row) => (!repos || repos.has(row.repo)) && (!users || users.has(row.login)) && (!types || types.has(row.type))) };
     };
 
