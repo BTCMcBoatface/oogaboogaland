@@ -2496,18 +2496,17 @@
       if (w.reloadHandoff || w.reloadHandoffFrame) { parts.snack.visible = false; return true; }
       if (w.ammo === AMMO_MAX && (!w.reloadSpare || w.spareAmmo[w.reloadMagazine] === AMMO_MAX)) { handoffToSpare(cave); return true; }
       w.reloadTime += dt;
-      // Fill the AK before both spares. A partial final bite pays only for the
-      // rounds loaded. Finish showing that magazine before touching the next.
+      // Fill the AK before both spares without depleting the pile.
+      // Finish showing that magazine before touching the next.
       let missing = reloadMissing(cave);
       while (w.reloadTime >= RELOAD_PERIOD / 2 && missing > 0) {
-        const rounds = reloadBite(cave), cost = rounds / AMMO_PER_BANANA;
-        if (ctx.reloadPolicy ? !ctx.reloadPolicy.available(cave, rounds) : world.level < cost) break;
+        const rounds = reloadBite(cave);
+        if (ctx.reloadPolicy ? !ctx.reloadPolicy.available(cave, rounds) : world.level < rounds / AMMO_PER_BANANA) break;
         w.reloadTime -= RELOAD_PERIOD / 2;
         w.reloadStep = 1 - w.reloadStep;
         if (w.reloadSpare) w.spareAmmo[w.reloadMagazine] += rounds;
         else w.ammo += rounds;
         if (ctx.reloadPolicy) ctx.reloadPolicy.consume(cave, rounds);
-        else world.level = Math.max(0, world.level - cost);
         missing -= rounds;
         if (missing && (w.reloadSpare ? w.spareAmmo[w.reloadMagazine] === AMMO_MAX : w.ammo === AMMO_MAX)) { handoffToSpare(cave); return true; }
       }

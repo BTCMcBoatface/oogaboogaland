@@ -32,8 +32,8 @@
   const BRONZE = "#a86a34", BRONZE_DK = "#6e4222", COPPER = "#c0703a", COPPER_DK = "#7e4220";
 
   const LEVEL = { pit: 0, low: 2.5, main: 5, high: 10, top: 15.5 };
-  // Rock outcrops either side of the front of the pit: [x, z, size].
-  const OUTCROPS = [[-11, 21, 1.3], [-16, 25, 1.6], [14.5, 20, 1]];
+  // Rock outcrops on the left of the front of the pit: [x, z, size].
+  const OUTCROPS = [[-11, 21, 1.3], [-16, 25, 1.6]];
   const HALL = { halfW: 23, back: -22, front: 30, h: 26 };
   // The walls' stone comes in cells this big and leans this far in over the hall's height.
   const WALL_CELL = 0.75, WALL_LEAN = 3.5, STATION_BACK = 0.8;
@@ -67,7 +67,7 @@
     ],
     switchboard: { x: -12, y: LEVEL.low, z: 6, w: 7, d: 5 },
     rebalancer: { x: 14, y: LEVEL.low, z: 4.2, w: 8, d: 10 },
-    treasury: { x: 12, y: LEVEL.low, z: 12.5, w: 7, d: 5 },
+    treasury: { x: 13.5, y: LEVEL.low, z: 20, w: 7, d: 5 },
     // In front of the core's stone foot, whose face is at z 0.2 there.
     forge: { x: 0, z: 0.7 },
     lookout: { x: -16, y: LEVEL.top, z: -14, w: 6, d: 6, tower: 5.5 },
@@ -75,8 +75,10 @@
     lookoutApproach: { x: -16, y: LEVEL.top, z: -10.8, w: 2, d: 1.5 },
     // Vertical climbing planes; normals point out from the upper landing.
     ladders: [
+      { x: -10, z: 8.4, bottom: 0, top: LEVEL.low, nx: 0, nz: 1, width: 1.4, inset: 0.3 },
       { x: 10.1, z: 6.8, bottom: 0, top: LEVEL.low, nx: -1, nz: 0, width: 1.4, inset: 0.3 },
-      { x: -16, z: -11.6, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: 1, width: 1.4, inset: 0.3 }
+      { x: 12, z: 22.4, bottom: 0, top: LEVEL.low, nx: 0, nz: 1, width: 1.4, inset: 0.3 },
+      { x: -17.2, z: -16, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: -1, width: 1.4, inset: 0.3 }
     ],
     study: { x: 21.4, y: LEVEL.main, z: 12, w: 4, d: 7 },
     // Level 2, the balcony's level: the walkway from the balcony's right side round the right wall, past the study
@@ -84,12 +86,11 @@
     // from the line and the tunnel (`porchOf`).
     walk: [[2.5, 17.6, 23.7, 26.3], [17.6, 20.2, 0, 26.3]],
     // Every other flight of stairs, [x, y, z] at the bottom and at the top and its width, read by the scaffold that
-    // builds them (cutting the rail wherever one lands) and by the floor an Ooga walks: pit to the switchboard, the
-    // treasury and the core's walkway, the main level to the high lines up the lines' inner sides, and the high
+    // builds them (cutting the rail wherever one lands) and by the floor an Ooga walks: pit to the
+    // core's walkway, the main level to the high lines up the lines' inner sides, and the high
     // lines to the landing in front of the first gallery, one flight from each. An end on a deck's edge stands on that
     // edge's rail line and crosses it square, so its rails meet the ends of the deck's.
     stairs: [
-      [-10, 0, 12.4, -10, LEVEL.low, 8.4, 1.6], [10.5, 0, 19, 10.5, LEVEL.low, 14.9, 1.6],
       [-4.8, 0, 7.5, -4.8, LEVEL.main, 1.3, 1.6], [4.8, 0, 7.5, 4.8, LEVEL.main, 1.3, 1.6],
       [-9.2, LEVEL.main, -4.4, -9.2, LEVEL.high, -9.6, 1.6], [9.2, LEVEL.main, -4.4, 9.2, LEVEL.high, -9.6, 1.6],
       [-6.4, LEVEL.high, -14.05, -0.8, LEVEL.top, -14.05, 1.6], [6.4, LEVEL.high, -14.05, 0.8, LEVEL.top, -14.05, 1.6]
@@ -236,11 +237,12 @@
     let out = keep ? labelCache.get(key) : null;
     if (out) return out;
     const S = LABEL_STYLES[style], canvas = document.createElement("canvas"), g = canvas.getContext("2d");
-    const titleFont = `bold 50px ${LABEL_FONT}`, subFont = `37px ${LABEL_FONT}`;
+    const titleFont = `bold 50px ${LABEL_FONT}`, subFont = `37px ${LABEL_FONT}`, lines = title.split("\n");
     g.font = titleFont;
-    const tw = g.measureText(title).width;
+    let tw = 0;
+    for (const line of lines) tw = Math.max(tw, g.measureText(line).width);
     g.font = subFont;
-    const sw = sub ? g.measureText(sub).width : 0, w = Math.ceil(Math.max(tw, sw) + 56), h = sub ? 124 : 80;
+    const sw = sub ? g.measureText(sub).width : 0, w = Math.ceil(Math.max(tw, sw) + 56), h = (sub ? 124 : 80) + (lines.length - 1) * 44;
     canvas.width = w;
     canvas.height = h;
     g.fillStyle = S.board;
@@ -252,11 +254,12 @@
     g.textBaseline = "middle";
     g.fillStyle = S.title;
     g.font = titleFont;
-    g.fillText(title, w / 2, sub ? 45 : h / 2 + 2);
+    const titleY = sub ? 45 : h / 2 + 2 - (lines.length - 1) * 22;
+    for (let i = 0; i < lines.length; i++) g.fillText(lines[i], w / 2, titleY + i * 44);
     if (sub) {
       g.fillStyle = S.sub;
       g.font = subFont;
-      g.fillText(sub, w / 2, 90);
+      g.fillText(sub, w / 2, 90 + (lines.length - 1) * 44);
     }
     const image = new Image();
     image.src = canvas.toDataURL("image/png");
@@ -433,7 +436,7 @@
       else crystal(-W + 4 + t * (2 * W - 8), 0, B + 1.8, 0.9 + rand());
     }
     for (const t of LAYOUT.tunnels) crystal(t.x + (t.turn ? 0 : 3.6), t.y, t.z + (t.turn ? 3.4 : 1.4), 0.7);
-    // Outcrops either side of the front of the pit, framing the view from the balcony.
+    // Outcrops on the left of the front of the pit, framing the view from the balcony.
     for (const [x, z, s] of OUTCROPS) {
       for (let k = 0; k < 4; k++) {
         const w = (3.6 - k * 0.7) * s, h = 1.4 * s;

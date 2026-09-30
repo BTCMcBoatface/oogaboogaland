@@ -57,7 +57,7 @@
     forge: view(0, 2.2, 1.5, 0.75, 0.22, 10),
     switchboard: view(-12, 4, 6, 0.55, 0.22, 9),
     rebalancer: view(14, 4.6, 4.2, -0.8, 0.3, 10),
-    treasury: view(12, 5, 12.5, -0.3, 0.25, 10),
+    treasury: view(13.5, 5, 20, -0.3, 0.25, 10),
     lookout: view(-16, 19, -14, 0.7, 0.15, 14),
     study: view(19, 8.6, 12, -Math.PI / 2 + 0.2, 0.2, 11),
     galleries: view(4, 17, -16, 0, 0.14, 17)
@@ -367,7 +367,7 @@
   const sats = (n) => n.toLocaleString("en-US");
   const refreshBoards = (s) => {
     const r = feed.reading, signal = feed.signal;
-    setBoard(s.lookoutLabel, "WATCHTOWER OUTPOST", signal === "live" ? (r.stream === "replay" ? "(Catching Up)" : "(Signal: Live)") : signal === "silent" ? "(No Signal)" : "(Waiting)", true);
+    setBoard(s.lookoutLabel, "WATCHTOWER\nOUTPOST", signal === "live" ? (r.stream === "replay" ? "(Catching Up)" : "(Signal: Live)") : signal === "silent" ? "(No Signal)" : "(Waiting)", true);
     const snap = mock.snapshot;
     // The rebalancer's boards never name a line: a rebalance says only its size and its hour.
     setData(s.rebBoards[0], "LAST REBALANCE", [["Size", s.rebScale ? SIZES[s.rebScale] : "None yet", "count"], ["Hour", s.rebHour ? `${s.rebHour} UTC` : "None yet", "count"], ["Lines", "Private", "plain"]], 1.6);
@@ -503,7 +503,7 @@
         s.gallery.push({ bay: false, index: s.gallery.length, node, stand, caps: caps2, line: null, flashL: 0, sputter: 0 });
       }
     }
-    s.galleryLabel = labelNode(root, L.galleries[0].x, L.galleries[0].y + 2.6, L.galleries[0].z + 1.6);
+    s.galleryLabel = labelNode(root, 0, L.LEVEL.top + 4.5, L.HALL.back + 4.9);
     // The switchboard, the rebalancer and the treasury on their decks.
     const sw = L.switchboard, rb = L.rebalancer, tr = L.treasury, lk = L.lookout, st = L.study;
     const switchNode = createNode({ position: { x: sw.x, y: sw.y, z: sw.z } });
@@ -550,7 +550,7 @@
     addChild(s.lamp, createNode({ geometry: optics.frame }), createNode({ geometry: optics.lens }), s.beam);
     const lkBody = createNode({ geometry: FM.lookoutTower() });
     addChild(lkNode, lkBody, s.lamp);
-    s.lookoutLabel = labelNode(lkNode, 2.2, 2.6, 2.3);
+    s.lookoutLabel = labelNode(lkNode, 0, 2.6, 2.3);
     // The study hall in the right wall, facing into the hall: locked for now.
     const stNode = createNode({ position: { x: st.x, y: st.y, z: st.z }, rotation: { x: 0, y: -Math.PI / 2, z: 0 } });
     const hallGeo = FM.studyHall();

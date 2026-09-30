@@ -1376,14 +1376,15 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
     </dialog>
     <dialog class="modal board-modal" id="board-modal" aria-labelledby="board-title">
       <div class="panel-head" id="board-head">
-        <button type="button" class="modal-close board-filter" id="board-filter" data-action="board-filter" aria-label="Filter repos and users" aria-expanded="false" aria-controls="board-filter-menu" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4H21L14 12V19L10 21V12Z"/></svg></button>
+        <button type="button" class="modal-close board-filter" id="board-filter" data-action="board-filter" aria-label="Filter repos, contributors, and contribution types" aria-expanded="false" aria-controls="board-filter-menu" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4H21L14 12V19L10 21V12Z"/></svg></button>
         <h2><span data-sign id="board-title">Board</span></h2>
         <button type="button" class="modal-close" data-action="board-close" aria-label="Close">&times;</button>
       </div>
       <section class="board-filter-menu" id="board-filter-menu" aria-label="Oogatron filters" hidden>
         <div class="board-filter-tabs" role="tablist" aria-label="Filter by">
           <button type="button" id="board-filter-repos" role="tab" aria-selected="true" aria-controls="board-filter-list" data-filter-tab="repos">Repos</button>
-          <button type="button" id="board-filter-users" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="users" tabindex="-1">Users</button>
+          <button type="button" id="board-filter-users" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="users" tabindex="-1">Contributors</button>
+          <button type="button" id="board-filter-types" role="tab" aria-selected="false" aria-controls="board-filter-list" data-filter-tab="types" tabindex="-1">Type</button>
         </div>
         <div class="board-filter-list" id="board-filter-list" role="tabpanel" aria-labelledby="board-filter-repos"></div>
         <button type="button" class="board-filter-done" data-action="board-filter-done">Done</button>

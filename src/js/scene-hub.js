@@ -1613,7 +1613,7 @@
         posts.push(p);
         stand("lanternPost", p.x, p.z, turns, 0, 0.7);
       }
-      const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["banner", 0.6, 3], ["rubble", 0.8]];
+      const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["rubble", 0.8]];
       let placed = 0;
       for (let k = 0; k < 16 && placed < CAMP.length; k++) {
         const a = k / 16 * Math.PI * 2 + 0.3, x = fire.x + Math.cos(a) * 3.1, z = fire.z + Math.sin(a) * 3.1;
@@ -2876,7 +2876,7 @@
         const z = ramp.from.z - ramp.axis.z * along - ramp.axis.x * side * across;
         if (island.surfaceAt(x, z) !== 0 || !island.isGrassAt(x, z) || island.path.overlaps(x, z, 0.8)
           || Math.hypot(x, z) < island.path.debug.ringOuterRadius + 1.5 || !free(x, z, 0.9)) continue;
-        chillSpots.push({ x, z, ry: Math.atan2(ramp.from.x - x, ramp.from.z - z), sit: true });
+        chillSpots.push({ x, z, ry: Math.atan2(-x, -z), sit: true });
       }
     }
     spots.push({ x: 0, z: -(MEADOW + 2.5), ry: Math.PI });
@@ -2959,7 +2959,7 @@
     if (!s) return false;
     out.x = s.x;
     out.z = s.z;
-    out.ry = s.ry;
+    out.ry = chilling && Number.isNaN(s.ry) ? Math.atan2(-s.x, -s.z) : s.ry;
     out.sit = !!s.sit;
     return true;
   };
@@ -6022,7 +6022,7 @@
   const updateMeter = () => {
     let reloading = 0;
     for (let i = 0; i < crew.list.length; i++) if (crew.list[i].weapon.reloading) reloading++;
-    hud.setMeter(world.level, METER_CAPACITY, reloading ? `${reloading} reloading · 6 shots per banana` : world.level < 1 ? "Waiting for bananas" : "Ready for reloads");
+    hud.setMeter(world.level, METER_CAPACITY, reloading ? `${reloading} reloading · pile unchanged` : world.level < 1 ? "Waiting for bananas" : "Ready for reloads");
   };
   const setPhase = (next) => {
     const first = phase === null;

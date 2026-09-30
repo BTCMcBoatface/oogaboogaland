@@ -38,9 +38,11 @@
         if (!valid || screen.name === "repo" && !params.name
           || screen.name === "leaderboard" && !["commits", "prs", "reviews", "issues", "comments"].includes(params.type)) continue;
         const filters = {};
-        for (const kind of ["repos", "users"]) {
+        for (const kind of ["repos", "users", "types"]) {
           const values = entry.filters?.[kind];
-          filters[kind] = Array.isArray(values) ? [...new Set(values.slice(0, 512).filter((value) => typeof value === "string" && value.length <= 256))] : null;
+          filters[kind] = Array.isArray(values) ? [...new Set(values.slice(0, kind === "types" ? 6 : 512)
+            .filter((value) => typeof value === "string" && value.length <= 256
+              && (kind !== "types" || ["commit", "pr", "review", "merge", "issue", "comment"].includes(value))))] : null;
         }
         windows.push({ x: entry.x, y: entry.y, width: entry.width, paused: entry.paused, screen: { name: screen.name, params }, filters });
       }
@@ -580,7 +582,7 @@
         el.weapon.dataset.reloading = String(reloading);
         el.weapon.dataset.canReload = String(canReload);
         el.weaponLabel.firstChild.data = reloading ? "Reloading" : "Ammo";
-        el.weaponMagazine.title = unlimited ? "Unlimited ammunition; firing does not consume rounds" : reloading ? "Stay near the pile to keep reloading; leave its range to stop" : canReload ? "Press Space to reload; two bananas load 6 rounds" : "Each slot is 1 round. Press Space beside the pile to reload.";
+        el.weaponMagazine.title = unlimited ? "Unlimited ammunition; firing does not consume rounds" : reloading ? "Stay near the pile to keep reloading; leave its range to stop" : canReload ? "Press Space to reload beside the pile; its level stays the same" : "Each slot is 1 round. Press Space beside the pile to reload.";
       }
       if (ammo === weaponAmmo) {
         if (modeChanged || !available || !equipped || reducedMotion.matches) showWeaponAmmo(ammo);
@@ -729,7 +731,7 @@
         boardDots: "board-dots", boardPrev: "board-prev", boardNext: "board-next", boardHelp: "board-help",
         boardHead: "board-head", boardPause: "board-pause", boardResize: "board-resize",
         boardFilter: "board-filter", boardFilterMenu: "board-filter-menu", boardFilterList: "board-filter-list",
-        boardFilterRepos: "board-filter-repos", boardFilterUsers: "board-filter-users"
+        boardFilterRepos: "board-filter-repos", boardFilterUsers: "board-filter-users", boardFilterTypes: "board-filter-types"
       };
       for (const key in ids) el[key] = node.querySelector(`[id="${ids[key]}"]`);
       if (floatingId) {
@@ -740,6 +742,7 @@
       el.boardFilter.setAttribute("aria-controls", el.boardFilterMenu.id);
       el.boardFilterRepos.setAttribute("aria-controls", el.boardFilterList.id);
       el.boardFilterUsers.setAttribute("aria-controls", el.boardFilterList.id);
+      el.boardFilterTypes.setAttribute("aria-controls", el.boardFilterList.id);
       const boardListeners = [];
       const on = (target, type, fn, options) => {
         target.addEventListener(type, fn, options);
@@ -753,8 +756,10 @@
       // A `floating` board also supplies `paused` and `setPaused`, and keeps island input available.
       let board = null, boardShown = -1, boardDots = -1;
       let filterTab = "repos", filterShown = -1;
-      const filterOptions = () => filterTab === "repos" ? board.repos : board.users;
-      const filterKey = (entry) => filterTab === "repos" ? entry.name : entry.login;
+      const filterTabs = [el.boardFilterRepos, el.boardFilterUsers, el.boardFilterTypes];
+      const typeLabels = { commit: "Commits", pr: "Pull requests", review: "Reviews", merge: "Merges", issue: "Issues", comment: "Comments" };
+      const filterOptions = () => filterTab === "repos" ? board.repos : filterTab === "users" ? board.users : board.types;
+      const filterKey = (entry) => filterTab === "repos" ? entry.name : filterTab === "users" ? entry.login : entry;
       const paintFilters = () => {
         filterShown = board.filterVersion;
         const selected = board.filters[filterTab];
@@ -769,10 +774,11 @@
           caption.textContent = text;
           label.append(input, caption); rows.push(label);
         };
-        row("", filterTab === "repos" ? "All repos" : "All users", selected === null, true);
+        row("", filterTab === "repos" ? "All repos" : filterTab === "users" ? "All contributors" : "All types", selected === null, true);
         for (const entry of filterOptions()) {
           const key = filterKey(entry);
-          const label = filterTab === "repos" ? key === "oogaboogaland" ? "OBL (oogaboogaland)" : key : BL.characters.displayOf(key);
+          const label = filterTab === "repos" ? key
+            : filterTab === "users" ? BL.characters.displayOf(key) : typeLabels[key];
           row(key, label, selected === null || selected.includes(key));
         }
         const scroll = el.boardFilterList.scrollTop;
@@ -781,8 +787,8 @@
         if (focusedChoice) for (const input of el.boardFilterList.querySelectorAll("input")) {
           if (input.dataset.filterChoice === focusedChoice && input.value === focusedValue) { input.focus({ preventScroll: true }); break; }
         }
-        el.boardFilterList.setAttribute("aria-labelledby", filterTab === "repos" ? el.boardFilterRepos.id : el.boardFilterUsers.id);
-        for (const tab of [el.boardFilterRepos, el.boardFilterUsers]) {
+        el.boardFilterList.setAttribute("aria-labelledby", filterTabs.find((tab) => tab.dataset.filterTab === filterTab).id);
+        for (const tab of filterTabs) {
           const active = tab.dataset.filterTab === filterTab;
           tab.setAttribute("aria-selected", String(active)); tab.tabIndex = active ? 0 : -1;
         }
@@ -913,7 +919,7 @@
         el.boardNote.hidden = !!board.floating || !board.note;
         if (board.floating) {
           paintBoardPause();
-          el.boardFilter.dataset.active = String(board.filters.repos !== null || board.filters.users !== null);
+          el.boardFilter.dataset.active = String(board.filters.repos !== null || board.filters.users !== null || board.filters.types !== null);
           if (!el.boardFilterMenu.hidden && filterShown !== board.filterVersion) paintFilters();
         }
         if (boardDots !== board.count) {
@@ -1020,9 +1026,12 @@
       on(el.boardFilterMenu, "keydown", (e) => {
         if (!e.target.closest("[data-filter-tab]") || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
         e.preventDefault(); e.stopPropagation();
-        filterTab = e.key === "Home" ? "repos" : e.key === "End" ? "users" : filterTab === "repos" ? "users" : "repos";
+        const current = filterTabs.findIndex((tab) => tab.dataset.filterTab === filterTab);
+        const next = e.key === "Home" ? 0 : e.key === "End" ? filterTabs.length - 1
+          : (current + (e.key === "ArrowRight" ? 1 : filterTabs.length - 1)) % filterTabs.length;
+        filterTab = filterTabs[next].dataset.filterTab;
         paintFilters();
-        (filterTab === "repos" ? el.boardFilterRepos : el.boardFilterUsers).focus();
+        filterTabs[next].focus();
       });
       on(el.boardFilterList, "change", (e) => {
         const input = e.target.closest("[data-filter-choice]");

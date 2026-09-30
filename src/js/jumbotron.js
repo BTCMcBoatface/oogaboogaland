@@ -277,6 +277,7 @@
   };
 
   const TYPE_COLOR = { commit: "commits", pr: "prs", review: "reviews", merge: "accent", issue: "issues", comment: "comments" };
+  const RECENT_TYPES = ["commit", "pr", "review", "merge", "issue", "comment"];
   // Short relative age for the recent feed, against wall-clock now.
   const recentAge = (iso, nowMs) => {
     const ms = nowMs - Date.parse(iso);
@@ -505,6 +506,7 @@
     const BOARD_TYPES = ["commits", "prs", "reviews", "comments", "issues"];
     const buildCycle = (source = model, filtered = false, explicitRepos = false, mainBoard = false) => {
       const c = [{ name: "recent" }, { name: "totals" }];
+      if (source?.typeFiltered) return c.slice(0, 1);
       for (const type of BOARD_TYPES) {
         if (!filtered || source.leaderboards[type].length) c.push({ name: "leaderboard", params: { type } });
       }
@@ -523,9 +525,10 @@
 
     // Build a reader's projection only on a filter edit or a new feed, never per frame.
     const filteredModel = (source, filters) => {
-      if (!source || filters.repos === null && filters.users === null) return source;
+      if (!source || filters.repos === null && filters.users === null && filters.types === null) return source;
       const users = filters.users === null ? null : new Set(filters.users);
       const repos = filters.repos === null ? null : new Set(filters.repos);
+      const types = filters.types === null ? null : new Set(filters.types);
       const pickBoards = (boards) => Object.fromEntries(BOARD_TYPES.map((type) =>
         [type, users ? boards[type].filter((row) => users.has(row.login)) : boards[type]]));
       const totalsOf = (boards) => {
@@ -561,8 +564,8 @@
         for (const repo of selectedRepos) for (const week of repo.weeklyTotals) weeks.set(week.week, (weeks.get(week.week) || 0) + week.total);
         weeklyTotals = [...weeks].map(([week, total]) => ({ week, total })).sort((a, b) => a.week < b.week ? -1 : a.week > b.week ? 1 : 0);
       }
-      return { ...source, filtered: true, repos: selectedRepos, leaderboards, totals, weeklyTotals,
-        recent: source.recent.filter((row) => (!repos || repos.has(row.repo)) && (!users || users.has(row.login))) };
+      return { ...source, filtered: true, typeFiltered: types !== null, repos: selectedRepos, leaderboards, totals, weeklyTotals,
+        recent: source.recent.filter((row) => (!repos || repos.has(row.repo)) && (!users || users.has(row.login)) && (!types || types.has(row.type))) };
     };
 
     const renderBoard = () => {
@@ -664,7 +667,7 @@
         const canvas = document.createElement("canvas");
         canvas.width = BOARD_W; canvas.height = BOARD_H;
         const context = canvas.getContext("2d", { alpha: false });
-        let filters = { repos: state?.filters?.repos ?? null, users: state?.filters?.users ?? null };
+        let filters = { repos: state?.filters?.repos ?? null, users: state?.filters?.users ?? null, types: state?.filters?.types ?? null };
         let source = filteredModel(model, filters), pages = buildCycle(source, source !== model, filters.repos !== null);
         let index = indexOfView(state ? state.screen : view, pages), selected = pages[index], seenModel = model;
         let filterVersion = 0;
@@ -682,6 +685,7 @@
           get filterVersion() { return filterVersion; },
           get repos() { return model ? model.repos : []; },
           get users() { return model ? model.contributors : []; },
+          get types() { return RECENT_TYPES; },
           setFilter(kind, values) {
             filters = { ...filters, [kind]: values };
             source = filteredModel(model, filters);
