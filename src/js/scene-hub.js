@@ -160,6 +160,7 @@
   const DRESSED = new WeakMap();
   const DRESSING_LAMPS = BL.dressing.LIGHT_RGB.map(([r, g, b]) => ({ r, g, b, radius: 5.5, glow: 0.9, hide: false }));
   const dressingLights = [];
+  const PILE_POST_DEGREES = [315, 78, 195], pilePosts = [];
   const PILE_SCALE = 0.45;
   const SCENERY_CLEARANCE = 0.25;
   const MEADOW_INNER = 5, MEADOW_OUTER = MEADOW - 1.5, CLIFF_INNER = MEADOW + 1.5, CLIFF_OUTER = RADIUS - 1;
@@ -1583,9 +1584,39 @@
     if ((slot.status !== "open" || slot.scene === "factory") && slot.status !== "mirror" && slot.name) addChild(group, createNode({ position: { x: 0, y: 4.5, z: 0.52 }, geometry: hubModels.caveSign(slot.name, THEME_ICON(slot)) }));
     for (let i = 0; i < g.length; i += 2) claim(m.x + cr * g[i] + sr * g[i + 1], m.z - sr * g[i] + cr * g[i + 1], 0.8);
   };
-  // The meadow from the same kit, in world axes: lantern posts beside the paths with their arms over them, a
-  // camp of stores round the fire, and rubble in the grass. Spots are chosen by the same claims and path tests
-  // the scatter uses, before it runs; the whole island bakes to one solid, one hanging and one glowing mesh.
+  const movePilePosts = () => {
+    for (const post of pilePosts) post.claim.x = post.claim.z = Infinity;
+    for (const post of pilePosts) {
+      let spot = null;
+      for (let step = 0; step <= 12 && !spot; step++) for (const nudge of NUDGES) {
+        const p = polar(post.degrees + nudge, island.path.debug.ringOuterRadius + 0.5 + step * 0.25);
+        if (!island.isGrassAt(p.x, p.z) || island.path.overlaps(p.x, p.z, 0.65)
+          || !workSceneryClear(p.x, p.z, 0.7) || nearMouth(p.x, p.z, 7)) continue;
+        let blocked = false;
+        for (const c of claimed) if (!c.scenery && Math.hypot(c.x - p.x, c.z - p.z) < c.r + 0.7) { blocked = true; break; }
+        if (!blocked) { spot = p; break; }
+      }
+      post.node.visible = post.pick.node.visible = post.lamp.light = !!spot;
+      if (!spot) continue;
+      const y = island.surfaceAt(spot.x, spot.z);
+      post.node.position.x = post.claim.x = spot.x;
+      post.node.position.y = y;
+      post.node.position.z = post.claim.z = spot.z;
+      // The lantern hangs from local +x; turn its arm toward the pile.
+      const yaw = -Math.atan2(spot.x, -spot.z) - Math.PI / 2;
+      const cr = Math.cos(yaw), sr = Math.sin(yaw);
+      post.node.rotation.y = yaw;
+      post.lamp.x = spot.x + cr * post.light[0] + sr * post.light[2];
+      post.lamp.y = y + post.light[1];
+      post.lamp.z = spot.z - sr * post.light[0] + cr * post.light[2];
+      post.pick.node.position.x = post.pick.owner.x = spot.x + cr * post.pick.offset[0] + sr * post.pick.offset[2];
+      post.pick.node.position.y = post.pick.owner.y = y + post.pick.offset[1];
+      post.pick.node.position.z = post.pick.owner.z = spot.z - sr * post.pick.offset[0] + cr * post.pick.offset[2];
+      BL.scene.updateWorld(post.pick.node);
+    }
+  };
+  // The meadow from the same kit, in world axes: a camp of stores round the fire and rubble in the grass.
+  // Three separate lantern posts follow the pile path; the fixed dressing bakes once for each island.
   const meadowDressing = (fire) => {
     if (renderer.kind === "canvas2d") return;
     let byIsland = DRESSED.get(island);
@@ -1599,18 +1630,6 @@
         ground.push(x, z, r);
         claim(x, z, r);
       };
-      const ARM = [[1, 0], [0, -1], [-1, 0], [0, 1]];
-      const posts = [];
-      for (let r = 7; r <= island.meadowRadius - 2; r += 3.5) for (let deg = 0; deg < 360; deg += 6) {
-        const p = polar(deg + r * 7, r);
-        if (!nearPath(p.x, p.z, 1.7) || nearPath(p.x, p.z, 1.0) || !ok(p.x, p.z, 0.7)) continue;
-        if (posts.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 8)) continue;
-        let turns = -1;
-        for (let q = 0; q < 4 && turns < 0; q++) if (island.isPath(p.x + ARM[q][0] * 1.4, p.z + ARM[q][1] * 1.4)) turns = q;
-        if (turns < 0) continue;
-        posts.push(p);
-        stand("lanternPost", p.x, p.z, turns, 0, 0.7);
-      }
       const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["rubble", 0.8]];
       let placed = 0;
       for (let k = 0; k < 16 && placed < CAMP.length; k++) {
@@ -1640,6 +1659,34 @@
       addLamp({ glow: 0, flare: 0, visible: true }, DRESSING_LAMPS[dressingLights[i + 3]], dressingLights[i], dressingLights[i + 1], dressingLights[i + 2], true, (i / 4) % 5, `dressing:${i / 4}`);
     }
     dressingLights.length = 0;
+    // These three meadow lanterns stand at the grass edge beside the growing pile path.
+    for (let i = 0; i < PILE_POST_DEGREES.length; i++) {
+      const degrees = PILE_POST_DEGREES[i];
+      let postDressing = byIsland.get("pilePost");
+      if (!postDressing) {
+        const set = BL.dressing.set();
+        set.put("lanternPost", 0, 0, 0);
+        byIsland.set("pilePost", postDressing = set.build());
+      }
+      const node = createNode();
+      addChild(root, node);
+      placed.push(node);
+      let glow = null;
+      for (const part of BL.dressing.nodes(postDressing, { living: true })) {
+        addChild(node, part);
+        if (part.geometry === postDressing.solid) solids.add(part);
+        if (part.geometry === postDressing.glow || part.geometry === postDressing.swingGlow) glow = part;
+      }
+      const light = postDressing.lights, pick = postDressing.picks;
+      const lamp = addLamp(glow, DRESSING_LAMPS[light[3]], 0, 0, 0, true, lamps.length, `pile-post:${i}`);
+      lamp.always = true;
+      const pickNode = createNode({ geometry: PICK_GEOMETRY });
+      const owner = { kind: "piece", piece: "lanternPost", variant: 0, node: pickNode, x: 0, y: 0, z: 0, next: 0, weaponType: "none" };
+      addTarget(pickNode, owner, { radius: Math.max(0.35, pick[5]) });
+      pilePosts.push({ degrees, node, claim: claim(Infinity, Infinity, 0.7), lamp,
+        light: [light[0], light[1], light[2]], pick: { node: pickNode, owner, offset: [pick[2], pick[3], pick[4]] } });
+    }
+    movePilePosts();
   };
   // The lawn: swaying tufts in small clumps across the meadow's grass as one fixed instanced batch, a single
   // draw. Clumps with bare grass between them read as tufts, not a carpet of blades. It follows the painted
@@ -7039,8 +7086,16 @@
   // Props remain live blockers throughout a climb, but never become a cached
   // wall-route endpoint. A spawned rock beneath a dismount therefore blocks or
   // reverses that route; destroying it reopens the terrain landing immediately.
-  // The surface over an HQ ramp is a tunnel roof, not a resting clearing.
-  const clankerRestSurfaceClear = (x, y, z, foot) => !npcRampRoofAt(x, y, z, foot);
+  // Keep the exposed entrance lip clear, but the deeper HQ tunnel roofs can host resting gorillas.
+  const clankerRestSurfaceClear = (x, y, z, foot) => {
+    if (!npcRampRoofAt(x, y, z, foot)) return true;
+    let nearest = Infinity, along = 0;
+    for (const ramp of island.headquarters.ramps) {
+      const dx = x - ramp.from.x, dz = z - ramp.from.z, distance = dx * dx + dz * dz;
+      if (distance < nearest) { nearest = distance; along = dx * ramp.axis.x + dz * ramp.axis.z; }
+    }
+    return along >= 3.25;
+  };
   const CLANKER_REST_SLOPE = { supportEntry: null, lab: false,
     groundRects: { flat: {}, angled: { walkable: false, uneven: Infinity, groundX: 0, groundZ: 0 } } };
   const clankerRestSiteClear = (entry, x, y, z, heading) => {
@@ -7769,7 +7824,7 @@
       CAMERA_GLYPHS.version++;
       const changed = island.path.setRadius(altar.platformRadius);
       island.path.apply(pathNode);
-      if (changed) reflowScenery();
+      if (changed) { movePilePosts(); reflowScenery(); }
     };
     layoutPile(pileMod.visualFootprintFor(world.level, PILE_SCALE));
     // While ₿IFRÖST is open its arch stands over the pass in the old gate's place, at the head of Bifröst; its stone is
@@ -8150,8 +8205,8 @@
         x: mouth.x, z: mouth.z, sr, cr, half: room.w / 2 + 2,
         floor: mouth.floorY, middle: (y + mouth.floorY) * 0.5
       });
+      if (slot.status === "dark" || slot.status === "headquarters") loungeRoofs.push(roof);
       if (slot.status === "dark") {
-        loungeRoofs.push(roof);
         loungeAreas.push({ x: mouth.x + sr * 6, z: mouth.z + cr * 6, radius: 9 });
       }
     }
@@ -8690,7 +8745,7 @@
     }
     for (const node of targets) input.remove(node);
     for (const node of placed) removeChild(root, node);
-    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = spots.length = chillSpots.length = headquartersRimLintels.length = climbMasonry.length = props.length = 0;
+    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = pilePosts.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = spots.length = chillSpots.length = headquartersRimLintels.length = climbMasonry.length = props.length = 0;
     cloudRandom = null;
     fireHazards.length = 0;
     clankerFireReachable = null;
