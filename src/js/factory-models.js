@@ -1,6 +1,6 @@
 // The Lightning Factory's geometry: a tiered cavern behind the 2 o'clock mouth, the tunnel the hub dresses that
-// mouth with, and the light kit ₿IFRÖST's window bakes its stand-in with. Everything is cached and built once per
-// page; the scene places nodes and animates them.
+// mouth with, and the light stand-in of the hall the hub's window shows through its shield (`hubWindow`). Everything
+// is cached and built once per page; the scene places nodes and animates them.
 //
 // `LAYOUT` is the one table of where everything stands, read by the scene as well, so the camera presets, the
 // point lights, the gorillas' decks and the geometry cannot disagree. The cave's frame: the node core stands
@@ -2325,22 +2325,47 @@
     return { geos, glow };
   };
 
-  // The hub's end. Beyond the shield, a big orange ₿ coin glows at the end of the tunnel against a dark wall, so the
-  // path pulls people in: plain geometry, like every other mouth's.
+  // The hub's end. Beyond the shield, the factory's bolt glows at the end of the tunnel against a dark wall, so the
+  // path pulls people in: the smooth bolt, not the voxel one. A plain start, to be dressed further later.
   const hubTunnel = cached(() => {
     const { geos, glow } = tunnelFrame(1);
     geos.push(box({ w: 4.6, h: 3.6, d: 0.2, color: "#1f140e", offset: { y: 1.8, z: SHIELD_Z - 2.9 } }));
+    glow.push(moved(smoothBolt(2.2, 0.24, "#ffd84a", 1), 0, 1.6, SHIELD_Z - 2.3));
     for (const x of [-1.5, 1.5]) glow.push(box({ w: 0.26, h: 0.34, d: 0.26, color: "#ffd27a", emissive: 1, offset: { x, y: 2.7, z: SHIELD_Z - 1.5 } }));
-    // The coin in two glowing rings, a geometry of its own so the hub can lift its highlight into a halo.
-    const rings = [[1.1, 1.26, "#ff5a16", 0.9], [1.36, 1.46, "#d8401a", 0.7]].map(([r0, r1, color, emissive]) => forwardLathe(turn([[r0, -0.012], [r1, -0.012], [r1, 0.012], [r0, 0.012]], 40, color, emissive)));
-    const medallion = [...coin(1, EMBER, "#ffe7a0", 1), ...rings].map((part) => moved(part, 0, 1.75, SHIELD_Z - 2.5));
-    return { timber: merge(...geos), glow: noShadow(merge(...glow)), coin: noShadow(merge(...medallion)) };
+    return { timber: merge(...geos), glow: noShadow(merge(...glow)) };
   });
 
-  // ---- light baked into a window's stand-in ---------------------------------------------------------------
+  // ---- the hall through the island's shield -------------------------------------------------------------
 
-  // The kit ₿IFRÖST's window bakes its chamber's stand-in with (`bifrost-models.js`, `gateWindow`): the chamber's
-  // lights sorted into cells (`windowLights`) and every face lit under a place's `mood` (`bakeWindow`).
+  // The hall as the island sees it through the shield at the 2 o'clock mouth. The hub's window pulls every point of
+  // this stand-in along its own sight line into a band just behind the shield, so it is built at full size in the
+  // hall's frame from the same table and helpers as the hall, and kept light: the core slimmed to its turned shapes,
+  // decks as slabs, lanterns as their glass, the cavern as a gridded shell. Every face glows with the hall's light at
+  // rest baked into its colour, so the island's sun and clock never touch it, and stone and timber stay dark, so the
+  // island's bloom, which every glowing face feeds, picks out only the lights. `front` is the balcony's last half
+  // metre before the shield at true size, where an Ooga walks through; `hall` is everything else that stands still,
+  // cut off where `front` begins; `chamber`, the `tank` variants standing at `tanks`, `fire`, `sat` and `satRed` are
+  // what the window lights and moves; and `paths` are the conduits the sats ride, sampled as `conduits` samples them.
+  const WINDOW_CUT = HALL.front - 1.1, WINDOW_SHIELD = EXIT_Z + SHIELD_Z;
+  // The factory's light at rest, as `scene-factory.js` sets it: ambient by a face's slope over its floor, the sun and
+  // the violet fill in its shade, and fog judged from an eye ten metres out from the shield. Stone and timber are
+  // dimmed by `dim` for the bloom they feed, then eased from `knee` to under `cap`.
+  const WINDOW_MOOD = {
+    sky: [0.42, 0.3, 0.2], ground: [0.16, 0.11, 0.08], floor: 0.34, sun: [0.25, 0.9, 0.3], direct: [0.6, 0.45, 0.32], strength: 0.35, fill: [0.05, 0.04, 0.11],
+    fog: [0.1, 0.07, 0.05], near: 40, far: 110, eye: [0, LEVEL.main + 2.5, WINDOW_SHIELD + 10], dim: 0.55, knee: 0.08, cap: 0.22
+  };
+  // Winds a face's vertex ids so its normal, taken as the renderer takes it (Newell's), points along (ox, oy, oz).
+  const orient = (geo, ids, ox, oy, oz) => {
+    const v = geo.verts;
+    let nx = 0, ny = 0, nz = 0;
+    for (let k = 0; k < ids.length; k++) {
+      const p = ids[k] * 3, q = ids[(k + 1) % ids.length] * 3;
+      nx += (v[p + 1] - v[q + 1]) * (v[p + 2] + v[q + 2]);
+      ny += (v[p + 2] - v[q + 2]) * (v[p] + v[q]);
+      nz += (v[p] - v[q]) * (v[p + 1] + v[q + 1]);
+    }
+    return nx * ox + ny * oy + nz * oz < 0 ? ids.reverse() : ids;
+  };
   // A set of point lights, [x, y, z, radius, r, g, b] each, sorted once into the cells, WINDOW_CELL metres on a side,
   // that their reach touches, so a face weighs only those in its own cell.
   const WINDOW_CELL = 8;
@@ -2357,10 +2382,10 @@
     }
     return { P, cells };
   };
-  // Lights every face as the factory's shader would under a place's `mood` and a `windowLights`
+  // Lights every face as the factory's shader would under WINDOW_MOOD (or another place's `mood`) and a `windowLights`
   // set, and sets it glowing in that colour, so it draws the same wherever it stands. `at` is added to each face's
   // middle before it is lit, for a part built at the origin. A face that glows fully takes no light.
-  const bakeWindow = (geo, { P, cells }, at, mood) => {
+  const bakeWindow = (geo, { P, cells }, at = [0, 0, 0], mood = WINDOW_MOOD) => {
     const { sky, ground, floor, sun, direct, strength, fill, fog: haze, near: fogNear, far: fogFar, eye, dim, knee, cap } = mood;
     const v = geo.verts, faces = geo.faces, sl = Math.hypot(...sun), ux = sun[0] / sl, uy = sun[1] / sl, uz = sun[2] / sl, none = [];
     const ease = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -2403,6 +2428,459 @@
     geo.cutawayHide = true;
     return geo;
   };
+  // A box between two corners, and a board from one point to another, `w` wide and 0.2 thick with its top on the
+  // line: a flight of stairs or a bridge, seen from across the hall.
+  const span = (x0, x1, y0, y1, z0, z1, color, emissive = 0) => box({ w: Math.abs(x1 - x0), h: Math.abs(y1 - y0), d: Math.abs(z1 - z0), color, emissive, offset: { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: (z0 + z1) / 2 } });
+  const board = (ax, ay, az, bx, by, bz, w, color) => {
+    const run = Math.hypot(bx - ax, bz - az);
+    return moved(turnedY(turnedX(box({ w, h: 0.2, d: Math.hypot(run, by - ay), color }), -Math.atan2(by - ay, run)), Math.atan2(bx - ax, bz - az)), (ax + bx) / 2, (ay + by) / 2 - 0.1, (az + bz) / 2);
+  };
+  // A flat polygon of [x, y, z] points facing (ox, oy, oz).
+  const plate = (points, [ox, oy, oz], color, emissive = 0) => {
+    const geo = geometry();
+    face(geo, orient(geo, points.map(([x, y, z]) => pushVert(geo, x, y, z)), ox, oy, oz), hexToRgb(color), { emissive });
+    return geo;
+  };
+  // A sheet of `nu` by `nv` quads over the unit square, laid by `at(u, v)` and facing along `out`, each in the stone
+  // `tone(i, j)` gives it: the cavern's floor, walls and vault.
+  const sheet = (nu, nv, at, [ox, oy, oz], tone) => {
+    const geo = geometry(), row = nu + 1;
+    for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) pushVert(geo, ...at(i / nu, j / nv));
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      const a = j * row + i;
+      face(geo, orient(geo, [a, a + 1, a + row + 1, a + row], ox, oy, oz), hexToRgb(tone(i, j)));
+    }
+    return geo;
+  };
+  // A half ring of stone round (0, cy), from radius r0 to r1 and depth z0 to z1, in `n` pieces: its face, its
+  // underside and its back.
+  const archBand = (r0, r1, cy, z0, z1, n, color) => {
+    const geo = geometry(), rgb = hexToRgb(color), P = [];
+    for (let k = 0; k <= n; k++) {
+      const a = Math.PI * k / n;
+      P.push([r0, r1].map((r) => [z0, z1].map((z) => pushVert(geo, Math.cos(a) * r, cy + Math.sin(a) * r, z))));
+    }
+    for (let k = 0; k < n; k++) {
+      const a = P[k], b = P[k + 1], m = Math.PI * (k + 0.5) / n, mx = Math.cos(m), my = Math.sin(m);
+      face(geo, orient(geo, [a[0][1], a[1][1], b[1][1], b[0][1]], 0, 0, 1), rgb);
+      face(geo, orient(geo, [a[0][0], a[0][1], b[0][1], b[0][0]], -mx, -my, 0), rgb);
+      face(geo, orient(geo, [a[1][0], a[1][1], b[1][1], b[1][0]], mx, my, 0), rgb);
+    }
+    return geo;
+  };
+  // The part of the segment a to b whose depth z lies between lo and hi, as [a, b], or null.
+  const within = (a, b, lo, hi) => {
+    const dz = b[2] - a[2];
+    let t0 = 0, t1 = 1;
+    if (Math.abs(dz) < 1e-9) { if (a[2] < lo || a[2] > hi) return null; } else {
+      const ta = (lo - a[2]) / dz, tb = (hi - a[2]) / dz;
+      t0 = Math.max(0, Math.min(ta, tb)); t1 = Math.min(1, Math.max(ta, tb));
+    }
+    if (t1 - t0 < 1e-6) return null;
+    const at = (t) => a.map((c, k) => c + (b[k] - c) * t);
+    return [at(t0), at(t1)];
+  };
+  // A rail as `railParts` builds it, lighter: its posts, the handrail, the bottom rail and, with `braces`, the cross in
+  // each bay, on a deck whose top is at y, keeping only what lies at depths within `keep`: a slanting brace's cut end
+  // is pressed flat into the cut, so the two sides of it meet exactly there.
+  const railLite = (x0, z0, x1, z1, y, { ends = [true, true], braces = false, step = 1.5, keep = [-Infinity, Infinity] } = {}) => {
+    const geos = [], n = Math.max(1, Math.round(Math.hypot(x1 - x0, z1 - z0) / step)), [lo, hi] = keep;
+    const at = (t, h) => [x0 + (x1 - x0) * t, y + h, z0 + (z1 - z0) * t];
+    const put = (a, b, w, color) => {
+      const s = within(a, b, lo, hi);
+      if (!s) return;
+      const g = beam(...s[0], ...s[1], w, color), gv = g.verts;
+      for (let k = 2; k < gv.length; k += 3) gv[k] = Math.min(hi, Math.max(lo, gv[k]));
+      geos.push(g);
+    };
+    for (let i = 0; i <= n; i++) {
+      if (i === 0 && !ends[0] || i === n && !ends[1]) continue;
+      const [x, , z] = at(i / n, 0);
+      if (z >= lo && z <= hi) geos.push(span(x - 0.085, x + 0.085, y, y + 1.06, z - 0.085, z + 0.085, TIMBER_DK));
+    }
+    put(at(0, 1.02), at(1, 1.02), 0.12, TIMBER_LT);
+    put(at(0, 0.2), at(1, 0.2), 0.1, TIMBER);
+    if (braces) for (let i = 0; i < n; i++) {
+      put(at(i / n, 0.25), at((i + 1) / n, 0.97), 0.055, TIMBER);
+      put(at(i / n, 0.97), at((i + 1) / n, 0.25), 0.055, TIMBER);
+    }
+    return geos;
+  };
+  // Where the lanterns hang, by the rules `lighting()` in `scene-factory.js` hangs them: [kind, x, y, z, turn] each,
+  // and the strings across the hall [ax, ay, az, bx, by, bz, sag, at]. The mouth's own string is past the shield.
+  const windowLamps = () => {
+    const L = LAYOUT, e = L.entrance, lamps = [];
+    const onRail = (x0, z0, x1, z1, y, fractions) => {
+      const n = Math.max(2, Math.round(Math.hypot(x1 - x0, z1 - z0) / 1.4) + 1);
+      for (const f of fractions) { const k = Math.round(f * (n - 1)) / (n - 1); lamps.push(["rail", x0 + (x1 - x0) * k, y, z0 + (z1 - z0) * k]); }
+    };
+    const [sx, , foot, , , head, sw] = L.stairway;
+    lamps.push(["top", -2.3, e.y, head + 0.5], ["top", 2.3, e.y, head + 0.5], ["post", -2.4, 0, foot - 0.7, 0], ["post", 2.4, 0, foot - 0.7, Math.PI]);
+    for (let z = foot + 0.1 + 3; z < head - 1; z += 3) for (const s of [-1, 1]) lamps.push(["rail", sx + s * (sw / 2 + 0.1), e.y * (z - foot) / (head - foot), z]);
+    for (const b of L.bays) for (const s of [-1, 1]) lamps.push(["hang", stationX(b) + s * 3.05, b.y + 3.88, stationZ(b) - 0.6]);
+    for (const s of [-1, 1]) lamps.push(["hang", L.forge.x + s * 3.05, 4.05, L.forge.z + 1.2]);
+    for (const t of L.tunnels) for (const s of [-1, 1]) {
+      const lx = s * 3.3, lz = 0.8, c = Math.cos(t.turn), sn = Math.sin(t.turn);
+      lamps.push(["hang", t.x + lx * c + lz * sn, t.y + 5.9, t.z - lx * sn + lz * c]);
+    }
+    for (const [lx, ly, lz] of STUDY.lamps) lamps.push(["hang", L.study.x - lz, L.study.y + ly, L.study.z + lx]);
+    lamps.push(["post", L.switchboard.x + 3.1, L.switchboard.y, L.switchboard.z - 1.9, Math.PI]);
+    for (const [x, z] of SHAFTS) for (const s of [-1, 1]) lamps.push(["hang", x + s * 1.7, 2.76, z - 0.2]);
+    for (const [d, spots] of [[L.rebalancer, REB.lamps], [L.treasury, TRE.lamps]]) for (const [x, y, z] of spots) lamps.push(["hang", d.x + x, d.y + y, d.z + z]);
+    const [[w0, w1, a0], [s0, , s1]] = L.walk;
+    onRail(w0, a0 + 0.1, w1, a0 + 0.1, e.y, [0.2, 0.5, 0.8]);
+    onRail(s0 + 0.1, a0, s0 + 0.1, s1, e.y, [0.1, 0.3, 0.5, 0.7, 0.9]);
+    onRail(-e.w / 2 + 0.1, e.z - e.d / 2 + 0.1, -e.w / 2 + 0.1, e.z + e.d / 2 - 0.1, e.y, [0.5]);
+    const r = L.ring;
+    for (const i of [5, 9, 16, 19, 23, 26]) { const a = i / 28 * TAU; lamps.push(["rail", r.x + Math.cos(a) * (r.outer - 0.15), r.y - 0.05, r.z + Math.sin(a) * (r.outer - 0.15)]); }
+    for (const t of L.tunnels) {
+      const [x0, x1, z0, z1] = porchOf(t);
+      if (t.turn) onRail(x0, z0 + 0.1, x1, z0 + 0.1, t.y, [0.5]);
+      else onRail(x0 + 0.1, z0, x0 + 0.1, z1, t.y, [0.5]);
+    }
+    for (const s of [-1, 1]) lamps.push(["chain", s * 6, 12.5, 8], ["chain", s * 13, 16.5, 3]);
+    return {
+      lamps,
+      strings: [[-14, 16, -12, 14, 16, -12, 1.6, [0.2, 0.4, 0.6, 0.8]], [-18, 13.5, -8, 18, 13.5, -8, 1.4, [0.2, 0.35, 0.65, 0.8]], [-20, 9, 8, -13, 9, 12, 0.6, [0.5]], [20, 9.5, 5, 13.5, 9, 7, 0.6, [0.5]]]
+    };
+  };
+  const hubWindow = cached(() => {
+    const L = LAYOUT, e = L.entrance, c = L.core, f = L.forge, r = L.ring, [lo, hi] = c.chamber, M = LEVEL.main, H = HALL.h, B = HALL.back, W = HALL.halfW, CUT = WINDOW_CUT;
+    const parts = [], front = [];
+    // The hall's lights at rest, as `lightUp` and `lightPool` set them: the core, the forge, the lines, the
+    // switchboard, rebalancer, treasury and watchtower, then the study, the tunnels, the balcony, the galleries, the
+    // daylight at the rim and every lantern, which the lanterns below add as they hang.
+    const lights = [
+      [c.x, 8.3, c.z + 3.4, 26, 0.97, 0.6, 0.24], [f.x, 1.9, f.z + 1.6, 12, 0.7, 0.32, 0.1],
+      ...L.bays.map((b) => [stationX(b), b.y + 2.2, b.z + 1.6, 9, 0.33, 0.45, 0.6]),
+      [L.switchboard.x, L.switchboard.y + 2.2, L.switchboard.z + 0.8, 9, 0.35, 0.6, 1], [L.rebalancer.x, L.rebalancer.y + 1.6, L.rebalancer.z + 0.6, 9, 0.18, 0.45, 0.5],
+      [L.treasury.x, L.treasury.y + 2, L.treasury.z + 1, 9, 1, 0.8, 0.35], [L.lookout.x, L.lookout.y + L.lookout.tower + 1, L.lookout.z, 14, 1, 0.82, 0.45],
+      [L.study.x + 1, L.study.y + 2.8, L.study.z, 6, 1, 0.75, 0.4],
+      ...L.tunnels.map((t, i) => [t.x + Math.sin(t.turn) * 2, t.y + 2.4, t.z + Math.cos(t.turn) * 2, 8, ...hexToRgb(TUNNEL_THEMES[i].ring).map((k) => k / 255)]),
+      [0, e.y + 2.2, e.z - 4, 12, 1, 0.66, 0.3], ...L.galleries.map((g) => [g.x, g.y + 2, g.z + 1, 10, 1, 0.66, 0.3]), [0, e.y + 2.2, EXIT_Z - 0.6, 9, 1.15, 1.1, 1]
+    ];
+
+    // The cavern: the pit's floor, the walls leaning in as they rise (at their smoothest, where the water runs) and the
+    // vault, in tiles of the hall's stone so the baked light grades across them, closed all round but for the front.
+    const lean = (y) => 0.5 + y / H * WALL_LEAN, tone = (k) => (i, j) => STONE[(i * 7 + j * 13 + k * 5) & 3];
+    parts.push(sheet(12, 13, (u, v) => [-W + 2 * W * u, 0, B + (CUT - B) * v], [0, 1, 0], tone(0)));
+    parts.push(sheet(12, 7, (u, v) => [(2 * u - 1) * (W - lean(H * v)), H * v, B + lean(H * v)], [0, 0, 1], tone(1)));
+    for (const s of [-1, 1]) parts.push(sheet(13, 7, (u, v) => [s * (W - lean(H * v)), H * v, B + lean(H * v) + (CUT - B - lean(H * v)) * u], [-s, 0, 0], tone(s + 3)));
+    parts.push(sheet(8, 10, (u, v) => [(2 * u - 1) * (W - lean(H)), H, B + lean(H) + (CUT - B - lean(H)) * v], [0, -1, 0], tone(5)));
+    // The falls of glowing water down the back wall, the pools they land in, and the crystal at the walls' feet, on
+    // the ledges by the tunnels and by the outcrops framing the pit, which stand here as stacked stone.
+    for (const fx of FALLS) {
+      const strip = geometry(), ids = [];
+      for (let k = 0; k <= 10; k++) {
+        const y = k * 1.58, z = B + 1.55 + y / H * WALL_LEAN;
+        ids.push([pushVert(strip, fx - 0.65, y, z), pushVert(strip, fx + 0.65, y, z)]);
+      }
+      for (let k = 0; k < 10; k++) face(strip, orient(strip, [ids[k][0], ids[k][1], ids[k + 1][1], ids[k + 1][0]], 0, 0, 1), hexToRgb(k % 2 ? "#6ab8ff" : "#3f8fe0"), { emissive: 0.65 });
+      parts.push(strip, moved(lathe({ profile: [[1.6, 0.15], [0, 0.15]], segments: 10, color: "#4a9bff", emissive: 0.5 }), fx, 0, B + 2.6));
+    }
+    const rand = mulberry32(2113);
+    const crystal = (x, y, z, s) => {
+      for (let k = 0; k < 2; k++) {
+        const a = rand() * TAU, h = s * (1.2 + rand() * 1.2), w = s * 0.22, g = lathe({ profile: [[w, 0], [w * 0.9, h * 0.8], [0, h]], segments: 4, color: k ? "#7fc4ff" : CRYSTAL, emissive: 0.75 });
+        const cl = Math.cos(a) * 0.35, sl = Math.sin(a) * 0.35, gv = g.verts;
+        for (let i = 0; i < gv.length; i += 3) { gv[i] += gv[i + 1] * cl; gv[i + 2] += gv[i + 1] * sl; }
+        parts.push(moved(g, x + Math.cos(a) * s * 0.3, y, z + Math.sin(a) * s * 0.3));
+      }
+    };
+    for (let i = 0; i < 12; i++) {
+      const side = i % 3, t = rand(), s = 0.8 + rand() * 0.9;
+      if (side === 2) crystal(-W + 4 + t * (2 * W - 8), 0, B + 1.8, s);
+      else crystal((side ? 1 : -1) * (W - 1.5 - rand()), 0, B + 3 + t * (HALL.front - B - 8), s);
+    }
+    for (const t of L.tunnels) crystal(t.x + (t.turn ? 0 : 3.6), t.y, t.z + (t.turn ? 3.4 : 1.4), 0.7);
+    for (const [x, z, s] of OUTCROPS) {
+      for (let k = 0; k < 4; k++) {
+        const w = (3.6 - k * 0.7) * s, h = 1.4 * s;
+        parts.push(box({ w, h, d: w * 0.9, color: STONE[(k + 2) % 4], offset: { x, y: h * (k + 0.5), z } }));
+      }
+      crystal(x + 1.4 * s, 0, z - 1.2 * s, 0.9 * s);
+    }
+
+    // The balcony, its planks as the scaffold lays them with their tops a hair over the floor the island's mouth
+    // carves, so the planks at the shield lie on it; its rails, open to the stairway and the walkway; and the track in
+    // from the tunnel. `front` takes the last half metre of each, from where the hall is cut to the shield.
+    {
+      const n = Math.max(2, Math.round(e.w / 0.9)), prand = mulberry32(Math.round(e.x * 7 + e.z)), top = e.y + 0.02, z0 = e.z - e.d / 2 + 0.02;
+      for (let i = 0; i < n; i++) {
+        const x = e.x + ((i + 0.5) / n - 0.5) * e.w, hw = e.w / n / 2 - 0.025, color = [TIMBER, TIMBER_LT, "#946236"][Math.floor(prand() * 3)];
+        parts.push(span(x - hw, x + hw, top - 0.2, top, z0, CUT, color));
+        front.push(span(x - hw, x + hw, e.y, top, CUT, WINDOW_SHIELD - 0.02, color));
+      }
+      const ex = e.w / 2 - 0.1, ez0 = e.z - e.d / 2 + 0.1, ez1 = e.z + e.d / 2 - 0.1, [[, , a0, a1]] = L.walk, cz = (a0 + a1) / 2, ch = (a1 - a0) / 2 - 0.1, sh = L.stairway[6] / 2 + 0.1;
+      const rails = (keep) => [
+        ...railLite(e.x - ex, ez0, e.x - sh, ez0, e.y, { keep, braces: true }), ...railLite(e.x + sh, ez0, e.x + ex, ez0, e.y, { keep, braces: true }),
+        ...railLite(e.x - ex, ez0, e.x - ex, ez1, e.y, { ends: [false, true], keep, braces: true }),
+        ...railLite(e.x + ex, ez0, e.x + ex, cz - ch, e.y, { ends: [false, true], keep, braces: true }), ...railLite(e.x + ex, cz + ch, e.x + ex, ez1, e.y, { keep, braces: true })
+      ];
+      parts.push(...rails([-Infinity, CUT]));
+      front.push(...rails([CUT, WINDOW_SHIELD - 0.02]));
+      // The track's rails run on 0.8 m past the shield, as `tunnelFrame` lays them. At the shield they lie over the
+      // island's own rails and last sleeper, laid as `hubTunnel` lays them, so `front` draws them a little fuller.
+      for (const x of [-0.5, 0.5]) {
+        parts.push(span(x - 0.035, x + 0.035, e.y + 0.065, e.y + 0.135, EXIT_Z - 4.6, CUT, IRON_LT));
+        front.push(span(x - 0.04, x + 0.04, e.y + 0.06, e.y + 0.14, CUT, WINDOW_SHIELD - 0.02, IRON_LT));
+      }
+      for (let z = 1 - 0.2; z > -4.5; z -= 0.5) if (z + EXIT_Z > CUT && z + EXIT_Z < WINDOW_SHIELD) front.push(span(-0.66, 0.66, e.y + 0.005, e.y + 0.075, z + EXIT_Z - 0.1, z + EXIT_Z + 0.1, TIMBER_DK));
+    }
+    // The grand stairway down to the forge: treads, stringers, and its rails on their posts.
+    {
+      const [x, y0, z0, , y1, z1, w] = L.stairway, steps = Math.round((y1 - y0) / 0.32), run = (z1 - z0) / steps, rise = (y1 - y0) / steps;
+      const heightAt = (z) => y0 + (y1 - y0) * (z - z0) / (z1 - z0);
+      for (let i = 0; i < steps; i++) parts.push(span(x - w / 2 + 0.05, x + w / 2 - 0.05, y0 + rise * (i + 1) - 0.12, y0 + rise * (i + 1), z0 + run * i - 0.015, z0 + run * (i + 1) + 0.015, i % 2 ? TIMBER : TIMBER_LT));
+      for (const s of [-1, 1]) {
+        const sx = x + s * (w / 2 + 0.1);
+        parts.push(beam(sx, y0 - 0.1, z0, sx, y1 - 0.1, z1, 0.3, TIMBER_DK), beam(sx, y0 + 1.05, z0 - 0.2, sx, heightAt(z1 + 0.1) + 1.02, z1 + 0.1, 0.14, TIMBER_LT), beam(sx, y0 + 0.6, z0 - 0.2, sx, heightAt(z1 + 0.1) + 0.6, z1 + 0.1, 0.09, TIMBER));
+        for (let z = z0 + 0.1; z < z1 - 0.5; z += 1.5) parts.push(span(sx - 0.085, sx + 0.085, heightAt(z) - 0.05, heightAt(z) + 1.05, z - 0.085, z + 0.085, TIMBER_DK));
+      }
+    }
+    // Level 2's walkway along the right wall and its rails, and every other flight, bridge, deck and porch as slabs.
+    {
+      const [[, , a0, a1], [s1x0, s1x1, s1z0]] = L.walk, ex = e.x + e.w / 2 - 0.1, wx = s1x0 + 0.1;
+      for (const [p0, p1, q0, q1] of L.walk) parts.push(span(p0, p1, e.y - 0.2, e.y, q0, q1, TIMBER));
+      parts.push(...railLite(ex, a0 + 0.1, wx, a0 + 0.1, e.y, { ends: [false, true] }), ...railLite(ex, a1 - 0.1, s1x1 - 0.1, a1 - 0.1, e.y, { ends: [false, true] }), ...railLite(wx, a0 + 0.1, wx, s1z0 - 0.1, e.y, { ends: [false, true] }));
+      for (const [ax, ay, az, bx, by, bz, w] of L.stairs) parts.push(board(ax, ay, az, bx, by, bz, w - 0.1, TIMBER));
+      for (const [bx0, bz0, bx1, bz1] of RING_BRIDGES) parts.push(board(bx0, M, bz0, bx1, M, bz1, 2, TIMBER));
+      for (const [bx0, bz0, bx1, bz1, w] of L.bridges) parts.push(board(bx0 - 0.3, LEVEL.top, bz0, bx1 + 0.3, LEVEL.top, bz1, w, TIMBER));
+      for (const d of [L.switchboard, L.rebalancer, L.treasury, L.landing, ...L.galleries]) parts.push(span(d.x - d.w / 2, d.x + d.w / 2, d.y - 0.3, d.y, d.z - d.d / 2, d.z + d.d / 2, TIMBER));
+      for (const t of L.tunnels) { const [p0, p1, q0, q1] = porchOf(t); parts.push(span(p0, p1, t.y - 0.3, t.y, q0, q1, TIMBER)); }
+    }
+
+    // The core, slimmed to its turned shapes: the stone plinth and its buttresses, the walkway ring round it with its
+    // lamps and rail, the bronze drum with its lava seam and blue lamps, the brass rings and bronze ribs round the
+    // chamber, the copper crown with its lit windows and blue lip, the lantern's base, bars and dome, and its chains.
+    // Every lit band stands a tenth of a metre proud, so the window's squeeze never folds it into what it lies on.
+    {
+      const core = [], radial = (geo, a, rad, y) => moved(turnedY(geo, -a + Math.PI / 2), Math.cos(a) * rad, y, Math.sin(a) * rad);
+      const band = (rad, y0, y1, color, segments = 16) => lathe({ profile: [[rad, y0], [rad, y1]], segments, color, emissive: 1 });
+      core.push(lathe({ profile: [[4.2, 0], [4.2, 0.5], [3.9, 0.7], [3.4, 0.9], [3.3, M - 0.6], [3.65, M - 0.35], [3.65, M - 0.2], [0, M - 0.2]], segments: 16, color: (t) => t < 0.3 ? STONE[3] : STONE[2] }));
+      for (let k = 0; k < 8; k++) {
+        const a = (k + 0.5) / 8 * TAU;
+        if (Math.abs(Math.sin(a) - 1) > 0.1) core.push(radial(box({ w: 0.9, h: M - 1.2, d: 0.6, color: STONE_DK }), a, 3.5, (M - 1.2) / 2 + 0.6));
+      }
+      core.push(lathe({ profile: [[r.inner, r.y - 0.2], [r.outer, r.y - 0.2], [r.outer, r.y], [r.inner, r.y], [r.inner, r.y - 0.2]], segments: 24, color: TIMBER }));
+      for (let k = 0; k < 40; k++) core.push(radial(plate([[-0.07, -0.06, 0], [0.07, -0.06, 0], [0.07, 0.06, 0], [-0.07, 0.06, 0]], [0, 0, 1], "#5fc0ff", 1), (k + 0.5) / 40 * TAU, r.outer + 0.1, r.y - 0.12));
+      const R = r.outer - 0.15;
+      core.push(lathe({ profile: [[R - 0.06, r.y + 0.98], [R + 0.06, r.y + 0.98], [R + 0.06, r.y + 1.07], [R - 0.06, r.y + 1.07], [R - 0.06, r.y + 0.98]], segments: 24, color: TIMBER_LT }));
+      for (let k = 0; k < 16; k++) { const a = (k + 0.5) / 16 * TAU; core.push(span(Math.cos(a) * R - 0.085, Math.cos(a) * R + 0.085, r.y, r.y + 1.02, Math.sin(a) * R - 0.085, Math.sin(a) * R + 0.085, TIMBER_DK)); }
+      core.push(lathe({ profile: [[3.25, M - 0.2], [3.3, M + 0.1], [3.08, M + 0.22], [3.08, lo - 0.34], [3.24, lo - 0.22], [3.24, lo], [0, lo]], segments: 16, color: BRONZE_DK }));
+      core.push(band(3.18, M + 0.34, M + 0.5, "#ff8a2a"), band(3.18, lo - 0.6, lo - 0.5, "#5fc0ff"));
+      for (const y of [lo, hi]) core.push(lathe({ profile: [[2.5, y - 0.2], [2.9, y - 0.2], [2.9, y + 0.2], [2.5, y + 0.2]], segments: 12, color: BRASS }));
+      for (let k = 0; k < 8; k++) core.push(radial(box({ w: 0.42, h: hi - lo + 0.2, d: 0.36, color: BRONZE }), (k + 0.5) / 8 * TAU, 2.72, (lo + hi) / 2));
+      core.push(lathe({ profile: [[2.95, hi], [3.12, hi + 0.25], [3.12, hi + 0.6], [2.72, hi + 0.8], [2.72, hi + 1.35], [2.24, hi + 1.55], [2.24, hi + 2.05], [1.64, hi + 2.25], [1.64, hi + 2.75], [1.0, hi + 2.95], [0.75, hi + 3.1], [0, hi + 3.1]], segments: 16, color: (t) => t < 0.3 ? COPPER : t < 0.6 ? COPPER_DK : COPPER }));
+      for (const [rad, y, n, h] of [[2.72, hi + 1.07, 14, 0.42], [2.24, hi + 1.8, 12, 0.38], [1.64, hi + 2.5, 9, 0.36]]) {
+        for (let k = 0; k < n; k++) core.push(radial(plate([[-0.1, -h / 2, 0], [0.1, -h / 2, 0], [0.1, h / 2, 0], [-0.1, h / 2, 0]], [0, 0, 1], "#ffb347", 1), (k + 0.5) / n * TAU, rad + 0.1, y));
+      }
+      core.push(band(3.22, hi + 0.36, hi + 0.48, "#5fc0ff"));
+      core.push(lathe({ profile: [[0.82, hi + 3.1], [0.82, hi + 3.28], [0.66, hi + 3.36], [0, hi + 3.36]], segments: 8, color: BRASS }));
+      for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; core.push(beam(Math.cos(a) * 0.62, hi + 3.36, Math.sin(a) * 0.62, Math.cos(a) * 0.62, hi + 4.56, Math.sin(a) * 0.62, 0.1, BRASS)); }
+      core.push(lathe({ profile: [[0.86, hi + 4.52], [0.86, hi + 4.64], [0.34, hi + 5.1], [0.14, hi + 5.5], [0, hi + 5.56]], segments: 8, color: COPPER_DK }));
+      for (let k = 0; k < 4; k++) { const a = (k + 0.5) / 4 * TAU, x = Math.cos(a) * 1.9, z = Math.sin(a) * 1.9; core.push(beam(x, hi + 2.1, z, x * 1.4, H, z * 1.4, 0.14, IRON_DK)); }
+      parts.push(moved(merge(...core), c.x, 0, c.z));
+    }
+    // The Tesla coils on the core's walkway: foot, wound column, toroid and a spark.
+    for (const [x, z] of COILS) {
+      parts.push(moved(lathe({ profile: [[0.42, 0], [0.42, 0.18], [0.3, 0.26], [0.3, 0.4], [0, 0.4]], segments: 8, color: BRONZE }), x, M, z));
+      parts.push(moved(lathe({ profile: [[0.21, 0.4], [0.21, 2.1], [0, 2.1]], segments: 8, color: COPPER }), x, M, z), moved(torus(0.34, 0.12, BRASS, 0, 12, 5), x, M + 2.22, z));
+      parts.push(moved(smoothBolt(0.8, 0.05, "#fff4b0", 1), x + 0.4, M + 2.62, z));
+    }
+    // The featured lines: each deck on its corner posts with its front rail and porch, and the station's frame, a plate
+    // between bronze posts under a beam with its bulbs, and the status lantern between the tanks, lit blue for a line
+    // that runs. The tanks themselves are `tank`, and the conduits from them to the chamber thin glowing rails on the
+    // conduits' own paths.
+    const paths = [];
+    L.bays.forEach((b) => {
+      parts.push(span(b.x - b.w / 2, b.x + b.w / 2, b.y - 0.3, b.y, b.z - b.d / 2, b.z + b.d / 2, TIMBER));
+      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const px = b.x + sx * (b.w / 2 - 0.2), pz = b.z + sz * (b.d / 2 - 0.2);
+        parts.push(span(px - 0.19, px + 0.19, groundUnder(px, pz, b.y), b.y - 0.3, pz - 0.19, pz + 0.19, TIMBER_DK));
+      }
+      parts.push(...railLite(b.x - b.w / 2 + 0.1, b.z + b.d / 2 - 0.1, b.x + b.w / 2 - 0.1, b.z + b.d / 2 - 0.1, b.y));
+      const frame = [
+        span(-2.2, 2.2, 0.15, 3.85, -1.03, -0.87, "#7c4424"), span(-2.58, -2.22, 0, 4.3, -0.78, -0.42, BRONZE), span(2.22, 2.58, 0, 4.3, -0.78, -0.42, BRONZE),
+        span(-2.6, 2.6, 3.98, 4.32, -0.82, -0.38, BRONZE_DK), span(-2.1, 2.1, 4.32, 4.42, -0.36, -0.26, "#ffb040", 1),
+        box({ w: 0.374, h: 0.484, d: 0.374, color: "#3fa7ff", emissive: 1, offset: { y: 4.0 - 0.3 - 0.84 * 1.1 + 0.33, z: -0.3 } })
+      ];
+      parts.push(moved(merge(...frame), stationX(b), b.y, stationZ(b)));
+      const path = conduitPath(b), samples = new Float32Array((CONDUIT_SAMPLES + 1) * 3);
+      for (let i = 0; i <= CONDUIT_SAMPLES; i++) {
+        const p = path(i / CONDUIT_SAMPLES);
+        samples[i * 3] = p.x; samples[i * 3 + 1] = p.y; samples[i * 3 + 2] = p.z;
+      }
+      paths.push(samples);
+      parts.push(tube({ path, radius: () => 0.1, rings: 24, segments: 6, colorFn: (t) => Math.round(t * 24) % 2 ? "#ff9a30" : "#6a3212", emissive: 1 }));
+    });
+    // The forge's arch under the walkway: its two rings of stone on their piers, the dark mouth, and the timber frame
+    // with its glowing vents. Its fire and sign are `fire`.
+    {
+      const arch = [archBand(1.93, 2.57, FORGE_CY, -0.65, 0.65, 8, STONE[2]), archBand(2.63, 3.27, FORGE_CY, -0.65, 0.35, 8, STONE[0]), span(-1.9, 1.9, 0, 3.4, -0.8, -0.4, "#1e120c")];
+      for (const s of [-1, 1]) {
+        arch.push(span(s * 1.93, s * 2.57, 0, FORGE_CY, -0.65, 0.65, STONE[1]), span(s * 2.63, s * 3.27, 0, FORGE_CY, -0.65, 0.35, STONE[3]));
+        arch.push(span(s * 3.7 - 0.23, s * 3.7 + 0.23, 0, 4.3, 0.52, 0.98, TIMBER_DK));
+        for (const y of [0.85, 1.5]) arch.push(span(s * 3.7 - 0.13, s * 3.7 + 0.13, y - 0.2, y + 0.2, 0.95, 1.08, "#ff8a2a", 1));
+      }
+      arch.push(span(-4.15, 4.15, 4.05, 4.55, 0.47, 1.03, TIMBER));
+      parts.push(moved(merge(...arch), f.x, 0, f.z));
+    }
+    // The forge's two shafts: the mounds of stone their lines come up out of.
+    for (const [x, z] of SHAFTS) parts.push(moved(lathe({ profile: [[2.8, 0], [2.2, 1.4], [1.2, 2.5], [0, 2.8]], segments: 8, color: STONE[1] }), x, 0, z + 1.6));
+    // The low decks' machines, each reduced to its glow: the switchboard's desk and its rows of screens and board, each
+    // row as wide as its arc, the rebalancer's platform and its ring of light, and the treasury's vault with the gold
+    // under its glass.
+    {
+      const sw = L.switchboard, rb = L.rebalancer, tr = L.treasury, cz = sw.z + CONSOLE.z;
+      parts.push(span(sw.x - 1.9, sw.x + 1.9, sw.y, sw.y + CONSOLE.top, cz - CONSOLE.desk - 0.45, cz - CONSOLE.desk + 0.45, TIMBER_DK));
+      for (const [bearing, reach, y, w, h] of [MONITORS[0], MONITORS[5], MONITORS[9]]) {
+        const half = -Math.sin(bearing) * reach + Math.cos(bearing) * w / 2, z = cz - reach + 0.1;
+        parts.push(span(sw.x - half, sw.x + half, sw.y + y - h / 2, sw.y + y + h / 2, z - 0.03, z + 0.03, "#1f4a70", 0.7));
+      }
+      parts.push(moved(lathe({ profile: [[1.85, 0], [1.85, 0.56], [0, 0.56]], segments: 12, color: IRON_DK }), rb.x, rb.y, rb.z + REB.cz), moved(lathe({ profile: [[1.95, 0.42], [1.95, 0.52]], segments: 12, color: "#5fe3ff", emissive: 0.95 }), rb.x, rb.y, rb.z + REB.cz));
+      parts.push(span(tr.x - 1.4, tr.x + 1.4, tr.y, tr.y + 1.5, tr.z + TRE.vz - TRE.deep / 2, tr.z + TRE.vz + TRE.deep / 2, "#5a3a22"));
+      parts.push(moved(lathe({ profile: [[TRE.dome[0], 0], [0.9, 0.7], [0.5, 1.2], [0, TRE.dome[1]]], segments: 8, color: "#d9a52a", emissive: 0.6 }), tr.x, tr.y + TRE.top, tr.z + TRE.vz));
+    }
+    // The galleries under the vault, each stand's pair of tanks as dim glass on its plate, with their front rails.
+    for (const g of L.galleries) {
+      parts.push(...railLite(g.x - g.w / 2 + 0.1, g.z + g.d / 2 - 0.1, g.x + g.w / 2 - 0.1, g.z + g.d / 2 - 0.1, g.y, { step: 2 }));
+      for (let i = 0; i < g.stations; i++) {
+        const x = g.x - g.w / 2 + (i + 0.5) * g.w / g.stations, z = g.z - 0.3;
+        parts.push(span(x - 0.85, x + 0.85, g.y, g.y + 0.18, z - 0.3, z + 0.3, IRON_DK));
+        parts.push(span(x - 0.69, x - 0.11, g.y + 0.36, g.y + 1.6, z - 0.29, z + 0.29, CAP_BLUE.dim[1], 0.65), span(x + 0.11, x + 0.69, g.y + 0.36, g.y + 1.6, z - 0.29, z + 0.29, CAP_ORANGE.dim[1], 0.65));
+      }
+    }
+    // The watchtower on its deck: posts, four legs, the lantern room's floor, its lamp lit and its dome, and the banner.
+    {
+      const lk = L.lookout, h = lk.tower, tower = [span(-lk.w / 2, lk.w / 2, -0.3, 0, -lk.d / 2, lk.d / 2, TIMBER)];
+      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const px = sx * (lk.w / 2 - 0.2), pz = sz * (lk.d / 2 - 0.2);
+        tower.push(span(px - 0.19, px + 0.19, groundUnder(lk.x + px, lk.z + pz, lk.y) - lk.y, -0.3, pz - 0.19, pz + 0.19, TIMBER_DK));
+        tower.push(beam(sx * 1.1, 0, sz * 1.1, sx * 0.77, h, sz * 0.77, 0.26, TIMBER_DK));
+      }
+      tower.push(span(-1.2, 1.2, h - 0.15, h + 0.15, -1.2, 1.2, TIMBER_LT));
+      tower.push(lathe({ profile: [[0.62, h + 0.34], [0.72, h + 0.9], [0.62, h + 1.72], [0, h + 1.8]], segments: 8, color: "#ffe29a", emissive: 1 }));
+      tower.push(lathe({ profile: [[1.12, h + 1.8], [1.12, h + 1.92], [0.7, h + 2.45], [0.3, h + 2.8], [0, h + 2.86]], segments: 8, color: COPPER_DK }));
+      tower.push(span(-0.65, 0.65, h - 2.6, h - 0.4, 1.175, 1.225, "#2b52b8"), moved(smoothBolt(1.4, 0.06, "#8fd0ff", 0.9), 0, h - 1.45, 1.32));
+      parts.push(moved(merge(...tower), lk.x, lk.y, lk.z));
+    }
+    // The peer tunnels, each its neon arch in the peer's colour round a glimpse of the peer's place, under its frame,
+    // turned into the wall it is cut into.
+    L.tunnels.forEach((t, i) => {
+      const T = TUNNEL_THEMES[i], R = 2.08, cy = 2.6, legs = cy - 0.15, total = 2 * legs + Math.PI * R;
+      const neon = (u) => {
+        const d = u * total;
+        if (d < legs) return { x: -R, y: 0.15 + d, z: 0.52 };
+        if (d > legs + Math.PI * R) return { x: R, y: cy - (d - legs - Math.PI * R), z: 0.52 };
+        const a = Math.PI - (d - legs) / R;
+        return { x: Math.cos(a) * R, y: cy + Math.sin(a) * R, z: 0.52 };
+      };
+      const sky = [[-R, 0.9, 0.4], [R, 0.9, 0.4]];
+      for (let k = 0; k <= 8; k++) sky.push([Math.cos(Math.PI * k / 8) * R, cy + Math.sin(Math.PI * k / 8) * R, 0.4]);
+      const tn = [
+        tube({ path: neon, radius: () => 0.09, rings: 20, segments: 4, colorFn: () => T.ring, emissive: 1 }),
+        plate(sky, [0, 0, 1], T.sky, 0.8), plate([[-R, 0.15, 0.4], [R, 0.15, 0.4], [R, 0.9, 0.4], [-R, 0.9, 0.4]], [0, 0, 1], T.ground, 0.45),
+        span(-TUNNEL_POST - 0.22, -TUNNEL_POST + 0.22, 0, 6.2, 0.12, 0.58, TIMBER_DK), span(TUNNEL_POST - 0.22, TUNNEL_POST + 0.22, 0, 6.2, 0.12, 0.58, TIMBER_DK),
+        span(-4.3, 4.3, 5.89, 6.41, 0.09, 0.61, TIMBER)
+      ];
+      parts.push(moved(turnedY(merge(...tn), t.turn), t.x, t.y, t.z));
+    });
+    // The bolt banners either side of the core, hung from the high lines' decks.
+    for (const x of [-12.5, 12.5]) parts.push(moved(merge(banner(2.2)), x, LEVEL.high - 0.45, L.bays[0].z + L.bays[0].d / 2 + 0.1));
+    // The lanterns, as their lit glass, with the posts and arms that carry them and the chains and cords they hang
+    // from; each throws its pool of light into the bake.
+    {
+      const { lamps, strings } = windowLamps(), glass = (s, x, y, z) => parts.push(box({ w: 0.34 * s, h: 0.44 * s, d: 0.34 * s, color: LANTERN_GLASS, emissive: 1, offset: { x, y: y + 0.3 * s, z } }));
+      const pool = (x, y, z) => lights.push([x, y, z, 7.5, 1.17, 0.72, 0.32]);
+      for (const [kind, x, y, z, turn = 0] of lamps) {
+        if (kind === "hang") {
+          glass(1.05, x, y - 0.3 - 0.84 * 1.05, z);
+          pool(x, y - 0.75, z);
+        } else if (kind === "post") {
+          const ax = Math.cos(turn), az = -Math.sin(turn), tx = x + ax * 0.8, tz = z + az * 0.8;
+          parts.push(span(x - 0.11, x + 0.11, y, y + 2.95, z - 0.11, z + 0.11, TIMBER_DK), beam(x - ax * 0.1, y + 2.82, z - az * 0.1, x + ax * 0.95, y + 2.82, z + az * 0.95, 0.14, TIMBER_DK));
+          glass(1.3, tx, y + 1.36, tz);
+          pool(tx, y + 1.8, tz);
+        } else if (kind === "top") {
+          parts.push(span(x - 0.18, x + 0.18, y, y + 1.7, z - 0.18, z + 0.18, TIMBER_DK), span(x - 0.28, x + 0.28, y + 1.68, y + 1.82, z - 0.28, z + 0.28, IRON_DK));
+          parts.push(moved(turnedY(lathe({ profile: [[0.3, 0.5], [0.3, 0.56], [0.14, 0.72], [0.05, 0.76], [0, 0.77]].map(([rr, hh]) => [rr * 1.7, hh * 1.7]), segments: 4, color: IRON_DK }), Math.PI / 4), x, y + 1.82, z));
+          glass(1.7, x, y + 1.82, z);
+          pool(x, y + 2.4, z);
+        } else if (kind === "rail") {
+          glass(0.85, x, y + 1.06, z);
+          pool(x, y + 1.4, z);
+        } else {
+          parts.push(beam(x, H, z, x, y + 1.5, z, 0.1, IRON_DK));
+          glass(1.75, x, y, z);
+          pool(x, y + 0.7, z);
+        }
+      }
+      for (const [ax, ay, az, bx, by, bz, sag, at] of strings) {
+        const on = (t) => [ax + (bx - ax) * t, ay + (by - ay) * t - Math.sin(Math.PI * t) * sag, az + (bz - az) * t];
+        for (let k = 0; k < 6; k++) parts.push(beam(...on(k / 6), ...on((k + 1) / 6), 0.05, "#1b1714"));
+        for (const t of at) {
+          const [px, py, pz] = on(t);
+          glass(1.2, px, py - 0.36 - 0.84 * 1.2, pz);
+          pool(px, py - 0.8, pz);
+        }
+      }
+    }
+    const hallLight = windowLights(lights), still = bakeWindow(merge(...parts), hallLight);
+
+    // The glass chamber lit, in its three bands of orange, with its four bolts and the lantern's flame.
+    const ribs = [[2.44, lo], [2.5, lo + 0.45], [2.53, lo + 1.5], [2.53, hi - 1.5], [2.5, hi - 0.45], [2.44, hi]];
+    const radiusAt = (y) => {
+      let k = 0;
+      while (k < ribs.length - 2 && ribs[k + 1][1] < y) k++;
+      const [[r0, y0], [r1, y1]] = [ribs[k], ribs[k + 1]];
+      return r0 + (r1 - r0) * (y - y0) / (y1 - y0);
+    };
+    const chamber = bakeWindow(moved(merge(
+      lathe({ profile: Array.from({ length: 11 }, (_, k) => [radiusAt(lo + (hi - lo) * k / 10), lo + (hi - lo) * k / 10]), segments: 16, color: (t) => t < 0.15 || t > 0.8 ? "#d65a1a" : t < 0.35 || t > 0.6 ? "#f5822c" : "#ffa640", emissive: 0.8 }),
+      lathe({ profile: [[0.3, hi + 3.36], [0.42, hi + 3.8], [0.36, hi + 4.25], [0, hi + 4.5]], segments: 8, color: "#ffe08a", emissive: 1 }),
+      ...[0, 1, 2, 3].map((k) => turnedY(moved(smoothBolt(3.6, 0.3, "#fff4c0", 1), 0, (lo + hi) / 2, 2.66), k * Math.PI / 2))
+    ), c.x, 0, c.z), hallLight);
+
+    // A line's tank, built at the origin standing on its deck: the bronze foot, the glass dim or lit with its halo, the
+    // bronze cap ringed in bulbs, and the white sign facing the balcony, the network on the blue, the bolt on the
+    // orange. Lit as standing under its line's light.
+    const bayLight = windowLights([[0, 2.2, 2.2, 9, 0.33, 0.45, 0.6]]);
+    const tankOf = (tone, lit) => {
+      const [edge, core] = lit ? tone.lit : tone.dim, mid = (CAP.foot + CAP.top) / 2, sign = tone === CAP_BLUE ? networkGlyph : smoothBolt;
+      return bakeWindow(merge(
+        lathe({ profile: [[0.86, 0], [0.86, 0.3], [0.72, CAP.foot], [0, CAP.foot]], segments: 12, color: BRONZE }),
+        lathe({ profile: [[CAP.r - 0.02, CAP.foot], [CAP.r + 0.01, CAP.foot + 0.3], [CAP.r + 0.02, mid], [CAP.r + 0.01, CAP.top - 0.3], [CAP.r - 0.02, CAP.top]], segments: 12, color: (t) => t > 0.2 && t < 0.75 ? core : edge, emissive: lit ? 1 : 0.8 }),
+        lathe({ profile: [[CAP.r + 0.1, CAP.foot + 0.04], [CAP.r + 0.1, CAP.foot + 0.16]], segments: 12, color: tone.halo, emissive: 1 }),
+        lathe({ profile: [[CAP.r + 0.02, CAP.top], [0.86, CAP.top + 0.05], [0.86, CAP.top + 0.4], [0.5, CAP.top + 0.56], [0, CAP.top + 0.58]], segments: 12, color: BRONZE }),
+        lathe({ profile: [[0.87, CAP.top + 0.41], [0.87, CAP.top + 0.49]], segments: 12, color: "#ffb040", emissive: 1 }),
+        moved(sign(1.75, 0.12, lit ? "#ffffff" : "#fbf6ea", 1), 0, mid, CAP.r + 0.14)
+      ), bayLight);
+    };
+    // The eight tanks as the factory stands them: the blue toward the line's tunnel, the orange toward the core.
+    const tanks = [];
+    L.bays.forEach((b, bay) => {
+      const out = Math.sign(b.x);
+      tanks.push({ bay, blue: true, x: stationX(b) + out * 1.2, y: b.y, z: stationZ(b) }, { bay, blue: false, x: stationX(b) - out * 1.2, y: b.y, z: stationZ(b) });
+    });
+
+    // The forge's fire, warm: its glowing face, the ring of heat round it, the floor's glow, its flames and its sign.
+    const fire = bakeWindow(moved(merge(
+      moved(forwardLathe(lathe({ profile: [[1.66, 0], [1.66, 0.12], [1.3, 0.28], [0.7, 0.36], [0, 0.38]], segments: 12, color: (t) => t < 0.3 ? "#9a360c" : t < 0.6 ? "#c84a12" : "#dc5a16", emissive: 0.85 })), 0, FORGE_CY, -0.36),
+      moved(forwardLathe(torus(1.76, 0.1, "#ff9a38", 1, 16, 5)), 0, FORGE_CY, -0.2),
+      moved(lathe({ profile: [[1.5, 0.03], [0, 0.04]], segments: 12, color: "#c84a12", emissive: 0.6 }), 0, 0, 1.4),
+      ...[[-1.05, 0.55], [-0.55, 0.75], [0, 0.62], [0.55, 0.78], [1.05, 0.52]].flatMap(([x, h]) => flame(h, x, 0.22, 0.32, false)),
+      moved(smoothBitcoin(2.3, 0.24, "#ffd98a", 1), 0, FORGE_CY, 0.14)
+    ), f.x, 0, f.z), hallLight);
+
+    // The sats: copies of the factory's gems of their own, so no record of theirs is shared with the factory's.
+    const unlit = windowLights([]), gem = (geo) => bakeWindow({ verts: geo.verts.slice(), faces: geo.faces.map((g) => ({ ...g, i: g.i.slice() })), lines: [] }, unlit);
+    return {
+      front: bakeWindow(merge(...front), hallLight), hall: still, chamber,
+      tank: { blueDim: tankOf(CAP_BLUE, false), blueLit: tankOf(CAP_BLUE, true), orangeDim: tankOf(CAP_ORANGE, false), orangeLit: tankOf(CAP_ORANGE, true) },
+      tanks, fire, sat: gem(sat()), satRed: gem(satFailed()), paths
+    };
+  });
 
   // The factory's end, from the balcony's back edge out to the rim. The rock is what the terrain carves at every
   // mouth, 5 wide and 3 high out to the rim and 6 by 4 in the chamber behind it where the shield stands, in the
@@ -2468,7 +2946,7 @@
     forgeSign, forgeWave, forgeLines, forgeTrack, forgeShafts, mintCoin, COILS, teslaCoil, banner, statusLantern, peerPipes, peerMirrors, TUNNEL_SIGN, TUNNEL_POST, EXIT_Z, CONDUIT_SAMPLES, TUNNEL_THEMES, STEP, supportAt, stairCeilingAt, clearAt, walkable, resolveFall,
     hall, scaffold, coreBody, coreChamber, conduits, sat, satFailed, stationFrame, capacitor, forge, forgeFire, cart,
     switchboard, switchScreens, REB, TRE, rebalancerBase, rebalancerRing, rebalancerFlow, treasuryBody, goldPile, hopperFill, beltNugget, goldCrate, dataBoard, moveBoard,
-    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutOptics, lookoutBeam, LOOKOUT_BEAM, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, bakeWindow, windowLights, exitTunnel, outsideView,
+    coreRing, teslaArcs, lookoutTower, lookoutLamp, lookoutOptics, lookoutBeam, LOOKOUT_BEAM, STUDY, studyHall, studyNote, studyBoard, tunnels, galleryStation, galleryCaps, label, lanterns, hardHat, hubTunnel, hubWindow, bakeWindow, windowLights, exitTunnel, outsideView,
     beam, moved, turnedY, smoothBolt, smoothBitcoin
   };
 })();
