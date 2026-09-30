@@ -110,7 +110,10 @@
     return false;
   };
   const boundsCache = new WeakMap();
+  // A cartoon part (`models.toonLoft`, the cartoon heads) is bounded by its blocky voxel shell, which holds it within the cull margin
+  // and keeps every fit, reach and contact read from the bounds as it was.
   const boundsOf = (geometry) => {
+    geometry = geometry.toonShell || geometry;
     let b = boundsCache.get(geometry);
     if (b) return b;
     const v = geometry.verts;

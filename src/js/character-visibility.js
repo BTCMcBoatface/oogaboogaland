@@ -5,6 +5,8 @@
   const UP = { x: 0, y: 1, z: 0 }, VERTICES = 64, FRAGMENTS = 1024, EPS = 1e-10;
   const meshes = new WeakMap();
   const meshOf = (geometry) => {
+    // A cartoon character part answers for its blocky voxel shell (`models.toonLoft`, the cartoon heads), as physics does.
+    geometry = geometry.toonShell || geometry;
     let mesh = meshes.get(geometry);
     if (mesh) return mesh;
     const vertices = geometry.verts, nodes = [];

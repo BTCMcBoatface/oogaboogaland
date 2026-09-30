@@ -11,7 +11,7 @@
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
-  const { makeVox, voxelGeometry, cached } = BL.models;
+  const { makeVox, voxelGeometry, toonLoft, blob, shellOf, cached } = BL.models;
   const { createNode, addChild, removeChild, updateLocal, boundsOf } = BL.scene;
   const { damp, clamp, mulberry32, fnv1a, mat4, quat } = BL.math;
   const U = 0.086;
@@ -200,6 +200,7 @@
   };
   const torsoRows = new WeakMap();
   const torsoCorners = (geometry) => {
+    geometry = shellOf(geometry);
     let corners = torsoRows.get(geometry);
     if (corners) return corners;
     const rows = new Map(), vertices = geometry.verts;
@@ -356,16 +357,54 @@
     geometry.labGripY = 9.5 * U * 0.65 * LAB_FLASK_HEIGHT;
     return geometry;
   });
+  // The cartoon gorilla head in the head's frame (cell (x, y, z) at origin + cell * U, the face toward +z): a heavy
+  // squared skull under a crest with its silver tip, ears, a hide face mask under a thick brow, the muzzle and
+  // nostrils, eyes with a catch light peeking over an agent's narrow black shades. The feeding head leaves the mouth open for the
+  // separate jaw. Drawn from palette indices, so the ape and the code form are one shape; the voxel bake is its
+  // `toonShell`, the shell climbs, fits and hits read.
+  const cartoonHead = (v, palette, origin, emissive, feeding) => {
+    const geo = { verts: [], faces: [], lines: [], smooth: true }, glow = (i) => (emissive && emissive[i]) || 0;
+    const c = (i) => BL.math.hexToRgb(palette[i]);
+    const X = (cx) => origin.x + cx * U, Y = (cy) => origin.y + cy * U, Z = (cz) => origin.z + cz * U;
+    const part = (x, y, z, rx, ry, rz, i, e = 2, tilt = 0) => blob(geo, X(x), Y(y), Z(z), rx * U, ry * U, rz * U, c(i), glow(i), e, tilt);
+    part(3.5, 3.6, 2.9, 3.85, 3.7, 3.15, C.body, 2.4);
+    part(3.5, 7.4, 1.8, 1.7, 1.5, 2.1, C.body, 2.2);
+    part(3.5, 8.9, 1.9, 0.6, 0.5, 0.95, C.silver);
+    for (const x of [-0.3, 7.3]) part(x, 4.5, 2.5, 0.6, 0.8, 0.7, C.hide);
+    part(3.5, 3.1, 5.3, 2.95, 2.8, 0.95, C.hide, 2.3);
+    part(3.5, 5.5, 6.0, 3.65, 0.75, 0.95, C.brow, 2.4);
+    if (feeding) part(3.5, 1.0, 5.9, 2.4, 0.95, 0.6, C.nostril);
+    else part(3.5, 1.5, 6.6, 2.65, 1.7, 1.4, C.hide, 2.2);
+    part(3.5, 2.7, 6.9, 2.3, 1.05, 1.1, C.hideDk, 2.2);
+    for (const x of [2.6, 4.4]) part(x, 2.5, 7.9, 0.4, 0.3, 0.22, C.nostril);
+    for (const [x, side] of [[1.7, -1], [5.3, 1]]) {
+      part(x, 4.55, 5.9, 0.75, 0.6, 0.3, C.eye);
+      part(x - side * 0.2, 4.75, 6.12, 0.2, 0.2, 0.08, 12);
+    }
+    // The shades, an agent's: two narrow, near-rectangular dark lenses canted up at their outer ends, a straight thin
+    // bridge, and a hard glint on each.
+    for (const [x, side] of [[1.75, -1], [5.25, 1]]) {
+      part(x, 4.0, 6.4, 1.45, 0.52, 0.28, C.shades, 6, side * 0.1);
+      part(x - side * 0.5, 4.18, 6.66, 0.34, 0.1, 0.05, 12, 4, side * 0.1);
+    }
+    part(3.5, 4.12, 6.52, 0.55, 0.12, 0.16, C.shades, 4);
+    geo.toonShell = geo.collisionGeometry = voxelGeometry(v, { unit: U, palette, origin, emissive });
+    return geo;
+  };
   // One voxel map per part, two palettes: ape and code.
   const geometries = cached(() => {
     const part = (name, build, origin) => {
       const v = build(mulberry32(fnv1a(`agent/${name}`)));
       return {
-        ape: voxelGeometry(v, { unit: U, palette: APE, origin }),
-        code: voxelGeometry(v, { unit: U, palette: CODE, origin, emissive: CODE_GLOW })
+        ape: toonLoft(v, { unit: U, palette: APE, origin }),
+        code: toonLoft(v, { unit: U, palette: CODE, origin, emissive: CODE_GLOW })
       };
     };
-    const lab = (build, origin, unit = U) => voxelGeometry(build(mulberry32(fnv1a("agent/lab"))), { unit, palette: LAB_PALETTE, origin });
+    const head = (name, build, origin, feeding) => {
+      const v = build(mulberry32(fnv1a(`agent/${name}`)));
+      return { ape: cartoonHead(v, APE, origin, undefined, feeding), code: cartoonHead(v, CODE, origin, CODE_GLOW, feeding) };
+    };
+    const lab = (build, origin, unit = U) => toonLoft(build(mulberry32(fnv1a("agent/lab"))), { unit, palette: LAB_PALETTE, origin });
     const flask = labFlaskGeometry();
     flask.labGripY = 9.5 * U * 0.65 * LAB_FLASK_HEIGHT;
     return {
@@ -374,8 +413,8 @@
       armL: part("armL", armVox, { x: -2 * U, y: -14 * U, z: -2 * U }),
       armR: part("armR", armVox, { x: -2 * U, y: -14 * U, z: -2 * U }),
       torso: part("torso", torsoVox, { x: -5 * U, y: 0, z: -3.5 * U }),
-      head: part("head", headVox, { x: -3.5 * U, y: 0, z: -2 * U }),
-      feedingHead: part("head", feedingHeadVox, { x: -3.5 * U, y: 0, z: -2 * U }),
+      head: head("head", headVox, { x: -3.5 * U, y: 0, z: -2 * U }, false),
+      feedingHead: head("head", feedingHeadVox, { x: -3.5 * U, y: 0, z: -2 * U }, true),
       jaw: part("jaw", jawVox, { x: -2.5 * U, y: -U, z: 0 }),
       labTorso: lab(labTorsoVox, { x: -5 * U, y: 0, z: -3.5 * U }),
       labArm: lab(labArmVox, { x: -2 * U, y: -14 * U, z: -2 * U }),
@@ -397,6 +436,7 @@
   const PART_NAMES = ["legL", "legR", "torso", "armL", "armR", "head"];
   const CLIMB_VERTICES = new WeakMap();
   const climbVertices = (geometry) => {
+    geometry = shellOf(geometry);
     let samples = CLIMB_VERTICES.get(geometry);
     if (samples) return samples;
     const seen = new Set(), values = [], v = geometry.verts, b = boundsOf(geometry);

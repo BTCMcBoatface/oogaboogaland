@@ -276,7 +276,7 @@
     addChild(astro.parts.head, createNode({ position: { x: 0, y: 0.13 * h, z: 0 }, scale: { x: h, y: h, z: h }, geometry: rocketModels.helmet(), smokeOpacity: 0.45 }));
     addChild(astro.root, createNode({ position: { x: 0, y: 0.06 * h, z: -0.18 * h }, scale: { x: h, y: h, z: h }, geometry: hubModels.jetpack() }));
     // The stick rides in the right hand pointing out of it; the tip light blinks while it reads.
-    astroStick = createNode({ position: { x: 0, y: -0.62 * h, z: 0.06 * h }, rotation: { x: Math.PI, y: 0, z: 0 }, scale: { x: 1, y: 0.01, z: 1 }, geometry: rocketModels.measureStick(), visible: false });
+    astroStick = createNode({ position: { x: 0, y: -BL.models.CLUB_HAND * h, z: 0.06 * h }, rotation: { x: Math.PI, y: 0, z: 0 }, scale: { x: 1, y: 0.01, z: 1 }, geometry: rocketModels.measureStick(), visible: false });
     astroLight = createNode({ position: { x: 0, y: 0.95, z: 0 }, geometry: rocketModels.readingLight() });
     addChild(astroStick, astroLight);
     addChild(astro.parts.armR, astroStick);

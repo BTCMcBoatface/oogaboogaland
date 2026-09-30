@@ -8,6 +8,11 @@
   "use strict";
   const BL = window.BL = window.BL || {};
   const { math, models, contributors } = BL;
+  // Cartoon parts are fitted, reached and swung by their blocky voxel shell (`models.toonLoft`, the cartoon heads), as before.
+  const { shellOf } = models;
+  // Where the hand is down the Ooga's arm (fractions of height), from `models`: the grip, the club's mount and the
+  // reloading hand.
+  const { HAND, CLUB_HAND, ARM_REACH } = models, RELOAD_HAND = 0.58 * ARM_REACH;
   const { clamp, lerp, damp, ease, randomInt } = math;
   const { createNode, addChild, removeChild, addTween } = BL.scene;
   const EAT_RATE = 1 / 20;
@@ -146,7 +151,7 @@
   const REACH = 1.6;
   const MUZZLE = new Float32Array(3);
   const meleeExtremes = (geometry) => {
-    const verts = geometry.verts, points = new Uint32Array(6);
+    const verts = shellOf(geometry).verts, points = new Uint32Array(6);
     for (let i = 3; i < verts.length; i += 3) for (let axis = 0; axis < 3; axis++) {
       if (verts[i + axis] < verts[points[axis * 2] + axis]) points[axis * 2] = i;
       if (verts[i + axis] > verts[points[axis * 2 + 1] + axis]) points[axis * 2 + 1] = i;
@@ -163,14 +168,16 @@
   math.quat.multiply(AXE_FORWARD_ROTATION, AXE_ARM_INVERSE, AXE_FORWARD_ROTATION);
   math.quat.fromEuler(AXE_UPRIGHT_ROTATION, 0, Math.PI / 2, 0);
   const FINGER_INVERSE = math.quat.create(), FINGER_TARGET = math.quat.create();
-  const CLUB_SLING_TILT = -0.3, CLUB_SLING_ANGLE = -0.8, CLUB_SLICES = 8;
+  // Slung across the back, flat enough to keep the club's head off the Ooga's ear, the drawn club's forward lean
+  // (`models.CLUB_LEAN`) taken back out so it lies against the back.
+  const CLUB_SLING_TILT = -0.3 - models.CLUB_LEAN, CLUB_SLING_ANGLE = -1.2, CLUB_SLICES = 8;
   const CLUB_ROTATION = math.quat.create(), CLUB_POINT = new Float64Array(3);
   const CLUB_AXES = new Float64Array(9);
   const CLUB_FIT = { x: 0, y: 0, z: 0, ex: 0, ey: 0, ez: 0, hx: 0, hy: 0, hz: 0, lo: 0, hi: 0, side: false, axes: new Float64Array(9) };
   // Cache the diagonal club's profile once. Separate height strips let its
   // handle lie against the back without its wider head entering the hair.
   const clubSlingProfile = (geometry) => {
-    const verts = geometry.verts, profile = new Float64Array(CLUB_SLICES * 6);
+    const verts = shellOf(geometry).verts, profile = new Float64Array(CLUB_SLICES * 6);
     let bottom = Infinity, top = -Infinity;
     for (let i = 0; i < verts.length; i += 3) {
       bottom = Math.min(bottom, verts[i + 1]); top = Math.max(top, verts[i + 1]);
@@ -276,8 +283,8 @@
     if (!node.visible) return;
     const frame = PILLOW_FRAME;
     if (node.geometry) {
-      const verts = node.geometry.verts, m = node.world;
-      for (const face of node.geometry.faces) {
+      const shell = shellOf(node.geometry), verts = shell.verts, m = node.world;
+      for (const face of shell.faces) {
         let src = PILLOW_CLIP_A, dst = PILLOW_CLIP_B, count = face.i.length;
         for (let i = 0; i < count; i++) {
           const v = face.i[i] * 3, x = m[0] * verts[v] + m[4] * verts[v + 1] + m[8] * verts[v + 2] + m[12] - frame.x;
@@ -323,7 +330,7 @@
   const measureSleeper = (node, head, headNode, feet = false, legL, legR) => {
     if (!node.visible) return;
     if (node.geometry) {
-      const verts = node.geometry.verts, m = node.world;
+      const verts = shellOf(node.geometry).verts, m = node.world;
       for (let i = 0; i < verts.length; i += 3) {
         const y = m[1] * verts[i] + m[5] * verts[i + 1] + m[9] * verts[i + 2] + m[13];
         if (head) SLEEP_BOUNDS.headMin = Math.min(SLEEP_BOUNDS.headMin, y);
@@ -374,7 +381,7 @@
     const head = cave.parts.head, pivotY = head.world[13], pivotZ = head.world[14];
     let reach = 0;
     const inspect = (geometry, m) => {
-      const verts = geometry.verts;
+      const verts = shellOf(geometry).verts;
       for (let i = 0; i < verts.length; i += 3) {
         const y = m[1] * verts[i] + m[5] * verts[i + 1] + m[9] * verts[i + 2] + m[13] - pivotY;
         const z = m[2] * verts[i] + m[6] * verts[i + 1] + m[10] * verts[i + 2] + m[14] - pivotZ;
@@ -395,7 +402,7 @@
   const bodyRadiusOf = (cave) => {
     let radius2 = 0;
     for (const key of BODY_PARTS) {
-      const part = cave.parts[key], verts = part.geometry.verts, m = part.world;
+      const part = cave.parts[key], verts = shellOf(part.geometry).verts, m = part.world;
       for (let i = 0; i < verts.length; i += 3) {
         const x = m[0] * verts[i] + m[4] * verts[i + 1] + m[8] * verts[i + 2] + m[12] - cave.root.position.x;
         const z = m[2] * verts[i] + m[6] * verts[i + 1] + m[10] * verts[i + 2] + m[14] - cave.root.position.z;
@@ -733,7 +740,7 @@
         cave.jet = null;
       }
       parts.club.quaternion = null;
-      setVec(parts.club.position, 0, -0.62 * cave.traits.height, 0.08 * cave.traits.height);
+      setVec(parts.club.position, 0, -CLUB_HAND * cave.traits.height, 0.08 * cave.traits.height);
       setVec(parts.club.rotation, cave.clubRest.x, 0, cave.clubRest.z);
       rest.visible = false;
       if (ctx.refreshMirrorObject) ctx.refreshMirrorObject(cave.root);
@@ -742,7 +749,7 @@
       node.poseYaw = 0;
       setVec(node.position, 0, 0, 0);
       BL.scene.updateWorld(node);
-      const verts = geometry.verts, m = node.world;
+      const verts = shellOf(geometry).verts, m = node.world;
       let bottom = Infinity, rear = Infinity;
       for (let i = 0; i < verts.length; i += 3) {
         bottom = Math.min(bottom, m[1] * verts[i] + m[5] * verts[i + 1] + m[9] * verts[i + 2]);
@@ -874,7 +881,7 @@
         setVec(node.scale, h, h, h);
         math.quat.rotateVec(MUZZLE, magazineHandRotation, 0, 0.08 * h, 0);
         const dx = node.position.x - MUZZLE[0] - arm.position.x, dy = node.position.y - MUZZLE[1] - arm.position.y, dz = node.position.z - MUZZLE[2] - arm.position.z;
-        const length = Math.hypot(dx, dy, dz), reach = Math.hypot(0.625, 0.15), ax = -0.15 / reach, ay = -0.625 / reach;
+        const length = Math.hypot(dx, dy, dz), reach = Math.hypot(HAND, 0.15), ax = -0.15 / reach, ay = -HAND / reach;
         GUN_ARM[0] = ay * dz / length; GUN_ARM[1] = -ax * dz / length;
         GUN_ARM[2] = (ax * dy - ay * dx) / length; GUN_ARM[3] = 1 + (ax * dx + ay * dy) / length;
         math.quat.normalize(GUN_ARM);
@@ -893,7 +900,7 @@
         math.quat.multiply(magazineHandRotation, FINGER_INVERSE, GUN_GRIP);
         node.quaternion = magazineHandRotation;
         math.quat.rotateVec(MUZZLE, magazineHandRotation, 0, -0.07 * h, 0);
-        setVec(node.position, MUZZLE[0], -0.58 * h + MUZZLE[1], 0.25 * h + MUZZLE[2]);
+        setVec(node.position, MUZZLE[0], -RELOAD_HAND * h + MUZZLE[1], 0.25 * h + MUZZLE[2]);
         setVec(node.scale, h, h, h);
       } else {
         // Both spares sit side by side on the anatomical left hip. The
@@ -1344,7 +1351,7 @@
       math.mat4.transformPoint(MUZZLE, node.world, 0, melee ? 0 : GUN_MUZZLE_Y * h, melee ? 0 : GUN_MUZZLE_Z * h);
       return setVec(out, MUZZLE[0], MUZZLE[1], MUZZLE[2]);
     };
-    const meleeReach = (cave = player) => Math.hypot(0.625, 0.15) * cave.traits.height + BL.scene.boundsOf(cave.parts.club.geometry).max[1];
+    const meleeReach = (cave = player) => Math.hypot(HAND, 0.15) * cave.traits.height + BL.scene.boundsOf(cave.parts.club.geometry).max[1];
     const weaponContactClear = (from, hit, melee = false) => {
       if (melee && input.weaponTargets) {
         const dx = hit.x - from.x, dy = hit.y - from.y, dz = hit.z - from.z, distance = Math.hypot(dx, dy, dz);
@@ -1404,7 +1411,7 @@
       w.meleeTime = MELEE_RECOVER; w.meleeStop = 1;
       poseWeapon(cave);
       BL.scene.updateWorld(cave.root);
-      const club = cave.parts.club, matrix = club.world, verts = club.geometry.verts;
+      const club = cave.parts.club, matrix = club.world, verts = shellOf(club.geometry).verts;
       let nearest = Infinity, dx = 0, dy = 0, dz = 0;
       for (let i = 0; i < verts.length; i += 3) {
         const x = hit.x - (matrix[0] * verts[i] + matrix[4] * verts[i + 1] + matrix[8] * verts[i + 2] + matrix[12]);
@@ -1430,7 +1437,7 @@
     };
     const meleeSceneryBlocked = (cave, before, after) => {
       if (!ctx.fireReachable) return false;
-      const verts = cave.parts.club.geometry.verts;
+      const verts = shellOf(cave.parts.club.geometry).verts;
       // Interactive contacts use the full mesh. Six authored extremities also
       // stop the blade at solid scenery without making terrain pick targets.
       for (let point = 0; point < cave.meleePoints.length; point++) {
@@ -1684,7 +1691,7 @@
         else math.quat.fromEuler(w.meleeAxeClub, club.rotation.x, club.rotation.y, club.rotation.z);
         const q = w.meleeAxeClub, h = cave.traits.height;
         FINGER_INVERSE[0] = -q[0]; FINGER_INVERSE[1] = -q[1]; FINGER_INVERSE[2] = -q[2]; FINGER_INVERSE[3] = q[3];
-        math.quat.rotateVec(MUZZLE, FINGER_INVERSE, -club.position.x, -0.625 * h - club.position.y, 0.15 * h - club.position.z);
+        math.quat.rotateVec(MUZZLE, FINGER_INVERSE, -club.position.x, -HAND * h - club.position.y, 0.15 * h - club.position.z);
         setVec(w.meleeAxeGrip, MUZZLE[0], MUZZLE[1], MUZZLE[2]);
         math.quat.multiply(w.meleeAxeClub, w.meleeAxeArm, w.meleeAxeClub);
         w.meleeAxeArmX = arm.rotation.x;
@@ -1822,7 +1829,7 @@
       math.quat.fromEuler(GUN_GRIP, 0, Math.PI / 2, 0);
       math.quat.multiply(cave.gunHandRotation, GUN_ARM, GUN_GRIP);
       arm.quaternion = cave.gunHandRotation;
-      math.quat.rotateVec(MUZZLE, arm.quaternion, 0, -0.625 * h, 0.15 * h);
+      math.quat.rotateVec(MUZZLE, arm.quaternion, 0, -HAND * h, 0.15 * h);
       const px = arm.position.x + MUZZLE[0], py = arm.position.y + MUZZLE[1], pz = arm.position.z + MUZZLE[2];
       math.quat.rotateVec(MUZZLE, gun.quaternion, 0, -0.14 * h, -0.184 * h);
       setVec(gun.position, px - MUZZLE[0], py - MUZZLE[1], pz - MUZZLE[2]);
@@ -1905,7 +1912,7 @@
         math.quat.fromEuler(AXE_ARM_INVERSE, -parts.armL.rotation.x, 0, 0);
         math.quat.multiply(cave.axeRotation, AXE_ARM_INVERSE, cave.axeRotation);
         math.quat.rotateVec(MUZZLE, cave.axeRotation, 0, grip, 0);
-        setVec(parts.club.position, gripX - MUZZLE[0], -0.625 * h - MUZZLE[1], 0.15 * h - MUZZLE[2]);
+        setVec(parts.club.position, gripX - MUZZLE[0], -HAND * h - MUZZLE[1], 0.15 * h - MUZZLE[2]);
         setVec(parts.club.rotation, 0, 0, 0);
         parts.club.quaternion = cave.axeRotation;
       } else if (sideSling) {
@@ -1930,19 +1937,19 @@
         // The circle sits a little outside the arm, so it sweeps past him.
         const turn = (elapsed * CHUK_SPINS * TAU + cave.phase) % TAU, spin = side < 0 ? turn : -turn;
         const out = side * CHUK_OUT * h;
-        setVec(parts.club.position, out, -0.62 * h, 0.08 * h);
+        setVec(parts.club.position, out, -CLUB_HAND * h, 0.08 * h);
         setVec(parts.club.rotation, Math.PI / 2, spin, 0);
         for (let i = 0; i < parts.chukTrail.length; i++) {
           const ghost = parts.chukTrail[i];
           ghost.visible = true;
-          setVec(ghost.position, out, -0.62 * h, 0.08 * h);
+          setVec(ghost.position, out, -CLUB_HAND * h, 0.08 * h);
           setVec(ghost.rotation, Math.PI / 2, spin + side * (i + 1) * CHUK_TRAIL, 0);
         }
       } else {
         const hockeySling = slungClub && cave.traits.name === "MrHodlX";
         const slingX = hockeySling ? -0.29 : -0.25, slingY = hockeySling ? 0.21 : 0.25;
         setVec(parts.club.position, slungClub ? slingX * h : 0,
-          (slungClub ? slingY : raisedPrimary ? -0.625 : -0.62) * h,
+          (slungClub ? slingY : raisedPrimary ? -HAND : -CLUB_HAND) * h,
           (slungClub ? -0.3 : raisedPrimary ? 0.15 : 0.08) * h);
         setVec(parts.club.rotation, slungClub ? cave.traits.stoneAxe ? 0 : CLUB_SLING_TILT : raisedPrimary ? 0 : cave.clubCarry.x,
           0, slungClub ? CLUB_SLING_ANGLE : raisedPrimary ? Math.PI / 2 : cave.clubCarry.z);
@@ -1969,7 +1976,7 @@
           if (parts.club.quaternion) MELEE_REST_CLUB.set(parts.club.quaternion);
           else math.quat.fromEuler(MELEE_REST_CLUB, parts.club.rotation.x, parts.club.rotation.y, parts.club.rotation.z);
           MELEE_REST_GRIP[0] = parts.club.position.x; MELEE_REST_GRIP[1] = parts.club.position.y; MELEE_REST_GRIP[2] = parts.club.position.z;
-          setVec(parts.club.position, 0, -0.625 * h, 0.15 * h);
+          setVec(parts.club.position, 0, -HAND * h, 0.15 * h);
           setVec(parts.club.rotation, 0, 0, Math.PI / 2);
           parts.club.quaternion = null;
         }
@@ -2056,7 +2063,7 @@
           math.quat.slerpTo(cave.axeRotation, GUN_ARM, axeGrip);
           parts.club.quaternion = cave.axeRotation;
           math.quat.rotateVec(MUZZLE, cave.axeRotation, w.meleeAxeGrip.x, w.meleeAxeGrip.y, w.meleeAxeGrip.z);
-          setVec(parts.club.position, lerp(parts.club.position.x, -MUZZLE[0], axeGrip), lerp(parts.club.position.y, -0.625 * h - MUZZLE[1], axeGrip), lerp(parts.club.position.z, 0.15 * h - MUZZLE[2], axeGrip));
+          setVec(parts.club.position, lerp(parts.club.position.x, -MUZZLE[0], axeGrip), lerp(parts.club.position.y, -HAND * h - MUZZLE[1], axeGrip), lerp(parts.club.position.z, 0.15 * h - MUZZLE[2], axeGrip));
         }
         if (returningPrimary) {
           const carry = 1 - ease.inOutQuad(clamp(w.meleeReadyTime / MELEE_CARRY_BLEND, 0, 1));
@@ -2114,7 +2121,7 @@
         arm.quaternion = cave.gunHandRotation;
         // During reload, rest the grip against the upper finger edge so
         // the rifle sits inward without burying its receiver in the hand.
-        math.quat.rotateVec(MUZZLE, cave.gunHandRotation, 0, (w.reloading ? -0.58 : -0.625) * h, (w.reloading ? 0.25 : 0.15) * h);
+        math.quat.rotateVec(MUZZLE, cave.gunHandRotation, 0, (w.reloading ? -RELOAD_HAND : -HAND) * h, (w.reloading ? 0.25 : 0.15) * h);
         const palmX = arm.position.x + MUZZLE[0], palmY = arm.position.y + MUZZLE[1], palmZ = arm.position.z + MUZZLE[2];
         // Solve the carry's lower wrist from the raised left hand. Reload
         // holds the rifle upright in the extended right hand.
@@ -2129,19 +2136,19 @@
         setVec(gun.position, palmX - MUZZLE[0], palmY - MUZZLE[1], palmZ - MUZZLE[2]);
         if (lowCarry) {
           // Lower the character's right arm without stretching it.
-          const rightArm = parts.armL, reach = Math.hypot(0.625, 0.15);
+          const rightArm = parts.armL, reach = Math.hypot(HAND, 0.15);
           math.quat.rotateVec(MUZZLE, gun.quaternion, 0, -0.08 * h, 0.27 * h);
           const dx = gun.position.x + MUZZLE[0] - rightArm.position.x;
           const dy = gun.position.y + MUZZLE[1] - rightArm.position.y;
           const dz = gun.position.z + MUZZLE[2] - rightArm.position.z;
-          const length = Math.hypot(dx, dy, dz), ax = 0.15 / reach, ay = -0.625 / reach;
+          const length = Math.hypot(dx, dy, dz), ax = 0.15 / reach, ay = -HAND / reach;
           GUN_ARM[0] = ay * dz / length; GUN_ARM[1] = -ax * dz / length;
           GUN_ARM[2] = (ax * dy - ay * dx) / length; GUN_ARM[3] = 1 + (ax * dx + ay * dy) / length;
           math.quat.normalize(GUN_ARM);
           math.quat.fromEuler(GUN_GRIP, 0, Math.PI / 2, 0);
           math.quat.multiply(cave.gunSupportRotation, GUN_ARM, GUN_GRIP);
           rightArm.quaternion = cave.gunSupportRotation;
-          math.quat.rotateVec(MUZZLE, rightArm.quaternion, 0, -0.625 * h, 0.15 * h);
+          math.quat.rotateVec(MUZZLE, rightArm.quaternion, 0, -HAND * h, 0.15 * h);
           const rightX = rightArm.position.x + MUZZLE[0], rightY = rightArm.position.y + MUZZLE[1], rightZ = rightArm.position.z + MUZZLE[2];
           // Carry stock-down from the right hand toward the raised left palm.
           math.quat.fromEuler(gun.quaternion, -0.53, Math.PI - 2.23, 0);
@@ -2150,7 +2157,7 @@
           // Turn the whole left arm around its long axis toward the wood.
           // Its palm stays in place and the nubs stay on the hand's edge.
           const leftArm = parts.armR, q = leftArm.quaternion;
-          math.quat.rotateVec(MUZZLE, q, 0, -0.625 * h, 0);
+          math.quat.rotateVec(MUZZLE, q, 0, -HAND * h, 0);
           const leftX = leftArm.position.x + MUZZLE[0], leftY = leftArm.position.y + MUZZLE[1], leftZ = leftArm.position.z + MUZZLE[2];
           math.quat.rotateVec(MUZZLE, gun.quaternion, 0, -0.0475 * h, 0.27 * h);
           const woodX = gun.position.x + MUZZLE[0] - leftX, woodY = gun.position.y + MUZZLE[1] - leftY, woodZ = gun.position.z + MUZZLE[2] - leftZ;
@@ -2198,7 +2205,7 @@
             math.quat.fromEuler(GUN_SWAP_TARGET, -0.35, 0.5, 1.13);
           }
           math.quat.slerpTo(gun.quaternion, GUN_SWAP_TARGET, blend);
-          math.quat.rotateVec(MUZZLE, right.quaternion, 0, (w.reloading ? lerp(-0.58, -0.625, blend) : -0.625) * h, (w.reloading ? lerp(0.25, 0.15, blend) : 0.15) * h);
+          math.quat.rotateVec(MUZZLE, right.quaternion, 0, (w.reloading ? lerp(-RELOAD_HAND, -HAND, blend) : -HAND) * h, (w.reloading ? lerp(0.25, 0.15, blend) : 0.15) * h);
           const handX = right.position.x + MUZZLE[0], handY = right.position.y + MUZZLE[1], handZ = right.position.z + MUZZLE[2];
           math.quat.rotateVec(MUZZLE, gun.quaternion, 0, -0.14 * h, -0.184 * h);
           setVec(gun.position, handX - MUZZLE[0], handY - MUZZLE[1], handZ - MUZZLE[2]);
@@ -2260,7 +2267,7 @@
         const tx = gun.position.x + MUZZLE[0] - arm.position.x;
         const ty = gun.position.y + MUZZLE[1] - arm.position.y;
         const tz = gun.position.z + MUZZLE[2] - arm.position.z;
-        math.quat.rotateVec(MUZZLE, arm.quaternion, 0, -0.625 * h, 0.15 * h);
+        math.quat.rotateVec(MUZZLE, arm.quaternion, 0, -HAND * h, 0.15 * h);
         const ax = MUZZLE[0], ay = MUZZLE[1], az = MUZZLE[2];
         GUN_ARM[0] = ay * tz - az * ty;
         GUN_ARM[1] = az * tx - ax * tz;
@@ -2269,7 +2276,7 @@
         math.quat.normalize(GUN_ARM);
         math.quat.multiply(cave.gunHandRotation, GUN_ARM, arm.quaternion);
         arm.quaternion = cave.gunHandRotation;
-        math.quat.rotateVec(MUZZLE, arm.quaternion, 0, -0.625 * h, 0.15 * h);
+        math.quat.rotateVec(MUZZLE, arm.quaternion, 0, -HAND * h, 0.15 * h);
         sightArmOffset.x = tx - MUZZLE[0]; sightArmOffset.y = ty - MUZZLE[1]; sightArmOffset.z = tz - MUZZLE[2];
         arm.position.x += sightArmOffset.x; arm.position.y += sightArmOffset.y; arm.position.z += sightArmOffset.z;
       }

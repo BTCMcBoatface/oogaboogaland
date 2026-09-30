@@ -4688,13 +4688,15 @@ body.orbit-dragging #tooltip {
     height: 96px;
   }
 
-  #joy-look {
-    right: calc(320px + var(--safe-right));
+  /* As in portrait: the sticks give way to the open sheet, so the look stick keeps to the right edge. */
+  .sheet[data-open="true"]~.joysticks,
+  .sheet[data-open="true"]~.bottom-hud>.act {
+    display: none;
   }
 
   .act {
     left: auto;
-    right: calc(440px + var(--safe-right));
+    right: calc(140px + var(--safe-right));
     bottom: calc(96px + var(--safe-bottom));
     z-index: 13;
     transform: none;

@@ -165,7 +165,7 @@
     joined: 1789692980,
     lastCommit: 1788219000,
     // Laser eyes: lit orange, open or closed, with no pupils; clean shaven under the mane
-    look: { eyeColor: "#f7931a", eyeGlow: 1, noPupils: true, cleanShaven: true, hair: "#f2ece0" },
+    look: { eyeColor: "#f7931a", eyeGlow: 1, noPupils: true, cleanShaven: true, noMouth: true, hair: "#f2ece0" },
     voice: {
       poke: "You've got 10 seconds!",
       idle: ["You are fired!", "Where is Kortik??", "Go rebalance your Node!", "Get laid on the 1st date", "What's your question for DrNeski?", "I sold my neighbor ex's cat for sats"]
@@ -204,7 +204,8 @@
         k.headEmissive[core] = 1;
       },
       headgear(k) {
-        addChild(k.parts.head, createNode({ scale: { x: k.h, y: k.h, z: k.h }, geometry: biteGeometry() }));
+        // Set back onto the cartoon face, whose jaw stands a little behind the old block face.
+        addChild(k.parts.head, createNode({ position: { x: 0, y: 0, z: -0.03 * k.h }, scale: { x: k.h, y: k.h, z: k.h }, geometry: biteGeometry() }));
       }
     }
   });
