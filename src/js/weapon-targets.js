@@ -118,7 +118,9 @@
     };
     const eligible = (target, ignore, includeNonWeapon = false) => {
       const { node, owner } = target;
-      return !!node.geometry && owner.active !== false && (includeNonWeapon || owner.weaponType !== "none") && (!ignore || owner.cave !== ignore)
+      return !!node.geometry && owner.active !== false && (includeNonWeapon || owner.weaponType !== "none")
+        && (!ignore || owner.cave !== ignore && owner.entry?.owner !== ignore
+          && (!ignore.owner || owner.cave !== ignore.owner) && !(ignore.gorilla && owner.kind === "clanker"))
         && !(node.mirror && (node.mirrorPortal || node.mirrorReveal >= 1)) && refreshWorld(node);
     };
     const sync = node => {

@@ -2777,13 +2777,18 @@
   const isPlayerAttack = source => !!source && (source === crew.player || source.controlled && source.actionControlled);
   const hitMirror = (power, x, y, z, source) => {
     const damage = mirrorCave.damage;
-    if (!damage.hit(power, x, y, z)) return;
-    if (isPlayerAttack(source)) fx.damageNumber(x, y + 0.25, z, power);
+    const scaledPower = power * 4;
+    if (!damage.hit(scaledPower, x, y, z)) return;
+    if (isPlayerAttack(source)) fx.damageNumber(x, y + 0.25, z, scaledPower);
     syncMirrorDamage();
   };
   const weaponImpact = (source, hit, dx, dy, dz, power = 1) => {
     if (hit.owner.kind === "caveman") {
       crew.damage(hit.owner.cave, power, isPlayerAttack(source));
+      return;
+    }
+    if (hit.owner.kind === "clanker") {
+      if (clankers.damage(hit.owner.entry, power) && isPlayerAttack(source)) fx.damageNumber(hit.x, hit.y + 0.25, hit.z, power * 4);
       return;
     }
     if (hit.node === mirrorCave.node) {
@@ -7411,7 +7416,7 @@
       for (let hand = 0; hand < 2; hand++) {
         const part = hand ? entry.gorilla.parts.armR : entry.gorilla.parts.armL, previous = hand ? combat.right : combat.left;
         mirrorCave.ripples.strike(previous, part.world, part.geometry, dt);
-        if (!combat.hit && input.weaponTargets.strike(CLANKER_HIT, previous, part.world, part.geometry)) {
+        if (!combat.hit && input.weaponTargets.strike(CLANKER_HIT, previous, part.world, part.geometry, entry)) {
           combat.hit = true;
           combat.hitOwner = CLANKER_HIT.owner;
           weaponImpact(entry, CLANKER_HIT, Math.sin(entry.heading), -1, Math.cos(entry.heading), entry.poundPower);
@@ -7446,10 +7451,14 @@
     entry.fireFX.spread = new Float32Array(CLANKER_BURN_PARTS.length);
     entry.fireFX.burning = false;
     entry.combat = { left: math.mat4.create(), right: math.mat4.create(), hit: false, hitOwner: null, groundChecked: false };
-    const owner = { kind: "clanker", entry, cave: entry, priority: 2, weaponType: "none" };
-    const visit = (node) => {
-      if (node.geometry) { entry.renderParts.push(node); addTarget(node, owner); clankerPartOwners.set(node, entry); }
-      for (const child of node.children) visit(child);
+    const visit = (node, region = "body") => {
+      if (node === entry.gorilla.parts.head) region = "head";
+      if (node.geometry) {
+        entry.renderParts.push(node);
+        addTarget(node, { kind: "clanker", entry, cave: entry, priority: 2, weaponType: "enemy", hitRegion: region });
+        clankerPartOwners.set(node, entry);
+      }
+      for (const child of node.children) visit(child, region);
     };
     visit(entry.root);
     clankerMeshes.add(entry.root);

@@ -1781,7 +1781,7 @@
       gorilla.poseManaged(0.6, 0, 0, 0, i * 2.39996323, 0, false, false);
       const entry = {
         owner, cave: owner, tooltipOwner: owner, gorilla, root: gorilla.root, parts: gorilla.parts,
-        health: { value: BL.crew.HEALTH_MAX * 2, max: BL.crew.HEALTH_MAX * 2 }, index: i,
+        health: { value: BL.crew.HEALTH_MAX * 2, max: BL.crew.HEALTH_MAX * 2, delay: 0 }, index: i,
         radius: WALK_RADIUS, height: 2.7, foot: FOOT, minY: 0, biped: false, compact: owner.state === "working" && gorilla.compact, footprintMode: "walk",
         active: false, tracked: false, mode: "", phase: "", route: "", entryTurn: false, planningEntry: false, site: -1, fromSite: -1, portal: -1,
         hasSlot: false, slotIndex: -1, slotX: 0, slotY: 0, slotZ: 0, goalX: 0, goalY: 0, goalZ: 0,
@@ -1795,7 +1795,7 @@
           replans: 0, recoveries: 0, escapes: 0, escapeLeft: 0, escapeBlocked: 0, escapeX: 0, escapeZ: 0,
           retryAt: 0, reason: "", x: NaN, y: NaN, z: NaN, workTime: 0, workCycles: 0, workReach: 0, workStage: "", workItem: -1,
           turnError: Infinity, heading: NaN, searchCursor: 0 },
-        overflow: false, activity: 0, hits: 0, pounds: 0, pound: 0, poundHit: false, poundPower: 2,
+        overflow: false, activity: 0, hits: 0, pounds: 0, pound: 0, poundHit: false, poundPower: 2.5,
         beat: 0, beats: 0, stand: 0, parked: false, parkFor: 0, exitFootprint: false, workCycle: 0, recover: 0, lounge: "", jumps: 0,
         loungePartner: null, loungeHeading: NaN, loungeCycle: 0, loungeRoof: false, loungeDepart: false, groomTime: 0, groomWait: 0,
         planningRoam: false, planningSeat: false, walkPoseChecked: false, roam: { path: new Float64Array(12), count: 0, index: 0, wall: false, detour: false, level: 0, reverseStart: false, departHeading: 0, propDeparture: false,
@@ -4772,7 +4772,7 @@
       if (!e || e.climb.active || e.fire.rolling || e.drive.airborne || e.recover > 0 || e.parked || e.pound || e.beat) return false;
       if (ctx.canSmash ? !ctx.canSmash(e) : !expandGesture(e, 2.25)) return false;
       if (!e.gorilla.pound()) return false;
-      e.poundPower = 2 + 2 * clamp(charge, 0, 1);
+      e.poundPower = 2.5 + 2.5 * clamp(charge, 0, 1);
       e.footprintMode = "pound"; e.compact = e.gorilla.poundCompact; e.radius = Math.max(e.radius, 2.25);
       e.pound = BL.agent.POUND_TIME; e.poundHit = false; e.actionControlled = e.motion.smash = true;
       return true;
@@ -5480,6 +5480,8 @@
     };
     const updateEntry = (e, dt) => {
       const p = e.root.position, beforeX = p.x, beforeY = p.y, beforeZ = p.z;
+      if (e.health.delay > 0) e.health.delay = Math.max(0, e.health.delay - dt);
+      else if (e.health.value < e.health.max) e.health.value = Math.min(e.health.max, e.health.value + BL.crew.HEALTH_REGEN_RATE * dt);
       e.motion.labDt = dt;
       e.motion.walkPhase = NaN;
       e.motion.walkGait = e.controlled ? e.drive.run ? "gallop" : "knuckle" : "";
@@ -5940,6 +5942,12 @@
       if (e.site !== labSite && e.activity >= 3) e.rest = Math.min(e.rest, 0.7);
       return true;
     };
+    const damage = (entry, power) => {
+      if (!entry || !entry.active || !(power > 0)) return false;
+      entry.health.value = Math.max(0, entry.health.value - power * 4);
+      entry.health.delay = BL.crew.HEALTH_REGEN_DELAY;
+      return true;
+    };
     const stats = () => {
       let active = 0, working = 0, chilling = 0, overflow = 0, airborne = 0, hits = 0, pounds = 0, beats = 0, stuck = 0, replans = 0, recoveries = 0;
       for (let i = 0; i < list.length; i++) {
@@ -5965,7 +5973,7 @@
       list.length = 0; byOwner.clear();
       portals.fill(null);
     };
-    return { list, sync, update, target, companionTarget, hit, plan, startLabShuttle, debugMove, cancelDebugMove, stats, liveGeometry, dispose, contactAt,
+    return { list, sync, update, target, companionTarget, hit, damage, plan, startLabShuttle, debugMove, cancelDebugMove, stats, liveGeometry, dispose, contactAt,
       possess, release, respawn, control, cancelInput, smash, chestBeat, ignite, dropRoll, supportRemoved,
       get player() { return player; } };
   };

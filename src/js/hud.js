@@ -441,7 +441,7 @@
       const showHealth = selected;
       if (el.modeHealth.hidden === showHealth) el.modeHealth.hidden = !showHealth;
       const sourceHealth = gorilla ? gorillaEntry.health : cave && cave.health;
-      const healthMax = gorilla ? gorillaEntry.health.max : 25;
+      const healthMax = sourceHealth ? sourceHealth.max : BL.crew.HEALTH_MAX;
       const health = sourceHealth ? Math.max(0, Math.min(healthMax, sourceHealth.value)) : healthMax;
       if (health !== modeHealth || healthMax !== modeHealthMax) {
         modeHealth = health;
@@ -1354,7 +1354,7 @@
       update: (place = true) => {
         if (!tipCave) return;
         const state = statusFor(tipCave);
-        const healthMax = tipCave.health && tipCave.health.max || 25;
+        const healthMax = tipCave.health && tipCave.health.max || BL.crew.HEALTH_MAX;
         const health = tipCave.health ? Math.max(0, Math.min(healthMax, tipCave.health.value)) : healthMax;
         const shownHealth = Math.ceil(health);
         const healthChanged = health !== tipHealth || healthMax !== tipHealthMax;

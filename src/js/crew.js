@@ -14,17 +14,17 @@
   const CHEW_PERIOD = 3.2;
   const AMMO_MAX = 30, AMMO_PER_BANANA = 3, RELOAD_PERIOD = 1.2, BURST_ROUNDS = 3, BURST_STEP = 0.09, SHOT_PERIOD = 0.44;
   const FOCUSED_AUTO_HOLD = 0.12;
-  const SHOT_POWER = 0.5;
+  const SHOT_POWER = 0.5, HEADSHOT_MULTIPLIER = 2.5;
   const GUN_MUZZLE_Y = -0.01, GUN_MUZZLE_Z = 0.67;
   const GUN_SIGHT_DOWN = Math.atan2(0.09 - 0.08, 0.59 + 0.18);
   const GUN_SIGHT_DROP = 0.08 * Math.cos(GUN_SIGHT_DOWN) + 0.18 * Math.sin(GUN_SIGHT_DOWN);
-  const MELEE_RECHARGE_DELAY = 0.1, MELEE_RECHARGE_TIME = 0.1;
+  const MELEE_RECHARGE_DELAY = 0.1, MELEE_RECHARGE_TIME = 0.1, MELEE_HIT_POWER = 1.25;
   const MELEE_WIND = 0.08, MELEE_QUICK_WIND = 0.025, MELEE_STRIKE = 0.128, MELEE_QUICK_STRIKE = 0.09, MELEE_RECOVER = 0.112;
   const MELEE_RELEASE = MELEE_STRIKE + MELEE_RECOVER, MELEE_TIME = MELEE_WIND + MELEE_RELEASE;
   const MELEE_TAP_TIME = 0.12, MELEE_CHARGE_DELAY = 0.24, MELEE_CHARGE_TIME = 1;
   const MELEE_COMBO_WINDOW = 0.4;
   const MELEE_READY_HOLD = 0.5, MELEE_CARRY_BLEND = 0.25;
-  const GUN_BASH_TIME = 0.28, GUN_BASH_IMPACT = 0.13, GUN_BASH_POWER = 0.75;
+  const GUN_BASH_TIME = 0.28, GUN_BASH_IMPACT = 0.13, GUN_BASH_POWER = 1;
   const clearMeleeThrust = (cave) => {
     const w = cave.weapon, p = cave.parts.armL.position;
     p.x -= w.meleeOffsetX; p.y -= w.meleeOffsetY; p.z -= w.meleeOffsetZ;
@@ -69,7 +69,7 @@
   // wider than a frame's step, consecutive frames overlap, and the eye reads an arc.
   const CHUK_FOLD = 2.4, CHUK_SPINS = 15, CHUK_TRAIL = 0.32, CHUK_ARM = -2.05, CHUK_ARM_OUT = -0.32, CHUK_OUT = 0.16;
   // A weighted flail lands harder than a club and moves faster than one.
-  const NUNCHAKU_POWER = 1.8, NUNCHAKU_RATE = 1.9;
+  const NUNCHAKU_POWER = 2, NUNCHAKU_RATE = 1.9;
   const GUN_HOLD = 0.24, GUN_KICK = 0.045, GUN_FLASH_TIME = 0.035;
   const MAGAZINE_SWAP_TIME = 0.44;
   const RELOAD_HANDOFF_TIME = 0.32, RELOAD_FULL_HOLD = 0.24;
@@ -78,7 +78,7 @@
     models.box({ w: 0.035, h: 0.12, d: 0.07, color: "#ffd94a", emissive: 1 }),
     models.box({ w: 0.05, h: 0.05, d: 0.08, color: "#fff4c4", emissive: 1 })
   );
-  const HEALTH_MAX = 25, HEALTH_REGEN_DELAY = 4, HEALTH_REGEN_RATE = 5, HEALTH_PICKUP_TIME = 0.35;
+  const HEALTH_MAX = 100, HEALTH_REGEN_DELAY = 4, HEALTH_REGEN_RATE = 20, HEALTH_PICKUP_TIME = 0.35;
   const GEAR_PICKUP_RADIUS = 0.72;
   const STUN_BIRD = models.merge(
     models.box({ w: 0.09, h: 0.055, d: 0.055, color: "#ffd84a", emissive: 0.7 }),
@@ -457,6 +457,7 @@
       const h = cave.traits.height;
       let health = world.health.get(contributor.name);
       if (!health) { health = { value: HEALTH_MAX, delay: 0, stunned: false, recovering: false }; world.health.set(contributor.name, health); }
+      health.max = HEALTH_MAX;
       health.value = clamp(Number.isFinite(health.value) ? health.value : HEALTH_MAX, 0, HEALTH_MAX);
       health.delay = Math.max(0, Number.isFinite(health.delay) ? health.delay : 0);
       health.stunned = health.value <= 0 || health.stunned === true && health.value < HEALTH_MAX;
@@ -1369,7 +1370,7 @@
       const w = cave.weapon;
       w.meleePower = meleePower(cave);
       w.meleeHitAt = elapsed;
-      return w.meleePower * (cave.traits.nunchaku ? NUNCHAKU_POWER : 1);
+      return w.meleePower * MELEE_HIT_POWER * (1 + w.meleeCharge) * (cave.traits.nunchaku ? NUNCHAKU_POWER : 1);
     };
     const hitMeleeTarget = (cave, powerOverride = null) => {
       const w = cave.weapon, hit = w.meleeTarget;
@@ -1533,7 +1534,7 @@
         if (ctx.onProjectileMove) ctx.onProjectileMove(x, y, z, p.x, p.y, p.z, step, bullet.source, bullet.workShot);
         // Emit the crossing while the struck glass still exists.
         if (impacted) {
-          const power = SHOT_POWER * (weaponHit.owner.hitRegion === "head" ? 2 : 1);
+          const power = SHOT_POWER * (weaponHit.owner.hitRegion === "head" ? HEADSHOT_MULTIPLIER : 1);
           if (ctx.onWeaponHit) ctx.onWeaponHit(bullet.source, weaponHit.type, power);
           if (ctx.onWeaponImpact) ctx.onWeaponImpact(bullet.source, weaponHit, dx / distance, dy / distance, dz / distance, power);
         }
@@ -4895,8 +4896,9 @@
       if (!cave || !cave.root.visible || cave.health.stunned || power <= 0) return false;
       const health = cave.health;
       const p = cave.root.position;
-      health.value = Math.max(0, health.value - power);
-      if (showDamage) fx.damageNumber(p.x, p.y - cave.baseY + cave.bodyHeight + 0.15, p.z, power);
+      const dealt = power * 4;
+      health.value = Math.max(0, health.value - dealt);
+      if (showDamage) fx.damageNumber(p.x, p.y - cave.baseY + cave.bodyHeight + 0.15, p.z, dealt);
       health.delay = HEALTH_REGEN_DELAY;
       if (health.value <= 0) {
         health.stunned = true;
@@ -5766,7 +5768,7 @@
           // Resolve the reticle target even if the visible skin passed beside it.
           hitMeleeTarget(cave);
         } else if (!input.weaponTargets && ctx.onMeleeStrike) {
-          w.meleeHit = ctx.onMeleeStrike(meleePreviousWorld, club.world, club.geometry, dt, meleePower(cave) * (cave.traits.nunchaku ? NUNCHAKU_POWER : 1));
+          w.meleeHit = ctx.onMeleeStrike(meleePreviousWorld, club.world, club.geometry, dt, meleePower(cave) * MELEE_HIT_POWER * (1 + w.meleeCharge) * (cave.traits.nunchaku ? NUNCHAKU_POWER : 1));
           if (w.meleeHit) spendMeleePower(cave);
         }
         if (w.meleeHit) {
