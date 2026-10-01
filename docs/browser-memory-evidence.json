@@ -1747,6 +1747,19 @@
         "passed": 145,
         "total": 152,
         "remainingFailures": 7
+      },
+      "focusedAfterStationaryCaveAndLocalMarkers": {
+        "passed": 148,
+        "total": 152,
+        "seconds": 84.2,
+        "remainingFailures": 4,
+        "log": "untracked/issue-93/failure-fix-cutaway-8.log",
+        "failures": [
+          "birds-eye combat: ramp-window cutaway columns extend beyond the raw ramp, keep their authored route station, and retain real window fragments in the terrain base",
+          "birds-eye combat: basement entrances open at HQ while the remaining route stays covered until descent",
+          "birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset",
+          "carry orbit: upper floors stay hidden in both lower-level camera handoffs and return after shoulder settles"
+        ]
       }
     },
     "cameraFollowup": {
@@ -1804,7 +1817,13 @@
         0.9999989727292405
       ],
       "threshold": 0.999,
-      "status": "Local authored-segment alignment passes in Node; focused browser validation pending."
+      "status": "Original 0.999 local-segment alignment requirement passes in the focused browser run."
+    },
+    "stationaryCaveFixture": {
+      "diagnosis": "The original cave sample stood on the moving gorilla mesh. Its support was 1.6929903632947028 m while the island floor remained 0; hop, hopV and leap were zero.",
+      "correction": "Move the floor sample 2.5 m beside the gorilla work lane, retaining the original floor, roof-cut and zoom-stability requirements.",
+      "console": [],
+      "status": "Existing browser floor and zoom assertions pass."
     }
   },
   "raceScenery": {

@@ -4164,7 +4164,10 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
     }
     const lab = B.mouths.find(m => BL.caves.slots.find(s => s.id === m.id)?.scene === "lab"), places = [
       { name: "surface", x: -8, z: 8, floor: 0 }, ...(hill ? [hill] : []),
-      { name: "cave", x: lab.x - Math.sin(lab.ry) * 3, z: lab.z - Math.cos(lab.ry) * 3, floor: lab.floorY },
+      // Keep the floor sample beside the gorilla's work lane: his live mesh
+      // is a moving support, so standing on him cannot prove zoom stability.
+      { name: "cave", x: lab.x - Math.sin(lab.ry) * 3 + Math.cos(lab.ry) * 2.5,
+        z: lab.z - Math.cos(lab.ry) * 3 - Math.sin(lab.ry) * 2.5, floor: lab.floorY },
       { name: "HQ", x: room.x, z: room.z, floor: H.floor }, { name: "basement", x: lower.x, z: lower.z, floor: H.basement.floor }];
     const geometry = I.geometry, verts = geometry.verts, originalVerts = Array.from(verts), source = I.cutawaySource, data = source.data, originalData = data.slice(), rows = [], thresholds = [];
     const entries = [...D.terrainSections, ...D.caveSections], regions = B.renderOpts.cutawayRegions;
