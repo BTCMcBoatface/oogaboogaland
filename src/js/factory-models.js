@@ -70,7 +70,8 @@
     treasury: { x: 13.5, y: LEVEL.low, z: 20, w: 7, d: 5 },
     // In front of the core's stone foot, whose face is at z 0.2 there.
     forge: { x: 0, z: 0.7 },
-    lookout: { x: -16, y: LEVEL.top, z: -14, w: 6, d: 6, tower: 5.5 },
+    // The rear landing leaves a full body clear of both the tower and the deck posts.
+    lookout: { x: -16, y: LEVEL.top, z: -14, w: 6, d: 8, tower: 5.5 },
     lookoutDeck: { x: -16, y: LEVEL.top + 5.65, z: -14, w: 5, d: 5 },
     lookoutApproach: { x: -16, y: LEVEL.top, z: -10.8, w: 2, d: 1.5 },
     // Vertical climbing planes; normals point out from the upper landing.
@@ -78,7 +79,7 @@
       { x: -10, z: 8.4, bottom: 0, top: LEVEL.low, nx: 0, nz: 1, width: 1.4, inset: 0.3 },
       { x: 10.1, z: 6.8, bottom: 0, top: LEVEL.low, nx: -1, nz: 0, width: 1.4, inset: 0.3 },
       { x: 12, z: 22.4, bottom: 0, top: LEVEL.low, nx: 0, nz: 1, width: 1.4, inset: 0.3 },
-      { x: -17.2, z: -16, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: -1, width: 1.4, inset: 0.3 }
+      { x: -17.5, z: -16, bottom: LEVEL.top, top: LEVEL.top + 5.65, nx: 0, nz: -1, width: 1.4, inset: 0.3 }
     ],
     study: { x: 21.4, y: LEVEL.main, z: 12, w: 4, d: 7 },
     // Level 2, the balcony's level: the walkway from the balcony's right side round the right wall, past the study

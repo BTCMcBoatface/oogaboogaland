@@ -3658,7 +3658,7 @@ const hubJumbotron = { name: "hub jumbotron", why: "rule: the rotation runs rece
   record("hub jumbotron: a draft PR draws a different ticker row than the same PR undrafted", r.differs, JSON.stringify({ differs: r.differs }));
 } };
 // The healthiest of its kind, so a prop an earlier step shot at is never the one measured.
-const nextTo = (prop, gap, yaw = "-Math.PI / 2", pitch = 0.3) => `(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const r = B.headquarters.breakables.list.filter((r) => r.owner.prop === "${prop}" && r.owner.active && !r.broken).sort((a, b) => b.health - a.health)[0]; window.__target = r; const t = r.owner.node.position; B.pilot.navigate({ position: { x: t.x - ${gap}, y: a.root.position.y - a.baseY, z: t.z }, yaw: ${yaw}, pitch: ${pitch}, dist: 4 }); B.advance(0.3, 1 / 60); return r.health; })()`;
+const nextTo = (prop, gap, yaw = "-Math.PI / 2", pitch = 0.3) => `(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const r = B.headquarters.breakables.list.filter((r) => r.owner.prop === "${prop}" && r.owner.active && !r.broken && !r.reveal).sort((a, b) => b.health - a.health)[0]; window.__target = r; const t = r.owner.node.position; B.pilot.navigate({ position: { x: t.x - ${gap}, y: a.root.position.y - a.baseY, z: t.z }, yaw: ${yaw}, pitch: ${pitch}, dist: 4 }); B.advance(0.3, 1 / 60); return r.health; })()`;
 const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage, so a box breaks in one, a barrel in two and a rock in four, and the prop comes back", run: async (b) => {
   const swings = {};
   await tapKey(b, "1");
@@ -3672,7 +3672,7 @@ const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage
     }
     swings[prop] = { health, n };
   }
-  const back = await b.evaluate(`(() => { const r = window.__target, B = window.__ooga; for (let t = 0; t < 65; t++) { B.advance(1, 1 / 30); if (!r.broken) return { t: t + 1, health: r.health, active: r.owner.active }; } return null; })()`);
+  const back = await b.evaluate(`(() => { const r = window.__target, B = window.__ooga; for (let t = 0; t < 65; t++) { B.advance(1, 1 / 30); if (!r.broken && !r.reveal) return { t: t + 1, health: r.health, active: r.owner.active }; } return null; })()`);
   record("hub melee: one swing breaks a box, two a barrel and four a rock, and a broken rock is back whole within a minute", swings.crate.n === 1 && swings.barrel.n === 2 && swings.rock.n === 4 && !!back && back.t >= 30 && back.t <= 61 && back.health === swings.rock.health && back.active, JSON.stringify({ swings, back }));
   await b.evaluate(nextTo("rock", 1.175));
   const recharge = await b.evaluate(`(() => {
@@ -3718,7 +3718,9 @@ const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage
       a.weapon.meleeCharge = 1;
       const chargedBefore = r.health;
       crew.releaseSwing(a, false, true);
-      return { ready, recovered, rows, last, switched, finalDamage, chargedDamage: chargedBefore - r.health, labels };
+      const chargedDamage = chargedBefore - r.health;
+      B.advance(1 / 60, 1 / 60);
+      return { ready, recovered, rows, last, switched, finalDamage, chargedDamage, labels };
     } finally { overlay.fillText = fillText; }
   })()`);
   const powers = [5, 1.25, 1.25, 3.125, 5];
@@ -5113,7 +5115,8 @@ const factoryWalking = { name: "factory walking", why: "regression: Factory move
     key("s", true); B.advance(0.65, 1 / 60); key("s", false);
     const off = a.root.position.y - a.baseY;
     // Recreate a shallow overlap left by a landing or relocation, then leave it with ordinary input.
-    const x = d.x + F.REB.console[0] + 0.78 + a.bodyRadius - 0.08, z = d.z + F.REB.console[1];
+    // Stay beside the console without also moving into the crate behind its right corner.
+    const x = d.x + F.REB.console[0] + 0.78 + a.bodyRadius - 0.08, z = d.z + F.REB.console[1] + 0.3;
     B.pilot.navigate({ position: { x, y: d.y, z }, yaw: 0, pitch: 0, dist: 6 }); B.advance(0.1, 1 / 60);
     const overlapped = !F.clearAt(x, z, d.y, a.bodyRadius);
     const inwardBlocked = !F.walkable(x, z, x - 0.05, z, d.y, a.bodyRadius, a.bodyHeight);

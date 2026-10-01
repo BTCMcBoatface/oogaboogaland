@@ -42,6 +42,10 @@ The lifecycle runner's heap accounting now consumes snapshot node records increm
 
 DSB player and character-continuity checks pass (137/137 and 128/128), traversing the current return through ₿IFRÖST before comparing the hub actor. The seated-animation check passes its original ranges, fixed root and compact footprint. A terrain-ray shortcut uses 246,016 additional bytes of cached height bounds; 15,917 deterministic random and boundary-aligned rays match the preceding implementation exactly. All original unit checks pass. The shortcut does not make the movement-performance floor pass.
 
+The next repair batch passes the melee check (127/127), Timechain on both renderers (141/141), factory ladder controls (125/125), factory floor reachability (125/125) and factory walking (127/127). Melee fixtures wait for the restored mesh, and sample damage labels after a drawn frame. The lighthouse has a wider lower landing and a ladder clear of its tower. The console recovery fixture retains its inward-blocked requirement while avoiding a second overlap with the nearby crate.
+
+Timechain's two Canvas taps were rejected because slow frames delayed handlers by 456–477 ms. Gesture duration now uses input event timestamps; the driver queues a real 40 ms press/release without waiting for a slow frame between them. All six wall details open through pointer events on both renderers. The original tap-duration and performance thresholds remain unchanged. A finer outline grid was measured and reverted because it did not improve performance. The unit suite remains 123/123.
+
 This change remains a draft pending clean full-suite/performance validation. It must not close #93 or be represented as a complete solution to its full checklist.
 
 ## Checks for a maintainer

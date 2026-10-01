@@ -1625,5 +1625,39 @@
       }
     ],
     "completeSuitePassed": false
+  },
+  "validationRepairsFollowup": {
+    "unit": {
+      "passed": 123,
+      "total": 123
+    },
+    "focused": {
+      "melee": {
+        "passed": 127,
+        "total": 127
+      },
+      "timechainBothRenderers": {
+        "passed": 141,
+        "total": 141
+      },
+      "factoryLadders": {
+        "passed": 125,
+        "total": 125
+      },
+      "factoryFloor": {
+        "passed": 125,
+        "total": 125
+      },
+      "factoryWalking": {
+        "passed": 127,
+        "total": 127
+      }
+    },
+    "canvasTapDelayedHandlerMs": [
+      456.10000000009313,
+      476.8000000002794
+    ],
+    "performanceGridExperiment": "Reverted: no measured improvement; original thresholds retained.",
+    "fullSuite": "Pending after follow-up changes; preceding full run was 640/679."
   }
 }
