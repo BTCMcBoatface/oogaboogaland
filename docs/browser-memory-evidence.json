@@ -1659,6 +1659,12 @@
       "gorillaInactiveRoofs": {
         "passed": 125,
         "total": 125
+      },
+      "birdsEyeCombatCamera": {
+        "passed": 142,
+        "total": 142,
+        "seconds": 83.8,
+        "console": []
       }
     },
     "canvasTapDelayedHandlerMs": [
@@ -1736,7 +1742,69 @@
         "Exclude complete relief-window roots from the weather fixture.",
         "Keep identical cloud shading while comparing shader offset with physical translation."
       ],
-      "status": "Release fade and isolated rendering pass; remaining camera/cutaway failures and fresh full validation remain outstanding."
+      "status": "Release fade and isolated rendering pass; remaining camera/cutaway failures and fresh full validation remain outstanding.",
+      "focusedAfterWeatherAndFloorCorrection": {
+        "passed": 145,
+        "total": 152,
+        "remainingFailures": 7
+      }
+    },
+    "cameraFollowup": {
+      "focusedBeforePointerRepair": {
+        "passed": 141,
+        "total": 143,
+        "failures": [
+          "HUD pointer capture",
+          "Lower-floor session exceeded the unchanged 120-second limit"
+        ]
+      },
+      "isolatedPointerRouting": {
+        "passed": 1,
+        "total": 1,
+        "locked": true,
+        "secondaryHit": true,
+        "primaryHit": true,
+        "primary": true,
+        "equipped": true,
+        "restored": true,
+        "shots": 0,
+        "afterShots": 0,
+        "console": []
+      },
+      "diagnosis": "Chrome rejected lock on the inactive tab with WrongDocumentError. Page.bringToFront allows the same physical gesture to capture; the fixture now starts with the club and waits for native lock.",
+      "focusedAfterActiveTabRepair": {
+        "passed": 141,
+        "total": 142,
+        "seconds": 98.9,
+        "remainingFailure": "HUD pointer capture after the complete sequence; isolated native capture passes."
+      },
+      "status": "The exact camera regression passes 142/142 after waiting for two drawn frames following tab activation and starting-weapon selection. Lower-floor and full-suite validation remain outstanding."
+    },
+    "terrainFloorClassification": {
+      "upwardHorizontalFloors": 5997,
+      "missingFromImmutableBase": 0,
+      "previousMisclassifiedWalls": 668,
+      "rampWindowCrossingFaces": 6382,
+      "rampWindowCrossingFacesPreserved": true,
+      "remainingRampWindowOwnershipFailures": 2266,
+      "status": "Node diagnosis; focused browser validation remains pending. Upper-route ownership overrides require investigation."
+    },
+    "rampMarkerDirection": {
+      "actualSourceBuilder": true,
+      "labelAlignment": [
+        0.9999969187815597,
+        0.9999969187815596,
+        0.9999978369955935,
+        0.9999978369955935
+      ],
+      "arrowAlignment": [
+        0.9999884205539451,
+        0.9999884205539453,
+        0.9999989727292404,
+        0.9999989727292405
+      ],
+      "threshold": 0.999,
+      "status": "Local authored-segment alignment passes in Node; focused browser validation pending."
     }
   },
   "raceScenery": {

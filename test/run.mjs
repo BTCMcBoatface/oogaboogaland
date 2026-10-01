@@ -3868,6 +3868,9 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     && rightViews.combatFirstBack.mode === "first-person" && rightViews.combatFirstBack.combat, JSON.stringify(rightViews));
   const shoulderFraming = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, a = P.player, rows = [];
+    // The preceding gesture check intentionally ends in first-person.
+    // Return through the real zoom control before measuring shoulder framing.
+    P.hooks.onZoom(1.2); B.advance(1, 1 / 60);
     const sample = () => {
       const C = B.camera, p = a.root.position, dx = C.position.x - C.target.x, dz = C.position.z - C.target.z, length = Math.hypot(dx, dz);
       const side = ((C.position.x - p.x) * dz - (C.position.z - p.z) * dx) / length / a.traits.height;
@@ -4114,7 +4117,13 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     && falling.bird.aimDot < -0.5 && falling.carry.frames === falling.bird.frames && falling.carry.off === falling.bird.off && falling.carry.back === falling.bird.back
     && [falling.carry, falling.bird].every(r => r.off >= 0 && r.back > r.off && r.back < 600 && r.low < -50 && r.gravityFrames > 120 && r.gravityError < 1e-5 && r.ballisticError < 1e-5 && r.departure.x < -0.5 && r.departure.z < -0.5 && r.departure.vx < 0 && r.departure.vz < 0), JSON.stringify(falling));
   record("birds-eye combat: the falling character stays centered and visible above every cut plane until respawn, without a camera-height lag", falling.bird.shown && falling.bird.center < 0.02 && falling.bird.follow < 1e-5 && falling.bird.clearance > 0.06 && falling.bird.low < -50 && falling.bird.back > falling.bird.off, JSON.stringify(falling.bird));
+  // Prior view checks can leave the AK selected; start this swap check with
+  // the club. Native pointer lock needs an active tab as well as emulated focus.
+  await b.send("Page.bringToFront");
+  await b.evaluate(`__ooga.pilot.weaponMode(1)`);
+  await untilPage(b, 'B.pilot.player.weapon.primaryEquipped');
   await b.click(size.x, size.y);
+  await untilPage(b, 'document.pointerLockElement === document.getElementById("scene")');
   const hudPointer = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, a = P.player, canvas = document.getElementById("scene"), reticle = document.getElementById("weapon-reticle");
     B.advance(0.1, 1 / 60);
@@ -4161,17 +4170,21 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
     const entries = [...D.terrainSections, ...D.caveSections], regions = B.renderOpts.cutawayRegions;
     const paths = I.cutawayPaths, pathState = D.cutawayPaths, roof = D.terrainRampRoof;
     const rampMarkers = D.headquarters.rampMarkers.map(marker => {
-      const first = marker.ramp.samples[0], ahead = marker.ramp.samples[Math.min(3, marker.ramp.samples.length - 1)];
-      const dx = ahead.x - first.x, dz = ahead.z - first.z, length = Math.hypot(dx, dz) || 1;
-      const forwardX = Math.sin(marker.frame.rotation.y), forwardZ = Math.cos(marker.frame.rotation.y);
-      const arrowForwardX = Math.sin(marker.arrow.rotation.y), arrowForwardZ = Math.cos(marker.arrow.rotation.y);
+      // The route curves: each mark follows the segment where it stands,
+      // rather than the heading at the mouth several metres away.
+      const alignment = (node, distance) => {
+        const samples = marker.ramp.samples;
+        let i = 1; while (i < samples.length - 1 && samples[i].s < distance) i++;
+        const from = samples[i - 1], to = samples[i], dx = to.x - from.x, dz = to.z - from.z;
+        return (Math.sin(node.rotation.y) * dx + Math.cos(node.rotation.y) * dz) / Math.hypot(dx, dz);
+      };
       return { label: marker.label, channel: marker.channel, visible: marker.node.visible, arrowVisible: marker.arrow.visible,
         model: marker.node.geometry.rampMarker?.label, visual: marker.node.geometry.rampMarker?.visual, markerKind: marker.node.geometry.rampMarker?.kind, columns: marker.node.geometry.rampMarker?.columns, rows: marker.node.geometry.rampMarker?.rows,
         arrowKind: marker.arrow.geometry.rampMarker?.kind, labelDistance: marker.labelDistance, arrowDistance: marker.arrowDistance, scale: marker.frame.scale.x,
         labelSurfaceError: Math.abs(marker.frame.position.y - marker.labelPoint.y - 0.035),
         arrowSurfaceError: Math.abs(marker.arrow.position.y - marker.arrowPoint.y - 0.035),
-        aligned: forwardX * dx / length + forwardZ * dz / length,
-        arrowAligned: arrowForwardX * dx / length + arrowForwardZ * dz / length };
+        aligned: alignment(marker.frame, marker.labelDistance),
+        arrowAligned: alignment(marker.arrow, marker.arrowDistance) };
     });
     // Project the actual label transform through a full camera turn, including
     // the side-on and reversed views that used to mirror or invert the words.
@@ -4257,14 +4270,22 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
           && Math.abs(paths.bottoms[cell] - upperColumn.ceiling) < 1e-6;
       }
     }
-    for (const face of geometry.faces) if (face.cutawayPathKey && face.i.some(index => verts[index * 3 + 1] < face.cutawayPathBottom - 1e-7)) {
+    for (const face of geometry.faces) {
+      if (!face.cutawayPathKey || !face.i.some(index => verts[index * 3 + 1] < face.cutawayPathBottom - 1e-7)) continue;
+      // Floors are horizontal, upward-facing surfaces. Walls above a basement
+      // window can sit below an unrelated upper ramp's ceiling and are roofs.
+      const a = face.i[0] * 3, b = face.i[1] * 3, c = face.i[2] * 3;
+      const normalY = (verts[b + 2] - verts[a + 2]) * (verts[c] - verts[a]) - (verts[b] - verts[a]) * (verts[c + 2] - verts[a + 2]);
+      if (normalY <= 0 || face.i.some(index => verts[index * 3 + 1] !== verts[a + 1])) continue;
       retainedFloors++; floorsPreserved = floorsPreserved && baseFaces.has(face);
     }
     let rampWindowFaces = 0, rampWindowBaseFaces = 0, rampWindowCrossingFaces = 0, rampWindowFacesPreserved = true, rampWindowFaceOwnership = true;
     for (const face of geometry.faces) {
-      if (!face.headquartersWindowReveal || !face.cutawayPathKey) continue;
+      const window = H.windows[face.windowIndex];
+      // Room windows can overlap a ramp column without belonging to its route.
+      if (!face.headquartersWindowReveal || !face.cutawayPathKey || window?.kind !== "ramp") continue;
       rampWindowFaces++;
-      const decoded = decodePath(face.cutawayPathKey), window = H.windows[face.windowIndex];
+      const decoded = decodePath(face.cutawayPathKey);
       rampWindowFaceOwnership = rampWindowFaceOwnership && decoded.owners === 1 && window?.kind === "ramp"
         && decoded.channel === window.cutawayChannel && windowStations[decoded.channel].has(decoded.station);
       let below = false, above = false;
