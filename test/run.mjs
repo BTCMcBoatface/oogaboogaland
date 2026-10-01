@@ -2320,15 +2320,16 @@ const orbitFlow = async (b) => {
 // `node test/run.mjs race mine` runs the global unit tier plus those scenes; `full` runs every scene and the
 // perf floor; `perf` runs the perf floor alone; `unit` (or nothing) runs only the global tier.
 // Eight lanes saturate a 16-core box (measured 2026-09-20); raising it only adds heat.
-const SCENES = ["hub", "lab", "race", "drop", "orbit", "mine", "pool", "dsb", "factory", "bifrost", "arcade", "skee", "hoops", "shy", "claw", "hockey", "billiards", "darts", "pinball", "ride", "invaders", "snake", "pong", "stampede", "flap", "breaker", "dash", "stacker"];
+const SCENES = ["hub", "lab", "race", "drop", "orbit", "mine", "pool", "dsb", "factory", "bifrost", "poker", "arcade", "skee", "hoops", "shy", "claw", "hockey", "billiards", "darts", "pinball", "ride", "invaders", "snake", "pong", "stampede", "flap", "breaker", "dash", "stacker"];
 const LANES = Number(process.env.LANES) || 8;
 const ARGS = process.argv.slice(2);
-for (const a of ARGS) if (!SCENES.includes(a) && !["unit", "perf", "full"].includes(a)) throw new Error(`Unknown argument "${a}" (unit | perf | full | ${SCENES.join(" | ")})`);
+for (const a of ARGS) if (!SCENES.includes(a) && !["unit", "perf", "full", "poker-protocol"].includes(a)) throw new Error(`Unknown argument "${a}" (unit | perf | full | poker-protocol | ${SCENES.join(" | ")})`);
 const ONLY = process.env.ONLY || ""; // Optional substring within the requested scenes; defaults are unchanged.
 const FULL = ARGS.includes("full");
 const PICKED = FULL ? SCENES : SCENES.filter((s) => ARGS.includes(s));
 const PERF = FULL || ARGS.includes("perf");
-const UNIT = !(ARGS.length === 1 && ARGS[0] === "perf");
+const UNIT = !(ARGS.length === 1 && ["perf", "poker-protocol"].includes(ARGS[0]));
+const PROTOCOL = FULL || ARGS.includes("poker-protocol");
 // What keeps the cruft out: every step says why it exists, or the run does not start.
 const WHY = /^(regression|playthrough|rule|contract): \S/;
 const SCENE_BUDGET_S = 25;
@@ -6855,6 +6856,36 @@ scene("flap", { steps: [carnivalPlay("flap", 0.5), trip("flap")] });
 scene("breaker", { steps: [carnivalPlay("breaker", 0.5), trip("breaker")] });
 scene("dash", { steps: [carnivalPlay("dash", 0.5), trip("dash")] });
 scene("stacker", { steps: [carnivalPlay("stacker", 0.5), trip("stacker")] });
+scene("poker", { query: "character=portlandhodl", steps: [{ name: "poker floor and play", why: "playthrough: a visitor walks the floor, fills a table, plays to settlement and stands without exposing hidden cards", run: async b => {
+  await b.evaluate(`document.querySelector('[data-intro="poker"] .game-intro-go').click()`);
+  const walking = await walkKeys(b, "portlandhodl", 0, 18, [0, 1.5], 0.45);
+  record("poker walking: spectators move with WASD from two camera angles", allWalk(walking), JSON.stringify(walking));
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, P = BL.scenes.poker.debug.poker, click = a => document.querySelector('[data-poker-action="' + a + '"]').click();
+    const count = P.room.tables.length, seats = P.room.tables.every(t => t.chairs.length === 9), dealers = P.room.tables.every(t => t.agent.parts.torso.children.length >= 4);
+    P.select(0); click("join"); for (let i = 0; i < 4; i++) click("bots"); click("start");
+    const t = P.session.tables[0], privateCards = t.snapshot().seats.every(s => s.cards.every(c => c === null));
+    let guard = 0; while (t.playing && guard++ < 500) { if (t.snapshot("local-player").legal) click("call"); B.advance(0.81, 1 / 30); }
+    const done = t.snapshot(), total = done.seats.reduce((n, s) => n + s.stack, 0), shown = document.querySelector('[data-poker="street"]').textContent;
+    click("stand"); P.select(9); click("bots"); click("start"); B.advance(1, 1 / 30);
+    return { count, seats, dealers, privateCards, phase: done.phase, total, shown, tableTen: P.session.tables[9].snapshot().hand, standing: !document.body.hasAttribute("data-poker-seated") };
+  })()`);
+  record("poker local play: ten suited dealers, 90 chairs, nine-player settlement, table ten playable and private snapshots", r.count === 10 && r.seats && r.dealers && r.privateCards && r.phase === "showdown" && r.total === 9000 && r.shown === "Hand complete" && r.tableTen === 1 && r.standing, JSON.stringify(r));
+  if (process.env.POKER_SHOTS) {
+    await b.evaluate(`(() => { const P = BL.scenes.poker.debug.pilot; P.release(true); P.goPreset("entrance"); __ooga.advance(2); })()`);
+    await b.screenshot(join(process.env.POKER_SHOTS, "poker-floor.png"));
+  }
+} }, trip("poker")] });
+scene("poker", { label: "canvas2d", query: "canvas2d=1", steps: [{ name: "poker canvas2d", why: "rule: the floor and table controls work on the fallback renderer", run: async b => {
+  await b.evaluate(`document.querySelector('[data-intro="poker"] .game-intro-go').click()`);
+  const r = await b.evaluate(`(() => { const P = BL.scenes.poker.debug.poker; P.action("join"); P.action("bots"); P.action("start"); __ooga.advance(1); return { kind: __ooga.renderer.kind, phase: P.session.tables[0].snapshot().phase, nodes: __ooga.stats().visibleNodes }; })()`);
+  record("poker fallback: stone tables and a playable hand on Canvas 2D", r.kind === "canvas2d" && r.phase !== "waiting" && r.nodes > 120, JSON.stringify(r));
+} }] });
+scene("poker", { opts: PHONE_SIZE, steps: [phone("poker", { card: '[data-intro="poker"]', required: ["#joy-move", "#joy-look", '[data-poker-action="quick"]'] }), { name: "poker phone actions", why: "rule: seated touch players can read private cards and access legal actions without horizontal overflow", run: async b => {
+  const r = await b.evaluate(`(() => { const P = BL.scenes.poker.debug.poker; document.querySelector('[data-poker-action="quick"]').click(); const panel = document.querySelector('[data-poker="focus"]'), r = panel.getBoundingClientRect(); return { fits: !panel.hidden && r.left >= 0 && r.right <= innerWidth && panel.scrollWidth <= panel.clientWidth + 1, seats: document.querySelectorAll(".poker-seats button").length, cards: document.querySelectorAll(".poker-hand .poker-card").length }; })()`);
+  record("poker phone: nine seat choices and two private cards fit the panel", r.fits && r.seats === 9 && r.cards === 2, JSON.stringify(r));
+  if (process.env.POKER_SHOTS) await b.screenshot(join(process.env.POKER_SHOTS, "poker-phone.png"));
+} }] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
 scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
@@ -6939,7 +6970,7 @@ scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ nam
   record("dsb compatibility: built CSP preserves exactly the weather and DSB network permissions", await b.evaluate(`(() => {
     const policy = document.querySelector('meta[http-equiv="Content-Security-Policy"]').content;
     const sources = name => policy.split(";").map(s => s.trim().split(/\\s+/)).find(s => s[0] === name).slice(1).sort().join("|");
-    return sources("connect-src") === ["https:", "wss:"].sort().join("|") && sources("media-src") === "https://stream.noderunnersradio.com" && !policy.includes("unsafe-");
+    return sources("connect-src") === ["'self'", "https:", "wss:"].sort().join("|") && sources("worker-src") === "'self'" && sources("media-src") === "https://stream.noderunnersradio.com" && !policy.includes("unsafe-");
   })()`));
   record("dsb registry: c10 stays sealed and DSB is internally addressable without a cave", await b.evaluate(`(BL.caves.slots.find(s => s.id === "c10").status === "dark" && BL.caves.slots.find(s => s.id === "c10").scene === null) && !BL.caves.slots.some(s => s.scene === "dsb") && !!BL.scenes.dsb`));
   record("dsb compatibility: hub keeps the Agent module without spawning a standalone gorilla", await b.evaluate(`__ooga.scene === "hub" && !__ooga.agent && !!BL.agent && !!BL.characters.get("rules-without-rulers") && Object.hasOwn(__ooga, "agent") && Object.hasOwn(__ooga, "dsb") && !__ooga.dsb`));
@@ -7737,6 +7768,292 @@ const factoryChecks = (BL) => {
     record("factory demo node: the first channel reaches the forge within ten seconds and the forge never waits a minute, while the number of open lines holds steady", forge[0] < 10 && Math.max(...gaps) < 60 && counts.length > 8 && Math.max(...counts) - Math.min(...counts) <= 2, JSON.stringify({ first: forge[0], longest: Math.max(...gaps), openLines: [Math.min(...counts), Math.max(...counts)], channels: start }));
   }
 };
+const pokerChecks = (BL) => {
+  const R = BL.pokerRules, c = text => "23456789TJQKA".indexOf(text[0]) + "cdhs".indexOf(text[1]) * 13;
+  const cards = text => text.split(" ").map(c);
+  const fixtures = ["Ac Jd 9h 6s 3c", "Ac Ad 9h 6s 3c", "Ac Ad 9h 9s 3c", "Ac Ad Ah 6s 3c", "Ac 2d 3h 4s 5c", "Ac Jc 9c 6c 3c", "Ac Ad Ah 6s 6c", "Ac Ad Ah As 3c", "Tc Jc Qc Kc Ac"];
+  const scores = fixtures.map(text => R.evaluate(cards(text)));
+  record("poker rules: all hand categories, ace-low straight, kickers and seven-card best hand", scores.every((s, i) => s.category === i && (!i || s.score > scores[i - 1].score)) && R.evaluate(cards("2c 3d 4h 5s 6c")).score > scores[4].score && R.evaluate(cards("Ac Ad Kh Qs 3c")).score > R.evaluate(cards("Ac Ad Kh Js 3c")).score && R.evaluate(cards("Tc Jc Qc Kc Ac 2d 2h")).score === scores[8].score);
+  const board = cards("2c 3d 7h 9s Jc"), hands = ["Ac Ad", "Kc Kd", "Qc Qd", "Tc 8d"];
+  const seats = new Array(R.SEATS).fill(null);
+  [50, 100, 200, 200].forEach((n, i) => { seats[i] = { cards: cards(hands[i]), totalBet: n, inHand: true, folded: i === 3 }; });
+  const paid = R.settle(seats, board, 0);
+  record("poker pots: unequal all-ins split main and side pots, folded chips remain and rake is zero", paid.awards.join() === [200, 150, 200, ...new Array(R.SEATS - 3).fill(0)].join() && paid.pots.reduce((n, p) => n + p.amount, 0) === 550, JSON.stringify(paid));
+  seats[3].totalBet = 100;
+  const refund = R.settle(seats, board, 0);
+  record("poker pots: uncalled excess is refunded", refund.awards[2] === 100 && refund.pots.at(-1).refund && refund.pots.at(-1).amount === 100);
+  const tieSeats = new Array(R.SEATS).fill(null);
+  for (let i = 0; i < 3; i++) tieSeats[i] = { cards: cards(hands[i]), totalBet: 1, inHand: true, folded: i === 1 };
+  const tie = R.settle(tieSeats, cards("Ts Js Qs Ks As"), 0);
+  record("poker pots: board plays and the odd chip goes clockwise left of the button", tie.awards[0] === 1 && tie.awards[2] === 2);
+  const source = readFileSync(join(root, "src/js/poker-rules.js"), "utf8");
+  let draws = 0;
+  const rejection = { window: {}, crypto: { getRandomValues(a) { a[0] = draws++ ? 4 : 0xffffffff; return a; } } };
+  runInNewContext(source, rejection);
+  record("poker shuffle: rejects modulo-bias tail before returning a bounded integer", rejection.window.BL.pokerRules.randomInt(3) === 1 && draws === 2);
+  const unavailable = { window: {} }; runInNewContext(source, unavailable);
+  const stopped = unavailable.window.BL.pokerRules.create(); stopped.join("a", "A"); stopped.join("b", "B");
+  let secureFailed = false; try { stopped.start(); } catch { secureFailed = true; }
+  record("poker shuffle: missing secure entropy fails before hand or balance mutation", secureFailed && stopped.snapshot().hand === 0 && stopped.snapshot().seats[0].stack === 1000);
+  let seed = 87923;
+  const seeded = { window: {}, crypto: { getRandomValues(a) { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; a[0] = seed >>> 0; return a; } } };
+  runInNewContext(source, seeded);
+  const Q = seeded.window.BL.pokerRules, table = Q.create();
+  for (let i = 0; i < Q.SEATS; i++) table.join("p" + i, "Player " + i, true);
+  let full = false; try { table.join("extra", "Extra"); } catch { full = true; }
+  table.start();
+  const publicView = table.snapshot(), own = table.snapshot("p0"), turnId = publicView.seats[publicView.turn].id;
+  const before = JSON.stringify(table.snapshot(turnId));
+  let rejected = 0;
+  for (const value of [-1, 10.5, Infinity, 1001]) try { table.act(turnId, "raise", value); } catch { rejected++; }
+  try { table.act("not-seated", "call"); } catch { rejected++; }
+  try { table.start(); } catch { rejected++; }
+  try { table.leave("p0"); } catch { rejected++; }
+  record("poker actions: nine-seat cap, invalid raises, out-of-turn and mid-hand seat changes fail atomically", full && rejected === 7 && JSON.stringify(table.snapshot(turnId)) === before);
+  own.seats[0].cards[0] = -9; own.seats[0].stack = 1;
+  record("poker privacy: spectator and other-seat snapshots hide hole cards and snapshot mutation cannot alter play", publicView.seats.every(s => s.cards.every(c => c === null)) && table.snapshot("p0").seats[0].cards.every(c => Number.isInteger(c) && c >= 0) && own.seats.slice(1).every(s => s.cards.every(c => c === null)) && table.snapshot().seats[0].stack > 1 && !("deck" in publicView));
+  let conservation = true, hiddenFolded = true, bounded = true, finished = 0;
+  for (let h = 0; h < 300; h++) {
+    if (h) { for (let i = 0; i < Q.SEATS; i++) table.refill("p" + i); table.start(); }
+    let s = table.snapshot(), total = s.pot + s.seats.reduce((n, p) => n + p.stack, 0), steps = 0;
+    while (table.playing && steps++ < 1000) {
+      const id = s.seats[s.turn].id, l = table.snapshot(id).legal;
+      // All-ins interleaved with short calls, folds and full raises exercise real
+      // settlement paths across changing stacks; this is not a shuffle proof.
+      if (h % 3 === 0 && l.canRaise) table.act(id, "raise", l.max);
+      else Q.botAction(table, id);
+      s = table.snapshot();
+      conservation = conservation && s.pot + s.seats.reduce((n, p) => n + p.stack, 0) === total && s.seats.every(p => Number.isSafeInteger(p.stack) && p.stack >= 0);
+    }
+    finished += s.phase === "showdown" ? 1 : 0;
+    hiddenFolded = hiddenFolded && s.seats.filter(p => p.folded).every(p => p.cards.every(c => c === null));
+    bounded = bounded && s.history.length <= 12 && s.board.length <= 5;
+  }
+  record("poker playthrough: 300 nine-player hands terminate with conserved whole chips, bounded state and folded cards private", finished === 300 && conservation && hiddenFolded && bounded, JSON.stringify({ finished, conservation, hiddenFolded, bounded }));
+  const headsUp = Q.create(); headsUp.join("a", "A"); headsUp.join("b", "B"); headsUp.start();
+  const hu = headsUp.snapshot(); headsUp.act("a", "call"); headsUp.act("b", "check");
+  record("poker heads-up: button is small blind, acts first preflop and last postflop", hu.dealer === 0 && hu.turn === 0 && hu.seats[0].roundBet === 5 && hu.seats[1].roundBet === 10 && headsUp.snapshot().phase === "flop" && headsUp.snapshot().turn === 1);
+  {
+    const rows = [];
+    // Three players: pot 15, facing 10. A pot-sized raise calls 10 first,
+    // then raises 25, for a total of 35 (not 25 or 45).
+    for (const [preset, expected] of [["min", 20], ["half", 23], ["threeQuarter", 29], ["pot", 35], ["all", 1000]]) {
+      const t = Q.create(); for (const id of ["a", "b", "c"]) t.join(id, id);
+      t.start(); const before = t.snapshot("a"), amount = BL.pokerHud.betAmount(before, preset);
+      t.act("a", "raise", amount); const after = t.snapshot();
+      rows.push({ preset, amount, ok: amount === expected && after.seats[0].roundBet === expected && after.pot === expected + 15 });
+    }
+    record("poker sizing: presets include the call, submit legal street totals and move the displayed chips", rows.every(r => r.ok), JSON.stringify(rows));
+    const t = Q.create(); for (const id of ["a", "b", "c"]) t.join(id, id);
+    t.start(); t.act("a", "raise", 995);
+    const short = t.snapshot("b"), amount = BL.pokerHud.betAmount(short, "pot");
+    t.act("b", "raise", amount); t.act("c", "call"); const locked = t.snapshot("a");
+    record("poker sizing: short all-in caps the preset and never bypasses closed raise rights", short.legal.min > short.legal.max && amount === 1000 && !locked.legal.canRaise && BL.pokerHud.betAmount(locked, "all") === null);
+    record("poker public state: blind markers and contributions are exposed without private cards", hu.smallBlind === hu.dealer && hu.bigBlind === 1 && hu.seats[0].totalBet === 5 && hu.seats[1].totalBet === 10 && hu.seats[0].lastAction === "Small blind" && hu.seats.every(p => !p || p.cards.every(c => c === null)));
+  }
+  const walk = BL.pokerModels.walkable, actor = { bodyRadius: 0.65 };
+  record("poker floor: wide spectators can traverse the main and row aisles; table and chair sweeps collide", walk(0, 34, 0, -34, 0, 2, actor) && walk(-21, 18, 21, 18, 0, 2, actor) && !walk(-18, 24, -4, 24, 0, 2, actor) && !walk(22, 0, 26, 0, 0, 2, actor));
+  {
+    // Contract: changing the scenery during a hand must keep pick targets,
+    // chairs, dealers and private/public card nodes alive without growing the room.
+    const room = BL.pokerModels.build(), targets = room.tables.map(t => t.top), dealers = room.tables.map(t => t.agent);
+    const chairs = room.tables.map(t => t.chairs.slice()), count = node => 1 + node.children.reduce((n, c) => n + count(c), 0);
+    const baseline = count(room.root), first = room.tables[0], face = BL.pokerCards.geometry(0);
+    first.board[0].geometry = face; first.board[0].visible = true; first.backs[0].visible = true; first.chips[0].scale.y = 7;
+    let stable = true;
+    try {
+      for (let pass = 0; pass < 2; pass++) for (const theme of BL.pokerThemes.themes) {
+        room.setTheme(theme.id);
+        stable &&= room.theme === theme.id && room.root.children.length === 11 &&
+          room.tables.every((t, i) => t.top === targets[i] && t.agent === dealers[i] && t.chairs.every((c, j) => c === chairs[i][j])) &&
+          first.board[0].geometry === face && first.board[0].visible && first.backs[0].visible && first.chips[0].scale.y === 7;
+      }
+      room.setTheme("gatsby");
+      record("poker themes: repeated switches preserve seats, dealers and dealt cards with a bounded scene", stable && count(room.root) === baseline && BL.pokerModels.geometry("invalid") === BL.pokerModels.geometry("gatsby"));
+    } finally { for (const t of room.tables) t.agent.dispose(); }
+  }
+};
+const pokerProtocolChecks = async () => {
+  const { loadProtocol, source: protocolSource } = await import("../server/poker/load.mjs");
+  const { createECDH, randomBytes } = await import("node:crypto");
+  const { createPokerServer } = await import("../server/poker/server.mjs");
+  const { Worker } = await import("node:worker_threads");
+  const BL = loadProtocol(), C = BL.pokerCrypto, M = BL.pokerMatch, E = C.math;
+  const clone = value => JSON.parse(JSON.stringify(value));
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  const rejects = async fn => { try { await fn(); return false; } catch { return true; } };
+  try {
+    const scalars = [1n, 2n, 3n, E.N - 1n, ...Array.from({ length: 12 }, () => BigInt("0x" + randomBytes(32).toString("hex")) % (E.N - 1n) + 1n)];
+    for (const n of scalars) {
+      const native = createECDH("prime256v1"); native.setPrivateKey(Buffer.from(n.toString(16).padStart(64, "0"), "hex"));
+      const p = E.mul(E.G, n); check(E.encode(p) === native.getPublicKey("hex", "uncompressed"), "P-256 disagrees with native OpenSSL");
+      check(E.same(p, E.decode(E.encode(p))) && E.same(E.add(p, E.sub(E.O, p)), E.O), "Group inverse or encoding failed");
+      const peer = createECDH("prime256v1"); peer.generateKeys();
+      const shared = E.encode(E.mul(E.decode(peer.getPublicKey("hex", "uncompressed")), n)).slice(2, 66);
+      check(shared === native.computeSecret(peer.getPublicKey()).toString("hex"), "ECDH disagrees with native OpenSSL");
+    }
+    check(E.same(E.mul(E.G, E.N), E.O), "Wrong group order");
+    for (const bad of ["00", "04" + "0".repeat(128), "04" + "f".repeat(128), "02" + "0".repeat(64), {}, ""]) check(await rejects(() => E.decode(bad, true)), "Invalid public point accepted");
+    const p = C.player(), signature = await p.sign("test", { n: 1 });
+    check(await C.signatureValid(p.publicKey, "test", { n: 1 }, signature) && !await C.signatureValid(p.publicKey, "test", { n: 2 }, signature) && !await C.signatureValid(p.publicKey, "other", { n: 1 }, signature), "Signature domain binding failed");
+    p.dispose(); check(await rejects(() => p.sign("test", {})), "Disposed key still signs");
+    record("poker protocol: curve arithmetic matches native P-256 and rejects invalid points and signatures", true);
+  } catch (e) { record("poker protocol: curve arithmetic matches native P-256 and rejects invalid points and signatures", false, e.stack); return; }
+  try {
+    let count = 0;
+    const exercise = async p => {
+      const out = await E.walkNetwork(p.map((_, i) => i), E.route(p), async (pair, swap) => swap ? [pair[1], pair[0]] : pair);
+      check(p.every((destination, i) => out[destination] === i), "Permutation was not routed"); count++;
+    };
+    const perms = function* (a, start = 0) { if (start === a.length) { yield a.slice(); return; } for (let i = start; i < a.length; i++) { [a[start], a[i]] = [a[i], a[start]]; yield* perms(a, start + 1); [a[start], a[i]] = [a[i], a[start]]; } };
+    for (let n = 1; n <= 6; n++) for (const p of perms(Array.from({ length: n }, (_, i) => i))) await exercise(p);
+    for (let i = 0; i < 64; i++) await exercise(BL.pokerRules.shuffledDeck());
+    check(await rejects(() => E.route([0, 0])) && count > 900, "Malformed permutation accepted");
+    record("poker protocol: switch routing realizes arbitrary permutations including odd subnetworks", true, `${count} routes`);
+  } catch (e) { record("poker protocol: switch routing realizes arbitrary permutations including odd subnetworks", false, e.stack); return; }
+  let completedRecord;
+  try {
+    const started = performance.now(), n = BL.pokerRules.SEATS, identities = Array.from({ length: n }, () => C.player()), handKeys = identities.map(() => C.player());
+    const stacks = [1000, 90, 160, 240, 320, 400, 480, 560, 640].slice(0, n), total = stacks.reduce((a, b) => a + b);
+    const initial = { game: { seats: identities.map((p, i) => ({ id: p.publicKey, name: "Player " + (i + 1), stack: stacks[i] })), dealer: -1, hand: 0, version: 0 }, counters: [], epoch: 0 };
+    const match = M.create(0, initial);
+    const request = async (i, op, data) => {
+      const state = match.state(), value = { table: 0, signer: identities[i].publicKey, seq: (state.counters.find(([id]) => id === identities[i].publicKey)?.[1] || 0) + 1, op,
+        data: { ...(state.context && op !== "start" ? { hand: state.context.nonce, epoch: state.context.epoch } : {}), ...data } };
+      return { ...value, signature: await identities[i].sign("command", value) };
+    };
+    const send = async (i, op, data) => { const req = await request(i, op, data); await match.submit(req); return req; };
+    await send(0, "start", { nonce: C.nonce() });
+    for (let i = 0; i < n; i++) await send(i, "key", { key: handKeys[i].publicKey, proof: await handKeys[i].sign("hand-key", [match.state().context, identities[i].publicKey]) });
+    for (let i = 0; i < n; i++) {
+      const s = match.state(), context = await match.shuffleContext(identities[i].publicKey);
+      const shuffle = await C.shuffle(s.deck, s.aggregate, context);
+      if (!i) {
+        const before = match.state().root, broken = clone(shuffle); broken.gates[0].out[0] = broken.gates[0].out[1];
+        check(await rejects(async () => match.submit(await request(i, "shuffle", { shuffle: broken }))) && match.state().root === before, "Forged shuffle mutated the hand");
+        check(await rejects(() => C.verifyShuffle(s.deck, s.aggregate, ["wrong hand"], shuffle)), "Shuffle proof replayed in another hand");
+        check(await rejects(() => C.verifyShuffle(s.deck, s.aggregate, context, { gates: shuffle.gates.slice(1) })), "Truncated proof accepted");
+      }
+      await send(i, "shuffle", { shuffle });
+    }
+    check(match.phase === "ack", "Deck was dealt before agreement");
+    for (let i = 0; i < n; i++) await send(i, "ack", { root: match.state().ackRoot });
+    const holeState = match.state(), ownPosition = holeState.plan.holes[0].positions[0], need = holeState.requested[0].indices;
+    const forbidden = need.map(i => [i, []]); forbidden[0] = [ownPosition, await handKeys[0].share(holeState.deck[ownPosition], match.shareContext(identities[0].publicKey, ownPosition))];
+    const before = holeState.root;
+    check(await rejects(async () => match.submit(await request(0, "shares", { shares: forbidden }))) && match.state().root === before, "Private owner share was accepted before showdown");
+    let folded = -1, duplicateChecked = false;
+    for (let moves = 0; match.active && moves < 120; moves++) {
+      const s = match.state();
+      if (["hole", "board", "showdown"].includes(s.phase)) {
+        const requested = s.requested.find(r => r.indices.some(i => !s.shares.find(([id]) => id === r.id)?.[1].some(([j]) => j === i)));
+        check(!!requested, "No participant can advance dealing");
+        const i = identities.findIndex(p => p.publicKey === requested.id), known = new Map(s.shares.find(([id]) => id === requested.id)?.[1] || []), shares = [];
+        for (const index of requested.indices.filter(index => !known.has(index))) shares.push([index, await handKeys[i].share(s.deck[index], match.shareContext(requested.id, index))]);
+        if (shares.length) {
+          const [position, proof] = shares[0];
+          check(!await C.shareValid(handKeys[i].publicKey, s.deck[position], ["wrong card context"], proof), "Share accepted under the wrong context");
+        }
+        await send(i, "shares", { shares });
+      } else if (s.phase === "betting") {
+        if (folded < 0) {
+          const allCards = [];
+          for (let i = 0; i < n; i++) {
+            const mine = s.plan.holes[i];
+            for (const position of mine.positions) {
+              const other = s.shares.filter(([id]) => id !== mine.id).map(([, entries]) => new Map(entries).get(position));
+              check(other.length === n - 1 && other.every(Boolean), "Missing private dealing share");
+              const card = handKeys[i].open(s.deck[position], other); allCards.push(card);
+              check(!new Map(s.shares.find(([id]) => id === mine.id)?.[1] || []).has(position), "Owner share leaked during private dealing");
+            }
+          }
+          check(new Set(allCards).size === n * 2 && s.state.seats.every(p => p.cards.every(c => c === null)), "Private hands are not unique and hidden");
+          folded = s.state.turn;
+          await send(folded, "act", { action: "fold", amount: null, version: s.state.version });
+        } else {
+          const i = s.state.turn, legal = match.state(identities[i].publicKey).state.legal;
+          const req = await send(i, "act", { action: legal.canRaise ? "raise" : legal.check ? "check" : "call", amount: legal.canRaise ? legal.max : null, version: s.state.version });
+          if (!duplicateChecked) { const after = match.state().root; await match.submit(req); check(match.state().root === after, "A repeated command spent chips twice"); const altered = clone(req); altered.data.amount = 1; check(await rejects(() => match.submit(altered)), "Altered replay accepted"); duplicateChecked = true; }
+        }
+      } else throw new Error("Unexpected phase " + s.phase);
+    }
+    const final = match.state(); completedRecord = match.export();
+    check(final.phase === "complete" && final.state.result.pots.length > 3 && final.state.seats.reduce((n, p) => n + p.stack, 0) === total, "Nine-player side pots did not conserve chips");
+    check(final.state.seats[folded].cards.every(c => c === null), "Folded cards became public");
+    for (const position of final.plan.holes[folded].positions) check(!new Map(final.shares.find(([id]) => id === identities[folded].publicKey)[1]).has(position), "Folded owner's share entered the record");
+    const replayed = await M.replay(completedRecord);
+    check(C.canonical(replayed.state().state.result) === C.canonical(final.state.result) && replayed.state().root === final.root, "Independent replay disagrees with the payout");
+    const changed = clone(completedRecord); changed.events[0].request.data.nonce = C.nonce(); check(await rejects(() => M.replay(changed)), "Changed transcript accepted");
+    const sealed = BL.pokerRules.createSealed(initial.game); sealed.start(); sealed.act(sealed.snapshot().seats[sealed.snapshot().turn].id, "raise", 100); sealed.abort();
+    check(sealed.snapshot().seats.every((p, i) => p.stack === stacks[i]) && sealed.snapshot().pot === 0, "Canceled commitments were not refunded exactly");
+    for (const key of [...identities, ...handKeys]) key.dispose();
+    record("poker protocol: nine-player private deal, hostile proofs, side pots, replay and folded-card privacy", true, `${Math.round((performance.now() - started) / 1000)}s; ${JSON.stringify(completedRecord).length} byte public record`);
+  } catch (e) { record("poker protocol: nine-player private deal, hostile proofs, side pots, replay and folded-card privacy", false, e.stack); return; }
+  // playthrough: two actual worker clients join the HTTP service, jointly shuffle,
+  // play to settlement and export a record. This is Node, not a browser assertion.
+  const origins = new Set(), service = createPokerServer({ origins });
+  const workers = [], states = [], failures = [];
+  try {
+    await new Promise(resolve => service.server.listen(0, "127.0.0.1", resolve));
+    const origin = `http://127.0.0.1:${service.server.address().port}`; origins.add(origin);
+    const workerSource = "self.window = self;\n" + protocolSource + "\n" + readFileSync(join(root, "src/js/poker-worker.js"), "utf8");
+    const wrapper = `const { parentPort, workerData } = require('node:worker_threads'); const vm = require('node:vm'); const { webcrypto } = require('node:crypto');
+      const ctx = { crypto: webcrypto, TextEncoder, setTimeout, clearTimeout, AbortController, URLSearchParams, postMessage: m => parentPort.postMessage(m),
+        fetch: (path, options = {}) => fetch(new URL(path, workerData.origin), { ...options, headers: { Origin: workerData.origin, ...options.headers } }) };
+      ctx.self = ctx; vm.runInNewContext(workerData.source, ctx); parentPort.on('message', data => ctx.onmessage({ data }));`;
+    const waitFor = async (predicate, max = 180000) => { const start = Date.now(); while (!predicate()) { if (failures.length) throw new Error(failures.join("; ")); if (Date.now() - start > max) throw new Error("Worker playthrough timed out: " + states.map(s => s?.fairness.phase).join(",")); await new Promise(r => setTimeout(r, 40)); } };
+    for (let i = 0; i < 2; i++) {
+      const w = new Worker(wrapper, { eval: true, workerData: { origin, source: workerSource } }); workers.push(w);
+      w.on("error", e => failures.push(e.message));
+      w.on("message", m => { if (m.type === "state") states[i] = m.packet; if (m.type === "fatal") failures.push(m.message); });
+      w.postMessage({ type: "connect", table: 0 });
+    }
+    await waitFor(() => states.filter(Boolean).length === 2);
+    workers[0].postMessage({ type: "action", name: "join", value: { name: "First" } });
+    workers[1].postMessage({ type: "action", name: "join", value: { name: "Second" } });
+    await waitFor(() => states.every(s => s.tables[0].state.seats.filter(Boolean).length === 2));
+    workers[0].postMessage({ type: "action", name: "start" });
+    await waitFor(() => states.every(s => s.fairness.phase === "betting"));
+    for (let rounds = 0; rounds < 40 && !states.every(s => s.fairness.phase === "complete"); rounds++) {
+      const seat = states[0].tables[0].state.turn, actingId = states[0].tables[0].state.seats[seat]?.id, i = states.findIndex(s => s.identity === actingId);
+      if (i >= 0 && states[i].tables[0].state.legal) {
+        const version = states[i].tables[0].state.version;
+        workers[i].postMessage({ type: "action", name: "call", expectedVersion: version });
+        await waitFor(() => states.every(s => s.tables[0].state.version !== version));
+      }
+      await waitFor(() => states.every(s => ["betting", "complete"].includes(s.fairness.phase)));
+    }
+    check(states.every(s => s.fairness.phase === "complete" && s.tables[0].state.seats.filter(Boolean).reduce((n, p) => n + p.stack, 0) === 2000), "HTTP clients did not finish the same hand");
+    check(states[0].fairness.root === states[1].fairness.root, "Clients disagreed about the hand fingerprint");
+    const denied = await fetch(origin + "/poker/api/command", { method: "POST", headers: { Origin: "https://unrelated.invalid", "Content-Type": "application/json" }, body: "{}" });
+    check(denied.status === 403, "Cross-origin mutation was accepted");
+    const unauth = await fetch(origin + "/poker/api/state?table=0"); check(unauth.status === 401, "Unauthenticated session data exposed");
+    record("poker protocol: real HTTP worker clients complete a hand and enforce connection boundaries", true);
+  } catch (e) { record("poker protocol: real HTTP worker clients complete a hand and enforce connection boundaries", false, e.stack); }
+  finally { for (const w of workers) await w.terminate(); service.server.closeAllConnections(); await new Promise(resolve => service.server.close(resolve)); }
+  try {
+    let time = 0; const origins = new Set(), service = createPokerServer({ origins, clock: () => time });
+    const identities = [C.player(), C.player()], tokens = [];
+    try {
+      await new Promise(resolve => service.server.listen(0, "127.0.0.1", resolve)); const origin = `http://127.0.0.1:${service.server.address().port}`; origins.add(origin);
+      const post = (path, body, token) => fetch(origin + path, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: JSON.stringify(body) });
+      for (const identity of identities) { const nonce = C.nonce(), r = await post("/poker/api/session", { publicKey: identity.publicKey, nonce, signature: await identity.sign("connect", nonce) }); tokens.push((await r.json()).token); }
+      const request = async (i, seq, op, data) => { const value = { table: 0, signer: identities[i].publicKey, seq, op, data }; return { ...value, signature: await identities[i].sign("command", value) }; };
+      for (let i = 0; i < 2; i++) check((await post("/poker/api/command", await request(i, 1, "join", { name: "Timeout" }), tokens[i])).ok, "Join failed");
+      const start = await request(0, 2, "start", { nonce: C.nonce() }); check((await post("/poker/api/command", start, tokens[0])).ok, "Start failed");
+      time = 80000; check((await post("/poker/api/command", start, tokens[0])).ok, "Idempotent retry failed");
+      time = 90001; await service.sweep();
+      const state = service.tables[0].state(); check(state.phase === "idle" && state.state.seats.every(s => !s), "Missing key contributors were not evicted after refund");
+      const response = await fetch(origin + `/poker/api/state?table=0&hand=${start.data.nonce}&from=0`, { headers: { Authorization: "Bearer " + tokens[0] } });
+      const canceled = (await response.json()).previous, replay = await M.replay(canceled);
+      check(replay.phase === "aborted" && replay.state().state.seats.filter(Boolean).every(s => s.stack === 1000), "Cancellation record lost the exact refunds");
+      const cooldown = await post("/poker/api/command", await request(0, 3, "start", { nonce: C.nonce() }), tokens[0]); check(!cooldown.ok, "Timed-out participant immediately restarted");
+      const spoof = await post("/poker/api/command", await request(1, 2, "refill", {}), tokens[0]); check(!spoof.ok, "A connection impersonated another signer");
+    } finally { service.server.closeAllConnections(); await new Promise(resolve => service.server.close(resolve)); for (const p of identities) p.dispose(); }
+    record("poker protocol: timeouts refund chips, repeated requests cannot stall, and signers cannot be impersonated", true);
+  } catch (e) { record("poker protocol: timeouts refund chips, repeated requests cannot stall, and signers cannot be impersonated", false, e.stack); }
+};
+
 const unitChecks = async () => {
   const canvasStub = () => ({
     width: 0, height: 0,
@@ -7787,6 +8104,7 @@ const unitChecks = async () => {
     }
   }
   const BL = globalThis.BL;
+  pokerChecks(BL);
   {
     // Analytic half-spaces are an independent normal oracle: an incoming
     // bearing, even 70 degrees off, must not become the climbing direction.
@@ -8431,6 +8749,7 @@ if (!PICKED.length && !PERF) console.log(`Global tier only. Name scenes to test 
 await runTasks();
 // The shim installs browser globals in this process, so it runs after the browser lanes finish with Chrome.
 if (UNIT) await unitChecks();
+if (PROTOCOL) await pokerProtocolChecks();
 
 // The ledger is the memory a session does not have: every failing check, how many runs in a row it has
 // failed, since when, and its last detail; a pass clears it. Two failed runs in a row is a STOP.
