@@ -1743,9 +1743,10 @@
         "Keep identical cloud shading while comparing shader offset with physical translation.",
         "Do not extend an inactive basement route before the global scan reaches below HQ; the travelled route retains its ahead-of-player opening.",
         "Keep underground rock cut in carry orbit and through shoulder entry; restore once shoulder settles with its eye inside the ceiling.",
-        "Exclude the terminal settled shoulder frame from the carry-entry measurement, require at least ten in-progress frames, and retain the explicit restored-state check."
+        "Exclude the terminal settled shoulder frame from the carry-entry measurement, require at least ten in-progress frames, and retain the explicit restored-state check.",
+        "Require stable cuts across all six underground handoffs, verifying the straight-down shoulder eye stays above the ceiling; retain existing low-shoulder restoration and ground fade assertions."
       ],
-      "status": "Focused run passes 151/152. Straight-down shoulder expectation and fresh full validation remain unresolved.",
+      "status": "Focused lower-floor group passes 152/152; fresh full-suite validation remains outstanding.",
       "focusedAfterWeatherAndFloorCorrection": {
         "passed": 145,
         "total": 152,
@@ -1792,7 +1793,16 @@
         "ceilingY": -8.5,
         "projectionMix": 0,
         "rockMix": 1,
-        "status": "The straight-down shoulder eye remains above the basement ceiling. The remaining assertion expects an uncut ceiling and projection-timed rock fade; unresolved."
+        "status": "Resolved fixture expectation: retain the chosen above-ceiling view and its stable cut. Below-ceiling restoration and ground blend requirements remain explicit."
+      },
+      "focusedAfterShoulderExpectationCorrection": {
+        "passed": 152,
+        "total": 152,
+        "sceneSeconds": 92.1,
+        "sceneBudgetSeconds": 25,
+        "console": "clean",
+        "log": "untracked/issue-93/failure-fix-cutaway-12.log",
+        "sceneBudgetStatus": "SLOW warning retained"
       }
     },
     "cameraFollowup": {
@@ -1958,5 +1968,43 @@
       "All three touching doorway workers leave without recovery."
     ],
     "fullSuiteStatus": "Not yet rerun; earlier full run remains 666/703."
+  },
+  "dsbFollowup": {
+    "plaza": {
+      "passed": 145,
+      "total": 145,
+      "console": "clean",
+      "log": "untracked/issue-93/failure-fix-dsb-plaza-5.log"
+    },
+    "gameplay": {
+      "passed": 173,
+      "total": 173,
+      "renderers": [
+        "WebGL2",
+        "Canvas2D"
+      ],
+      "console": "clean",
+      "log": "untracked/issue-93/failure-fix-dsb-gameplay-6.log"
+    },
+    "fixtureCorrections": [
+      "Center desktop Shop controls and verify native pointer targets; preserve nearest scrolling on phone.",
+      "Wait for two drawn frames after landmark approach.",
+      "Measure visible moving tomato flight over the next eighteen frames after its initial displacement; preserve the original absolute splat and expiry times."
+    ],
+    "diagnostic": {
+      "screenX": -96.72909552947701,
+      "screenY": 196.16143382866525,
+      "cameraEye": {
+        "x": -14.507818997121971,
+        "y": 2.4177580992882035,
+        "z": 22.967953452512585
+      },
+      "projectilePosition": {
+        "x": -8.866666666666672,
+        "y": 1.607111111111111,
+        "z": 18
+      }
+    },
+    "fullSuiteStatus": "Fresh full validation outstanding."
   }
 }

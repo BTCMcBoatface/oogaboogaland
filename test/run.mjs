@@ -4524,6 +4524,7 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
     // Restore the basement before exercising the existing camera handoffs.
     P.navigate({ position: { x: lower.x, y: H.basement.floor, z: lower.z }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(2, 1 / 60);
     const cutState = () => ({ mode: P.mode, player: !!P.player, mix: P.birdsEyeMix, fade: B.renderOpts.cutawayFade, rock: B.renderOpts.cutawayRockMix,
+      eyeY: B.camera.position.y, ceiling: H.basement.ceiling,
       markers: D.headquarters.rampMarkers.reduce((count, marker) => count + (marker.node.visible ? 1 : 0), 0),
       cuts: B.renderOpts.cutawayMaxY < 1e5 ? [B.renderOpts.cutawayMaxY] : regions.slice(0, B.renderOpts.cutawayRegionCount).map(r => r.y) });
     const transition = (name, action, frames = 60) => {
@@ -4689,12 +4690,15 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
   record("birds-eye combat: the pile, HQ hearth and basement center align on screen at every selected floor despite their different elevations", rows.every(r => r.orthoMix === 1 && r.centerError < 0.001), JSON.stringify(rows.map(({ name, centerError, orthoMix }) => ({ name, centerError, orthoMix }))));
   record("birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset", state.transitions.length === 8
     && state.transitions.every(r => r.immediate < 1e-6 && r.mixStep < 0.08 && r.cutStep < 5 && r.rockError < 1e-6 && r.capError < 1e-5 && r.maxRegions <= 8)
-    && state.transitions.slice(0, 4).every(r => r.after.fade === 1 && r.after.cuts.length > 0)
-    && state.transitions.slice(4).every(r => r.fadeError < 1e-6 && r.span > 1 && r.changed >= 10 && r.direction && r.blended >= 10)
+    // The straight-down shoulder eye stays above the basement ceiling. Its
+    // chosen view still needs the same cut; the later low shoulder restores it.
+    && state.transitions.slice(0, 6).every(r => r.after.fade === 1 && r.after.cuts.length > 0 && r.fadeStep === 0 && r.span === 0)
+    && state.transitions[4].after.eyeY > state.transitions[4].after.ceiling
+    && state.transitions.slice(6).every(r => r.fadeError < 1e-6 && r.span > 1 && r.changed >= 10 && r.direction && r.blended >= 10)
     && state.transitions[1].after.mix > 0 && state.transitions[1].after.mix < 1
     && state.transitions[2].before.mix === state.transitions[1].after.mix
-    && [0, 2].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 1 && state.transitions[i].after.cuts.length > 0)
-    && [4, 6].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 0 && !state.transitions[i].after.cuts.length)
+    && [0, 2, 4].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 1 && state.transitions[i].after.cuts.length > 0)
+    && [6].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 0 && !state.transitions[i].after.cuts.length)
     && [3, 5, 7].every(i => state.transitions[i].after.mix === 1 && state.transitions[i].after.fade === 1 && state.transitions[i].after.cuts.length > 0)
     && state.transitions[4].after.mode === "shoulder" && state.transitions[5].after.mode === "birds-eye", JSON.stringify(state.transitions));
   record("carry orbit: upper floors stay hidden in both lower-level camera handoffs and return after shoulder settles", Object.values(state.carryRoofs).every(Boolean), JSON.stringify(state.carryRoofs));
@@ -7007,10 +7011,14 @@ const dsbEnter = async (b) => {
     B.go("dsb"); B.advance(0.6);
   })()`);
 };
-const dsbApproach = async (b, name) => b.evaluate(`(() => {
-  const B = __ooga, landmark = B.dsb.land.landmarks[${JSON.stringify(name)}], p = landmark.point();
-  B.pilot.navigate({ yaw: landmark.node.rotation.y, pitch: 0.2, dist: 7, position: p, target: { x: p.x, y: 1.7, z: p.z } }); B.advance(0.1);
-})()`);
+const dsbApproach = async (b, name) => {
+  await b.evaluate(`(() => {
+    const B = __ooga, landmark = B.dsb.land.landmarks[${JSON.stringify(name)}], p = landmark.point();
+    B.pilot.navigate({ yaw: landmark.node.rotation.y, pitch: 0.2, dist: 7, position: p, target: { x: p.x, y: 1.7, z: p.z } }); B.advance(0.1);
+  })()`);
+  // Projection uses the last drawn camera; advance alone does not paint it.
+  if (!await untilPage(b, 'B.dsb.phase === "land"')) throw Error("DSB approach did not draw");
+};
 const dsbExit = async (b, home = "bifrost") => {
   await b.evaluate(`__ooga.dsb.gate.activate(0); if (typeof __gateClock === "number") { __gateClock += 2000; __ooga.dsb.gate.update(); }`);
   await untilPage(b, 'B.dsb.gate.state === "ACTIVE"', 5000);
@@ -7021,7 +7029,8 @@ const dsbExit = async (b, home = "bifrost") => {
 for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (mobile ? "&canvas2d=1" : "")), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), why: "regression: moved Shop and TV keep collision, interactions, radio and cat navigation attached to their fronts", run: async b => {
   const check = (name, ok, detail = "") => record("DSB plaza " + (mobile ? "canvas2d: " : "webgl2: ") + name, ok, detail);
   const press = async selector => {
-    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "nearest" }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: ${JSON.stringify(mobile ? "nearest" : "center")} }); const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; return { x, y, hits: e.contains(document.elementFromPoint(x, y)) }; })()`);
+    if (!p.hits) throw Error("Blocked pointer: " + selector);
     if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
     else await b.click(p.x, p.y);
   };
@@ -7042,7 +7051,7 @@ for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza
     await dsbApproach(b, name);
     check(name + " prompt follows transformed front", await b.evaluate(`document.getElementById("dsb-context").textContent === ${JSON.stringify(name === "shop" ? "Visit meme shop" : "Use TV")}`));
     await press("#dsb-context");
-    if (name === "shop") { await press('[data-action="dsb-bread"]'); check("Shop purchases still work", await b.evaluate(`!document.getElementById("dsb-shop").hidden && __ooga.dsb.inventory.bread === 1 && __ooga.dsb.inventory.tokens === 17`)); await press('[data-action="dsb-close-shop"]'); }
+    if (name === "shop") { await press('[data-action="dsb-bread"]'); const purchase = await b.evaluate(`({ open: !document.getElementById("dsb-shop").hidden, ...__ooga.dsb.inventory, phase: __ooga.dsb.phase, player: {...__ooga.dsb.avatar.root.position} })`); check("Shop purchases still work", purchase.open && purchase.bread === 1 && purchase.tokens === 17, JSON.stringify(purchase)); await press('[data-action="dsb-close-shop"]'); }
     else { check("TV opens through native interaction", await b.evaluate(`__ooga.dsb.tv.isOpen`)); await press("#dsb-tv-close"); }
   }
   const audio = await b.evaluate(`(() => { const B=__ooga, d=B.dsb, source=d.land.landmarks.tv.point(-0.55,3.3,1.63), boat=d.land.boats[0].position; B.audio.environment({...B.camera,position:source},boat,5,source); const near=B.audio.radioVolume; B.audio.environment({...B.camera,position:{x:-10,y:3.3,z:14.6}},boat,5,source); const old=B.audio.radioVolume; BL.scene.updateWorld(d.land.root); const w=d.land.tvScreen.world; return { near,old,source,matches:Math.hypot(source.x-w[12],source.y-w[13],source.z-w[14])<1e-5 }; })()`);
@@ -7324,10 +7333,19 @@ for (const fallback of [false, true]) scene("dsb", { label: "dsb gameplay " + (f
   const projectile = await b.evaluate(`(() => {
     const B = __ooga, geometry = BL.dsbModels.cube("#ef4256"), node = B.dsb.land.root.children.find(n => n.geometry === geometry && n.visible);
     if (!node) return { created: false };
-    const start = { ...node.position }, screen = B.project(start.x, start.y, start.z), inventory = B.dsb.inventory.tomatoes;
+    const start = { ...node.position }, inventory = B.dsb.inventory.tomatoes;
+    // Measure flight after the projectile has left the player's hand.
     B.advance(0.12); const moved = Math.hypot(node.position.x - start.x, node.position.z - start.z);
-    B.advance(0.8); const splat = node.visible && node.position.y === 0.04 && node.scale.y === 0.06;
-    B.advance(1.5); return { created: true, inventory, visibleInView: screen.x >= 0 && screen.x <= innerWidth && screen.y >= 0 && screen.y <= innerHeight, moved, splat, expired: !node.visible && B.dsb.shots === 0 };
+    let visibleInView = false, flightFrames = 0;
+    // A side shoulder starts the shot outside its frustum. It must enter the
+    // view during early flight, while moving and before its floor splat.
+    for (; flightFrames < 18; flightFrames++) {
+      const screen = B.project(node.position.x, node.position.y, node.position.z);
+      if (node.visible && node.position.y > 0.12 && screen && screen.x >= 0 && screen.x <= innerWidth && screen.y >= 0 && screen.y <= innerHeight) { visibleInView = true; break; }
+      B.advance(1 / 60);
+    }
+    B.advance(0.8 - flightFrames / 60); const splat = node.visible && node.position.y === 0.04 && node.scale.y === 0.06;
+    B.advance(1.5); return { created: true, inventory, visibleInView, flightFrames, moved, splat, expired: !node.visible && B.dsb.shots === 0 };
   })()`);
   record("dsb gameplay: throwing consumes inventory and creates a visible moving tomato that splats and expires", projectile.created && projectile.inventory === 0 && projectile.visibleInView && projectile.moved > 1 && projectile.splat && projectile.expired, JSON.stringify(projectile));
   await b.key("b"); record("dsb gameplay: banana can be eaten", await b.evaluate(`__ooga.dsb.inventory.bananas === 0`));
