@@ -1558,11 +1558,12 @@ const { autoQualityProbe } = (() => {
   const autoQualityProbe = () => {
     const source = readFileSync(new URL("../src/js/director.js", import.meta.url), "utf8");
     const controller = source.slice(source.indexOf("  const perf ="), source.indexOf("  const WARMUP"));
-    const create = (quality = "high", renderedFrames = 100) => {
+    const memoryProbe = source.slice(source.indexOf("  const MEMORY_LIMITED ="), source.indexOf("  const MEMORY_LIMITED =") + source.slice(source.indexOf("  const MEMORY_LIMITED =")).indexOf("\n"));
+    const create = (quality = "high", renderedFrames = 100, deviceMemory) => {
       const changes = [], state = { focused: true, now: 0 };
       const renderer = { kind: "webgl2", quality, setQuality(value) { this.quality = value; changes.push(value); } };
-      const context = { renderer, document: { hasFocus: () => state.focused }, transition: null, renderedFrames, showQuality() {} };
-      const tier = runInNewContext(`${controller}\n({ autoTier, tierFromBoot, BOOT_MEDIUM, BOOT_LOW })`, context);
+      const context = { renderer, navigator: { deviceMemory }, document: { hasFocus: () => state.focused }, transition: null, renderedFrames, showQuality() {} };
+      const tier = runInNewContext(`${memoryProbe}\n${controller}\n({ autoTier, tierFromBoot, BOOT_MEDIUM, BOOT_LOW })`, context);
       // The governor reads delivered intervals only, so a frame costs the probe nothing but the interval it took.
       const frames = (count, interval = 1000 / 60) => { for (let n = 0; n < count; n++) tier.autoTier(interval, state.now += interval); };
       return { changes, state, renderer, context, frames, boot: tier.tierFromBoot, medium: tier.BOOT_MEDIUM, low: tier.BOOT_LOW };
@@ -1588,7 +1589,13 @@ const { autoQualityProbe } = (() => {
     const crawling = create(); crawling.boot(crawling.low * 1.2);
     const floor = create("low"); floor.boot(floor.low * 2); floor.boot(floor.medium * 0.3);
     const phone = create("medium"); phone.boot((phone.medium + phone.low) / 2);
-    return { healthy: healthy.changes.length === 0, gpuBound: bound.changes[0] === "medium",
+    const memoryBoot = [0.25, 1, 2, 4, 8].every((gb) => {
+      const limited = create("high", 100, gb); limited.boot(0);
+      const low = create("low", 100, gb); low.boot(0);
+      const slow = create("high", 100, gb); slow.boot(slow.low * 1.2);
+      return limited.renderer.quality === "medium" && low.changes.length === 0 && slow.renderer.quality === "low";
+    }) && [undefined, 0, NaN, 16].every((gb) => { const ample = create("high", 100, gb); ample.boot(0); return ample.changes.length === 0; });
+    return { memoryBoot, healthy: healthy.changes.length === 0, gpuBound: bound.changes[0] === "medium",
       reactsIn: slowAt, reactsFast: slowAt <= 2500, ignoresSpikes: spike.changes.length === 0,
       bounded: bounded.changes.join("|") === "medium|low", warmup: warming.changes.length === 0,
       ignoresPauses: excluded.changes.length === 0, fallback: fallback.changes.length === 0,
@@ -3073,7 +3080,7 @@ const adaptiveQualityChecks = async () => {
   record("adaptive quality: a GPU-bound machine is seen through delivered frames and loses a tier within two seconds", r.healthy && r.gpuBound && r.reactsFast, JSON.stringify(r));
   record("adaptive quality: warmup, transitions, background frames and isolated spikes do not lower quality", r.warmup && r.ignoresPauses && r.ignoresSpikes && r.fallback, JSON.stringify(r));
   record("adaptive quality: steps one tier at a time and stops at the lowest", r.bounded, JSON.stringify(r));
-  record("adaptive quality: boot cost seeds the opening tier, only ever downward", r.bootFast && r.bootMedium && r.bootLow && r.bootOneWay && r.bootKeepsCoarse, JSON.stringify(r));
+  record("adaptive quality: boot cost seeds the opening tier, only ever downward", r.bootFast && r.bootMedium && r.bootLow && r.bootOneWay && r.bootKeepsCoarse && r.memoryBoot, JSON.stringify(r));
 };
 // ---- Scenes ----
 // A scene is the unit of testing: one Chrome session running that scene's steps, side by side with the
