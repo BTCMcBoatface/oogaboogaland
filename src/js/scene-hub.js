@@ -80,6 +80,10 @@
   const MATRIX_DENSITY = { high: 8, medium: 8, low: 8, canvas2d: 1 };
   const PORTAL_Z = 0.5, PORTAL_MIN_X = -2.48, PORTAL_MAX_X = 2.48, PORTAL_MIN_Y = 0, PORTAL_MAX_Y = 2.98;
   const RIM_SEAM_DROP = 0.015;
+  // The sign's back reaches 0.07 m behind its origin; the Arcade's flat wall sits behind the projecting rim.
+  const CAVE_SIGN_Y = 3.5 - RIM_SEAM_DROP + hubModels.CAVE_SIGN_HEIGHT * 0.5 + 0.32;
+  const CAVE_SIGN_Z = PORTAL_Z + 0.055;
+  const CAVE_LIGHT_Z = 0.52;
   // RENDER_OPTS sky, light and lamp values are resampled from the clock every frame.
   const RENDER_OPTS = {
     clear: new Float32Array(3), horizon: new Float32Array(3), zenith: new Float32Array(3), sky: new Float32Array(3), ground: new Float32Array(3), sun: new Float32Array(3), direct: new Float32Array(3),
@@ -539,6 +543,7 @@
   const closedCaveZones = [];
   const sleepers = [];
   const labels = [];
+  const signDetails = [];
   const spots = [];
   const chillSpots = [];
   const headquartersRimLintels = [];
@@ -1370,17 +1375,20 @@
     const lights = RENDER_OPTS.lights;
     const webgl = renderer.kind === "webgl2";
     const limit = webgl ? LIGHT_CAPACITY : 0;
+    const phaseNow = daylight.phaseAt(hour);
+    const lanternsOn = phaseNow === "dusk" || phaseNow === "night" || phaseNow === "midnight";
     let count = 0, approximated = 0, registered = 0;
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i], node = l.node;
       if (l.light) registered++;
-      const k = l.always ? 1 : Math.min(1, Math.max(0, (RENDER_OPTS.torch - l.order * LAMP_STAGGER) / LAMP_RAMP));
+      const k = l.always ? 1 : l.nightOnly ? (lanternsOn ? 1 : 0)
+        : Math.min(1, Math.max(0, (RENDER_OPTS.torch - l.order * LAMP_STAGGER) / LAMP_RAMP));
       const lit = k > 0.05;
       if (lit && !l.lit && spark) fx.burst(l.x, l.y, l.z, 5, [SPARK], 1.3);
       l.lit = lit;
       l.k = k;
       const flicker = Math.sin(elapsed * 11 + i * 2.3) * 0.15;
-      node.glow = LAMP_OFF + k * (l.kind.glow + flicker) + node.flare * 1.5;
+      node.glow = (l.nightOnly ? 0 : LAMP_OFF) + k * (l.kind.glow + flicker) + node.flare * 1.5;
       if (node.flare > 0) node.flare = Math.max(0, node.flare - dt * 2);
       // kind.hide: the node is hidden while unlit, so a cold fire shows no flame at all.
       if (l.kind.hide) node.visible = lit;
@@ -1498,6 +1506,11 @@
     arcade: { glass: 0, icon: "banana", string: ["hanging", 0, [0.12, 0.5, 0.88]], inside: [["barrel", -2.4, -1.9, 0, 0], ["crate", 2.4, -2.0, 1, 0], ["barrel", 2.4, -2.0, 0, 1, 0.75]], ceiling: [[-2.35, 2.35, -1.5, -5.8, 3.0, [0.35, 0.8]]], pieces: [["crate", 5.2, 1.0, 0, 0], ["crate", 5.2, 1.0, 1, 1, 0.75], ["barrel", 4.4, 2.8, 0, 0], ["bench", 5.8, 3.5], ["rubble", 6.4, 2.3, 0, 1], ["banner", 6.6, 0.8, 0, 3]] }
   };
   const THEME_ICON = (slot) => slot.id === "c1" ? "favicon" : THEMES[slot.theme]?.icon || null;
+  const trackCaveSign = (node, slot, mouth) => {
+    signDetails.push({ node, solid: node.geometry, pixels: hubModels.caveSign(slot.name, THEME_ICON(slot), true),
+      x: mouth.x + Math.sin(mouth.ry) * node.position.z, y: mouth.floorY + node.position.y,
+      z: mouth.z + Math.cos(mouth.ry) * node.position.z });
+  };
   const mouthDressing = (slot, m) => {
     let byIsland = DRESSED.get(island);
     if (!byIsland) DRESSED.set(island, byIsland = new Map());
@@ -1508,7 +1521,9 @@
     const set = BL.dressing.set(), ground = [];
     // Ground pieces stand on the island itself; one whose spot is inside the cliff or over a drop is left out.
     const stand = (kind, lx, lz, turns = 0, variant = 0, lift = 0) => {
-      const y = island.surfaceAt(m.x + cr * lx + sr * lz, m.z - sr * lx + cr * lz) - m.floorY;
+      const x = m.x + cr * lx + sr * lz, z = m.z - sr * lx + cr * lz;
+      if ((kind === "barrel" || kind === "bench") && island.overlapsStairs(x, z, 1.7)) return;
+      const y = island.surfaceAt(x, z) - m.floorY;
       if (Math.abs(y) > 0.9) return;
       set.put(kind, lx, y + lift, lz, turns, variant);
       if (!lift) ground.push(lx, lz);
@@ -1517,11 +1532,11 @@
     stand("lanternPost", 4.4, 1.6, 2, theme.glass);
     for (const piece of theme.pieces) stand(...piece);
     const [lamp, variant, at] = theme.string;
-    set.cable(-3.05, 3.42, 1.1, 3.05, 3.42, 1.1, 0.3, at || [0.1, 0.24, 0.38, 0.5, 0.62, 0.76, 0.9], lamp, variant);
-    set.cable(-4.44, 2.98, 1.6, -3.05, 3.42, 1.1, 0.12);
-    set.cable(4.44, 2.98, 1.6, 3.05, 3.42, 1.1, 0.12);
-    set.put("vine", -3.0, 3.5, 1.06, 0, 0);
-    set.put("vine", 2.6, 3.5, 1.06, 0, 1);
+    set.cable(-3.05, 3.42, CAVE_LIGHT_Z, 3.05, 3.42, CAVE_LIGHT_Z, 0.3, at || [0.1, 0.24, 0.38, 0.5, 0.62, 0.76, 0.9], lamp, variant);
+    set.cable(-3.65, 3.18, -0.22, -3.05, 3.42, CAVE_LIGHT_Z, 0.08);
+    set.cable(3.65, 3.18, -0.22, 3.05, 3.42, CAVE_LIGHT_Z, 0.08);
+    set.put("vine", -3.0, 3.5, CAVE_LIGHT_Z, 0, 0);
+    set.put("vine", 2.6, 3.5, CAVE_LIGHT_Z, 0, 1);
     // A dark cave's rock stands flush with the rim's face, so the planks go on in front of both.
     if (theme.boards && slot.status === "dark") set.put("boards", 0, 0.2, 1.06);
     // Inside the mouth the floor is the cave's own, level with the doorway.
@@ -1540,7 +1555,8 @@
       addChild(parent, node);
       if (track) placed.push(node);
       if (node.geometry === baked.solid) solids.add(node);
-      else if (node.geometry === baked.glow || node.geometry === baked.swingGlow) addLamp(node, LAMP.lantern, x, y, z, false, lamps.length, `${id}:${lamps.length}`).always = true;
+      else if (node.geometry === baked.glow || node.geometry === baked.swingGlow) addLamp(node, LAMP.lantern, x, y, z, false, 0, `${id}:${lamps.length}`).always = true;
+      else if (node.geometry === baked.lampGlow || node.geometry === baked.swingLampGlow) addLamp(node, LAMP.lantern, x, y, z, false, 0, `${id}:${lamps.length}`).nightOnly = true;
     }
   };
   const CHALKBOARD_X = 6.75, CHALKBOARD_Z = 2.15, CHALKBOARD_YAW = -0.57;
@@ -1582,7 +1598,11 @@
     addPieceTargets(baked.picks, (lx, ly, lz) => lz < 0.3 ? null : { x: m.x + cr * lx + sr * lz, y: m.floorY + ly, z: m.z - sr * lx + cr * lz });
     if (slot.theme === "lab") placeChalkboard(m, group);
     // Headquarters and a sealed cave that is coming soon still hang their name over the door.
-    if ((slot.status !== "open" || slot.scene === "factory") && slot.status !== "mirror" && slot.name) addChild(group, createNode({ position: { x: 0, y: 4.5, z: 0.52 }, geometry: hubModels.caveSign(slot.name, THEME_ICON(slot)) }));
+    if (slot.status !== "open" && slot.status !== "mirror" && slot.name) {
+      const sign = createNode({ position: { x: 0, y: CAVE_SIGN_Y, z: CAVE_SIGN_Z }, geometry: hubModels.caveSign(slot.name, THEME_ICON(slot)) });
+      addChild(group, sign);
+      trackCaveSign(sign, slot, m);
+    }
     for (let i = 0; i < g.length; i += 2) claim(m.x + cr * g[i] + sr * g[i + 1], m.z - sr * g[i] + cr * g[i + 1], 0.8);
   };
   const movePilePosts = () => {
@@ -1657,7 +1677,8 @@
     const lit = baked.lights;
     for (let i = 0; i < lit.length; i += 4) dressingLights.push(lit[i], lit[i + 1], lit[i + 2], lit[i + 3]);
     for (let i = 0; i < dressingLights.length; i += 4) {
-      addLamp({ glow: 0, flare: 0, visible: true }, DRESSING_LAMPS[dressingLights[i + 3]], dressingLights[i], dressingLights[i + 1], dressingLights[i + 2], true, (i / 4) % 5, `dressing:${i / 4}`);
+      const lamp = addLamp({ glow: 0, flare: 0, visible: true }, DRESSING_LAMPS[dressingLights[i + 3]], dressingLights[i], dressingLights[i + 1], dressingLights[i + 2], true, (i / 4) % 5, `dressing:${i / 4}`);
+      lamp.nightOnly = dressingLights[i + 3] !== 4;
     }
     dressingLights.length = 0;
     // These three meadow lanterns stand at the grass edge beside the growing pile path.
@@ -1676,11 +1697,11 @@
       for (const part of BL.dressing.nodes(postDressing, { living: true })) {
         addChild(node, part);
         if (part.geometry === postDressing.solid) solids.add(part);
-        if (part.geometry === postDressing.glow || part.geometry === postDressing.swingGlow) glow = part;
+        if (part.geometry === postDressing.lampGlow || part.geometry === postDressing.swingLampGlow) glow = part;
       }
       const light = postDressing.lights, pick = postDressing.picks;
-      const lamp = addLamp(glow, DRESSING_LAMPS[light[3]], 0, 0, 0, true, lamps.length, `pile-post:${i}`);
-      lamp.always = true;
+      const lamp = addLamp(glow, DRESSING_LAMPS[light[3]], 0, 0, 0, true, 0, `pile-post:${i}`);
+      lamp.nightOnly = true;
       const pickNode = createNode({ geometry: PICK_GEOMETRY });
       const owner = { kind: "piece", piece: "lanternPost", variant: 0, node: pickNode, x: 0, y: 0, z: 0, next: 0, weaponType: "none" };
       addTarget(pickNode, owner, { radius: Math.max(0.35, pick[5]) });
@@ -1741,7 +1762,7 @@
     let n = 0;
     const plant = (x, z) => {
       const y = island.surfaceAt(x, z);
-      if (nearPath(x, z, 1.1) || !free(x, z, 1.2)) return false;
+      if (nearPath(x, z, 1.1) || island.overlapsStairs(x, z, 2) || !free(x, z, 1.2)) return false;
       // Level ground only: every side within a quarter metre of the foot.
       for (let i = 0; i < 4; i++) if (Math.abs(island.surfaceAt(x + Math.cos(i * 1.571) * 0.6, z + Math.sin(i * 1.571) * 0.6) - y) > 0.26) return false;
       const node = createNode({ geometry: BL.dressing.palm(n++ % 3), position: { x, y, z }, rotation: { x: 0, y: rand() * Math.PI * 2, z: 0 }, sightHidden: true });
@@ -1814,7 +1835,8 @@
     if (renderer.kind === "canvas2d") return;
     const gulls = BL.dressing.flock({ count: 22, radius: [28, 70], height: [8, 30], seed: 3 });
     const shore = BL.dressing.flock({ count: 10, radius: [90, 150], height: [SEA_Y + 6, SEA_Y + 20], seed: 8, scale: 3 });
-    const boats = BL.dressing.fleet({ sea: SEA_Y, spots: [[140, 0.4, 5.6], [190, 2.2, 6.8], [230, 3.9, 6.2], [170, 5.1, 5.3], [260, 1.3, 7.3]] });
+    // Keep the full hulls between the main island's outlying islets and the sea stacks starting at r240.
+    const boats = BL.dressing.fleet({ sea: SEA_Y, spots: [[140, 0.4, 5.6], [160, 2.2, 6.8], [125, 3.9, 6.2], [150, 5.1, 5.3], [170, 1.3, 7.3]] });
     for (const node of [gulls.node, shore.node, ...boats.nodes]) {
       addChild(root, node);
       placed.push(node);
@@ -1852,12 +1874,12 @@
     const ax = Math.sin(m.ry), az = Math.cos(m.ry);
     const caveIndex = island.mouths.indexOf(m) + 1;
     const group = createNode({ position: { x: m.x, y: m.floorY, z: m.z }, rotation: { x: 0, y: m.ry, z: 0 } });
-    const rim = createNode({ position: { x: 0, y: slot.status === "headquarters" ? 0 : -RIM_SEAM_DROP, z: 0.5 }, geometry: hubModels.caveMouthRim(slot.status === "headquarters" ? 1 : 0), sightSolid: true });
+    const rim = createNode({ position: { x: 0, y: slot.status === "headquarters" ? 0 : -RIM_SEAM_DROP, z: PORTAL_Z }, geometry: hubModels.caveMouthRim(slot.status === "headquarters" ? 1 : 0), sightSolid: true });
     addChild(group, rim);
     solids.add(rim);
     registerClimbMasonry(rim, m);
     if (slot.status === "headquarters") {
-      const lintel = createNode({ position: { x: 0, y: -RIM_SEAM_DROP, z: 0.5 }, geometry: hubModels.caveMouthRim(2), sightSolid: true });
+      const lintel = createNode({ position: { x: 0, y: -RIM_SEAM_DROP, z: PORTAL_Z }, geometry: hubModels.caveMouthRim(2), sightSolid: true });
       addChild(group, lintel);
       solids.add(lintel);
       registerClimbMasonry(lintel, m);
@@ -1965,8 +1987,10 @@
         claim(tx, tz, 0.5);
         addProp("torch", torch, tx, tz, 0.7);
       }
-      const sign = createNode({ position: { x: 0, y: 4.5, z: 0.52 }, geometry: hubModels.caveSign(slot.name, THEME_ICON(slot)), matrixEmissiveLiving: true, sightHidden: slot.scene === "lab" });
+      const signZ = slot.scene === "arcade" ? 0.055 : CAVE_SIGN_Z;
+      const sign = createNode({ position: { x: 0, y: CAVE_SIGN_Y, z: signZ }, geometry: hubModels.caveSign(slot.name, THEME_ICON(slot)), matrixEmissiveLiving: true, sightHidden: slot.scene === "lab" });
       addChild(group, sign);
+      trackCaveSign(sign, slot, m);
       const halfW = sign.geometry.signWidth * 0.5, halfH = sign.geometry.signHeight * 0.5;
       const x = m.x + ax * sign.position.z, y = m.floorY + sign.position.y, z = m.z + az * sign.position.z;
       const tx = Math.cos(m.ry), tz = -Math.sin(m.ry);
@@ -1980,7 +2004,7 @@
         ]
       });
       if (mirrorCave && mirrorCave.slot === slot) mirrorCave.sign = sign;
-      const lantern = createNode({ position: { x: halfW + 0.34, y: sign.position.y + halfH + 0.14, z: 0.52 }, geometry: hubModels.lantern() });
+      const lantern = createNode({ position: { x: halfW + 0.34, y: sign.position.y + halfH + 0.14, z: signZ }, geometry: hubModels.lantern() });
       addChild(group, lantern);
       const lx = lantern.position.x, ly = lantern.position.y - 0.27, lz = lantern.position.z;
       const wx = m.x + Math.cos(m.ry) * lx + ax * lz;
@@ -1988,6 +2012,7 @@
       const wz = m.z - Math.sin(m.ry) * lx + az * lz;
       const id = `${slot.id}:lantern:right`;
       const lamp = addLamp(lantern, LAMP.lantern, wx, wy, wz, !slot.glowOnly, 2, id);
+      lamp.nightOnly = true;
       const debug = { id, caveId: slot.id, kind: "lantern", side: "right", localPosition: [lx, ly, lz], worldPosition: [wx, wy, wz], registered: !slot.glowOnly, factor: 0, lit: false, selected: false, approximated: false, rimFront: null, fixtureBack: null, gap: null };
       lamp.debug = debug;
       entranceLights.push(debug);
@@ -2135,16 +2160,18 @@
   // An invisible one-way staircase continues from the dock into the sky. It
   // only arms from a grounded step off the outer deck: arriving from the air,
   // or jumping once on it, leaves every tread intangible until the visitor
-  // returns to the dock. The small fixed glyph pool reveals only fresh foot
-  // contacts, without adding collision meshes or per-frame allocations.
+  // returns to the dock. A fixed glyph pool reveals nearby treads after each
+  // foot contact, without adding collision meshes or per-frame allocations.
   const buildDockStairs = (dock) => {
-    const START = 4.25, RUN = 0.62, RISE = 0.5, HALF_WIDTH = 0.78, EFFECT_TIME = 0.62;
+    const START = 4.25, RUN = 0.62, RISE = 0.5, HALF_WIDTH = 0.78, EFFECT_TIME = 2.8;
+    const REVEAL_RADIUS = 3, GLYPH_POOL = 40;
     const base = dock.position.y, count = Math.ceil((FLY.yMax - base) / RISE), end = START + count * RUN;
     const ry = dock.rotation.y, ux = Math.cos(ry), uz = -Math.sin(ry), vx = Math.sin(ry), vz = Math.cos(ry);
     const glyphs = [];
-    for (let i = 0; i < MATRIX_TYPES; i++) {
-      const node = createNode({ visible: false, rotation: { x: -Math.PI / 2, y: ry, z: 0 }, geometry: hubModels.matrixGlyph(i), glow: 1 });
+    for (let i = 0; i < GLYPH_POOL; i++) {
+      const node = createNode({ visible: false, rotation: { x: -Math.PI / 2, y: ry, z: 0 }, geometry: hubModels.matrixGlyph(i % MATRIX_TYPES), glow: 1 });
       node.dockLife = 0;
+      node.dockStep = 0;
       addChild(root, node);
       placed.push(node);
       glyphs.push(node);
@@ -2180,18 +2207,29 @@
       const floor = floorAt(index);
       return floor <= y + maxStep + 1e-7 ? floor : -Infinity;
     };
-    const emit = (actor, index) => {
-      const node = glyphs[nextGlyph];
-      nextGlyph = (nextGlyph + 1) % glyphs.length;
-      const p = actor.root.position, across = acrossAt(p.x, p.z), along = START + (index - 0.5) * RUN;
-      node.position.x = dock.position.x + ux * along + vx * across;
+    const reveal = (index, distance) => {
+      if (index < 1 || index > count) return;
+      let node = null;
+      for (let i = 0; i < glyphs.length; i++) {
+        if (glyphs[i].dockLife > 0 && glyphs[i].dockStep === index) { node = glyphs[i]; break; }
+      }
+      if (!node) {
+        node = glyphs[nextGlyph];
+        nextGlyph = (nextGlyph + 1) % glyphs.length;
+      }
+      const along = START + (index - 0.5) * RUN;
+      node.position.x = dock.position.x + ux * along;
       node.position.y = floorAt(index) + 0.018;
-      node.position.z = dock.position.z + uz * along + vz * across;
-      node.scale.x = node.scale.y = 2.8;
+      node.position.z = dock.position.z + uz * along;
+      node.scale.x = node.scale.y = 4.4;
       node.scale.z = 1;
       node.glow = 1;
-      node.dockLife = EFFECT_TIME;
+      node.dockStep = index;
+      node.dockLife = Math.max(node.dockLife, EFFECT_TIME - distance * 0.18);
       node.visible = true;
+    };
+    const emit = (index) => {
+      for (let offset = -REVEAL_RADIUS; offset <= REVEAL_RADIUS; offset++) reveal(index + offset, Math.abs(offset));
       contacts++;
     };
     const update = (dt, actor) => {
@@ -2200,7 +2238,7 @@
         if (node.dockLife <= 0) continue;
         node.dockLife = Math.max(0, node.dockLife - dt);
         const k = node.dockLife / EFFECT_TIME;
-        node.scale.x = node.scale.y = 1.8 + k;
+        node.scale.x = node.scale.y = 3.5 + k * 0.9;
         node.glow = 0.35 + k * 0.65;
         if (!node.dockLife) node.visible = false;
       }
@@ -2214,7 +2252,7 @@
       const feet = p.y - actor.baseY;
       if (Math.abs(feet - floorAt(index)) < 0.08 && index !== lastStep) {
         lastStep = index;
-        emit(actor, index);
+        emit(index);
       }
     };
     return {
@@ -2251,6 +2289,7 @@
     addTerrainSection(site.ground.geometry.cutawaySource, site.node, place.y);
     solids.add(site.ground);
     addProp("poolbridge", site.bridge, worldX(0, place.bridgeLocalZ + S.span / 2), worldZ(0, place.bridgeLocalZ + S.span / 2), S.width);
+    addLamp(site.bridge, LAMP.lantern, worldX(0, place.bridgeLocalZ), place.y + 3.4, worldZ(0, place.bridgeLocalZ), false, 0, "poolbridge:lanterns").nightOnly = true;
     atNode("poolstair", site.stair, SITE_SHAFT_REACH);
     atNode("poolsign", site.sign, 1.4);
     // The bridge arrives along local +z and the cave sign stands between it and the hole, so both boards
@@ -2431,8 +2470,9 @@
     const c = site.cloud, court = site.arrival, at = [[p.x, p.floorY + 2, p.z], [court.x, court.y + 1.5, court.z], [court.x, court.y + 1.5, court.z],
       [(c.head.x + c.end.x) / 2, c.y + 1.6, (c.head.z + c.end.z) / 2], [c.head.x, c.y + 1.6, c.head.z]];
     site.lamps.forEach((node, i) => {
-      addLamp(node, LAMP.lantern, at[i][0], at[i][1], at[i][2], false, i);
-      if (!i) addLamp(archLamp.node, LAMP.lantern, archLamp.spark.x, archLamp.spark.y, archLamp.spark.z, false, 1);
+      const lamp = addLamp(node, LAMP.lantern, at[i][0], at[i][1], at[i][2], false, i);
+      if (i === 1 || i === 3 || i === 4) lamp.nightOnly = true;
+      if (!i) addLamp(archLamp.node, LAMP.lantern, archLamp.spark.x, archLamp.spark.y, archLamp.spark.z, false, 1).nightOnly = true;
     });
     const group = createNode({ position: { x: p.x, y: p.floorY, z: p.z }, rotation: { x: 0, y: p.ry, z: 0 } });
     addChild(root, group);
@@ -2517,10 +2557,12 @@
   // Rejection sampling: scatter props, keeping off paths and mouths.
   const scatter = () => {
     const rand = mulberry32(SEED);
+    const routeOverlaps = (x, z, radius) => island.path.overlaps(x, z, radius) || island.overlapsStairs(x, z, radius);
     const treeGroundClear = (geometry, x, z, y) => {
       // Scan every voxel column touched by the solid crown and a walking body's
       // radius. Four corner samples miss narrow, higher steps on cave roofs.
       const reach = geometry.treeSolidRadius + PLAYER_RADIUS, unit = island.unit, half = unit / 2;
+      if (island.overlapsStairs(x, z, reach)) return false;
       // Reserve a full voxel above two units for the tallest helmeted head-look envelope.
       const rootRadius = Math.hypot(0.5, 0.25), ceiling = y + geometry.treeSolidCanopyFloor - 2.25;
       const grid = island.sightGrid, minX = Math.floor((x - reach - grid[1]) / unit), maxX = Math.floor((x + reach - grid[1]) / unit);
@@ -2561,7 +2603,7 @@
     const meadow = (count, radius, kind, geometryAt, square = false) => {
       for (let n = 0, tries = 0; n < count && tries < 1500; tries++) {
         const { x, z } = polar(rand() * 360, Math.sqrt(lerp(MEADOW_INNER * MEADOW_INNER, MEADOW_OUTER * MEADOW_OUTER, rand())));
-        if (island.surfaceAt(x, z) > 0 || nearMouth(x, z, 3.5) || !workSceneryClear(x, z, radius) || !candidateFree(x, z, radius) || !free(x, z, radius) || island.path.overlaps(x, z, radius)) continue;
+        if (island.surfaceAt(x, z) > 0 || nearMouth(x, z, 3.5) || !workSceneryClear(x, z, radius) || !candidateFree(x, z, radius) || !free(x, z, radius) || routeOverlaps(x, z, radius)) continue;
         addScenery(geometryAt(n), x, z, square ? Math.floor(rand() * 4) * Math.PI / 2 + (rand() - 0.5) * 0.4 : rand() * Math.PI * 2, 0, kind, radius);
         n++;
       }
@@ -2572,7 +2614,7 @@
       let n = 0;
       const tryAt = (x, z) => {
         const h = island.surfaceAt(x, z);
-        if (h < minHeight || !free(x, z, radius)) return false;
+        if (h < minHeight || !free(x, z, radius) || routeOverlaps(x, z, radius)) return false;
         let clear = true;
         for (let i = 0; i < 4 && clear; i++) {
           const a = (i + 0.5) * Math.PI / 2;
@@ -2620,7 +2662,7 @@
     const clearance = island.path.debug.ringOuterRadius + SCENERY_CLEARANCE;
     if (o.node.position.y < 2 && !workSceneryClear(o.x, o.z, o.footprint)) return 3;
     if (Math.hypot(o.x, o.z) - o.footprint < clearance - 1e-9) return 1;
-    if (island.path.overlaps(o.x, o.z, o.footprint)) return 2;
+    if (island.path.overlaps(o.x, o.z, o.footprint) || island.overlapsStairs(o.x, o.z, o.footprint)) return 2;
     for (let i = 0; i < claimed.length; i++) {
       const c = claimed[i];
       if (!c.scenery && Math.hypot(c.x - o.x, c.z - o.z) < c.r + o.footprint) return 3;
@@ -2777,13 +2819,18 @@
   const isPlayerAttack = source => !!source && (source === crew.player || source.controlled && source.actionControlled);
   const hitMirror = (power, x, y, z, source) => {
     const damage = mirrorCave.damage;
-    if (!damage.hit(power, x, y, z)) return;
-    if (isPlayerAttack(source)) fx.damageNumber(x, y + 0.25, z, power);
+    const scaledPower = power * 4;
+    if (!damage.hit(scaledPower, x, y, z)) return;
+    if (isPlayerAttack(source)) fx.damageNumber(x, y + 0.25, z, scaledPower);
     syncMirrorDamage();
   };
   const weaponImpact = (source, hit, dx, dy, dz, power = 1) => {
     if (hit.owner.kind === "caveman") {
       crew.damage(hit.owner.cave, power, isPlayerAttack(source));
+      return;
+    }
+    if (hit.owner.kind === "clanker") {
+      if (clankers.damage(hit.owner.entry, power) && isPlayerAttack(source)) fx.damageNumber(hit.x, hit.y + 0.25, hit.z, power * 4);
       return;
     }
     if (hit.node === mirrorCave.node) {
@@ -6256,6 +6303,11 @@
     if (chalkboard.openNow) { /* Keep the exact camera and controlled actor pose until the board closes. */ }
     else if (clankerPlay.active) clankerPlay.update(dt);
     else pilot.update(dt);
+    for (let i = 0; i < signDetails.length; i++) {
+      const sign = signDetails[i], dx = camera.position.x - sign.x, dy = camera.position.y - sign.y, dz = camera.position.z - sign.z;
+      const limit = sign.node.geometry === sign.pixels ? 20 : 16;
+      sign.node.geometry = dx * dx + dy * dy + dz * dz < limit * limit ? sign.pixels : sign.solid;
+    }
     updateBirdsEyeCutaway(dt);
     updateAreaLabel();
     if (POSITION_DEBUG && elapsed >= positionDebugNext) {
@@ -6529,6 +6581,9 @@
       side = -(lift - hip) * across / rollNorm;
       lift = hip + (relative + along * forward) / norm;
       forward = (forward - along * relative) / norm;
+      // Downhill pitch must not put the trunk core below the lower contact
+      // ray, where a legal tread would be mistaken for a blocking wall.
+      lift = Math.max(lift, 0.65 * scale);
     }
     const sine = Math.sin(heading), cosine = Math.cos(heading);
     out.x = x + sine * forward + cosine * side;
@@ -6917,6 +6972,22 @@
           floor = Math.max(floor, solids.gorillaBlendedStepAt(x, z, y, reach, heading, floor,
             rect.halfForward, rect.halfSide, rect.centerForward));
         } else floor = Math.max(floor, solids.gorillaStepAt(x, z, y, step));
+      }
+      // At a diagonal roof edge the center can be over lower ground while
+      // the walking pads still stand on the lip. One remaining corner alone
+      // cannot hold the whole body up.
+      if (!entry.drive.airborne && !entry.jump.active && !entry.climb.active && y - floor > STEP_MAX) {
+        const sine = Math.sin(heading), cosine = Math.cos(heading), scale = entry.root.scale.x;
+        let planted = 0;
+        for (let forward = 0; forward < 2; forward++) for (let side = -1; side <= 1; side += 2) {
+          const along = (forward ? 1.35 : 0.05) * scale, across = side * 0.6 * scale;
+          const px = x + sine * along + cosine * across, pz = z + cosine * along - sine * across;
+          if (Math.abs(clankerPadSupportAt(px, pz, y, step, props) - y) <= 0.1) planted++;
+        }
+        if (planted >= 2) {
+          const pads = entry.gorilla.walkSupportAt(x, z, y, heading, step, props, clankerPadSupportAt);
+          if (Number.isFinite(pads)) floor = Math.max(floor, pads);
+        }
       }
       return floor;
     }
@@ -7411,7 +7482,7 @@
       for (let hand = 0; hand < 2; hand++) {
         const part = hand ? entry.gorilla.parts.armR : entry.gorilla.parts.armL, previous = hand ? combat.right : combat.left;
         mirrorCave.ripples.strike(previous, part.world, part.geometry, dt);
-        if (!combat.hit && input.weaponTargets.strike(CLANKER_HIT, previous, part.world, part.geometry)) {
+        if (!combat.hit && input.weaponTargets.strike(CLANKER_HIT, previous, part.world, part.geometry, entry)) {
           combat.hit = true;
           combat.hitOwner = CLANKER_HIT.owner;
           weaponImpact(entry, CLANKER_HIT, Math.sin(entry.heading), -1, Math.cos(entry.heading), entry.poundPower);
@@ -7446,10 +7517,14 @@
     entry.fireFX.spread = new Float32Array(CLANKER_BURN_PARTS.length);
     entry.fireFX.burning = false;
     entry.combat = { left: math.mat4.create(), right: math.mat4.create(), hit: false, hitOwner: null, groundChecked: false };
-    const owner = { kind: "clanker", entry, cave: entry, priority: 2, weaponType: "none" };
-    const visit = (node) => {
-      if (node.geometry) { entry.renderParts.push(node); addTarget(node, owner); clankerPartOwners.set(node, entry); }
-      for (const child of node.children) visit(child);
+    const visit = (node, region = "body") => {
+      if (node === entry.gorilla.parts.head) region = "head";
+      if (node.geometry) {
+        entry.renderParts.push(node);
+        addTarget(node, { kind: "clanker", entry, cave: entry, priority: 2, weaponType: "enemy", hitRegion: region });
+        clankerPartOwners.set(node, entry);
+      }
+      for (const child of node.children) visit(child, region);
     };
     visit(entry.root);
     clankerMeshes.add(entry.root);
@@ -7884,22 +7959,23 @@
     // The arch's lanterns pool warm light on its stone, ranked right after the fire so every tier keeps the fires first;
     // its glass glows with the islet's lamps.
     if (archLamp) addLamp({ glow: 0, flare: 0, visible: true }, LAMP.arch, archLamp.pool.x, archLamp.pool.y, archLamp.pool.z, true, 1, "bifrost:arch");
-    // The jumbotron stands on the rim crest just west of the gate, turned to face the meadow center.
+    // The Oogatron arches gently over the path at the top of the south stairs.
     {
-      const jx = -7, jz = -27, jScale = 2.6;
+      const jx = 0, jz = 28.5, jScale = 2.6;
       const jry = Math.atan2(-jx, -jz);
-      claim(jx, jz, 3.4);
-      // legDrop is the stand's reach below the cabinet's middle; jSink is the part sunk into the rock.
-      const legDrop = BL.jumbotron.DROP, jSink = 0.06;
+      claim(jx, jz, 3.8);
+      // Lift the cabinet clear of the path while the posts remain buried beside it.
+      const legDrop = BL.jumbotron.DROP, jSink = 0.06, jLift = 1.62;
       jumbotron = BL.jumbotron.create({
         data: BL.jumbotronData,
-        position: { x: jx, y: island.surfaceAt(jx, jz) + (legDrop - jSink) * jScale, z: jz },
+        position: { x: jx, y: island.surfaceAt(jx, jz) + (legDrop - jSink) * jScale + jLift, z: jz },
         ry: jry,
-        scale: jScale
+        scale: jScale,
+        curved: true
       });
       addChild(root, jumbotron.node);
       placed.push(jumbotron.node);
-      addProp("jumbotron", jumbotron.node, jx, jz, 3.4);
+      addProp("jumbotron", jumbotron.node, jx, jz, 3.8).pickRay = ray => jumbotron.pickRay(ray);
       hud.restoreBoards(jumbotronBoard);
       // Shells launch from just above the cabinet's top rail.
       jumbotronSpot = { x: jx, y: jumbotron.node.position.y + 0.7 * jScale, z: jz };
@@ -8065,8 +8141,14 @@
       const p = cave.root.position, feet = p.y - cave.baseY;
       return Math.abs(bedSupportAt(p.x, p.z, feet, 1e-4, 0) - feet) < 1e-4 ? island.supportAt(p.x, p.z, feet, STEP_MAX, -120, sleepNavigation.radius) : feet;
     };
-    shared.bedRoute = (cave, bed, toBed) => sleepNavigation.route(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, cave.slot?.x, cave.slot?.z);
-    shared.bedPlan = (cave, bed, toBed) => sleepNavigation.plan(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, cave.slot?.x, cave.slot?.z);
+    shared.bedRoute = (cave, bed, toBed) => {
+      const home = cave.slot || WALK_IN;
+      return sleepNavigation.route(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, home.x, home.z, !toBed && cave.state === "chilling");
+    };
+    shared.bedPlan = (cave, bed, toBed) => {
+      const home = cave.slot || WALK_IN;
+      return sleepNavigation.plan(cave.root.position.x, planFeet(cave), cave.root.position.z, bed, toBed, home.x, home.z, !toBed && cave.state === "chilling");
+    };
     shared.bedRouteClear = (cave, to) => {
       const p = cave.root.position;
       sleepRouteFrom.x = p.x; sleepRouteFrom.y = p.y - cave.baseY; sleepRouteFrom.z = p.z;
@@ -8749,7 +8831,7 @@
     }
     for (const node of targets) input.remove(node);
     for (const node of placed) removeChild(root, node);
-    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = pilePosts.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = spots.length = chillSpots.length = headquartersRimLintels.length = climbMasonry.length = props.length = 0;
+    targets.length = placed.length = claimed.length = scenery.length = sceneryClaims.length = matrixInteriors.length = matrixGates.length = sealedCaves.length = clouds.length = cloudObstacles.length = lamps.length = pilePosts.length = entranceLights.length = fireSeats.length = sleepers.length = labels.length = signDetails.length = spots.length = chillSpots.length = headquartersRimLintels.length = climbMasonry.length = props.length = 0;
     cloudRandom = null;
     fireHazards.length = 0;
     clankerFireReachable = null;

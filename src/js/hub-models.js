@@ -137,7 +137,7 @@
   // The sign emblems: 7x7 art in named inks, ringed in a dark outline worked out from the art itself.
   const SIGN_BADGES = {
     bolt: { ink: { "#": "#ffcf2e", "+": "#fff1a0" }, rows: ["....+##", "...+##.", "..+##..", ".+#####", "....##.", "...##..", "..##..."] },
-    die: { ink: { "#": "#f2efe8", "+": "#ffffff", "*": "#1f6f6a" }, rows: [".+++++.", "+*###*#", "+######", "+##*###", "+######", "+*###*#", ".#####."] },
+    die: { ink: { "#": "#f2efe8", "+": "#ffffff", "*": "#000000" }, rows: [".+++++.", "+*###*#", "+######", "+##*###", "+######", "+*###*#", ".#####."] },
     flag: { ink: { "#": "#f2efe8", "*": "#1b1b1e", "P": "#a8703e" }, rows: ["P#*#*#.", "P*#*#*#", "P#*#*#*", "P*#*#*.", "P......", "P......", "P......"] },
     pick: { ink: { "I": "#c9ced6", "+": "#eef1f5", "H": "#a8703e" }, rows: ["..+II..", ".I.H.I.", "I..H..I", "...H...", "...H...", "...H...", "...H..."] },
     glyph: { ink: { "#": "#46ff72" }, rows: [".#.##..", ".##..#.", "..#.#..", ".#..##.", "..##.#.", ".#.#...", ".##.##."] },
@@ -174,10 +174,11 @@
   // A cave's name board: three thick bevelled planks with ragged ends on two posts that stand proud above and
   // below, the name raised in faintly glowing cream on one dark stained panel so it reads day and night and
   // from across the island (solid letters and one panel, nothing thin enough to break up at distance), the
-  // cave's badge before it (badge and name centred as one group) and iron plates on the corners. The front face sits at SIGN_FRONT and nothing reaches behind
+  // cave's badge before it (badge and name centred as one group) and iron plates on the corners. A second
+  // cached version leaves small gaps between square letter cells for close views. The front face sits at SIGN_FRONT and nothing reaches behind
   // z = -0.07, so it hangs where the old board did.
-  const caveSign = (text = "EntropyLab", iconName = null) => {
-    const key = iconName ? text + "|" + iconName : text;
+  const caveSign = (text = "EntropyLab", iconName = null, pixels = false) => {
+    const key = `${text}|${iconName || ""}|${pixels ? "pixels" : "solid"}`;
     const hit = SIGN_CACHE.get(key);
     if (hit) return hit;
     let cells = -1;
@@ -211,6 +212,11 @@
         const line = glyph[row];
         for (let col = 0; col < line.length; col++) {
           if (line[col] !== "1") continue;
+          if (pixels) {
+            geos.push(box({ w: SIGN_CELL * 0.84, h: SIGN_CELL * 0.84, d: 0.07, color: SIGN_INK, emissive: 0.25,
+              offset: { x: cursor + (col + 0.5) * SIGN_CELL, y: (2 - row) * SIGN_CELL, z: SIGN_FRONT + 0.03 } }));
+            continue;
+          }
           let n = 1;
           while (line[col + n] === "1") n++;
           run(cursor + col * SIGN_CELL + SIGN_CELL * 0.5, (2 - row) * SIGN_CELL, n);
@@ -284,17 +290,17 @@
     const stone = pick(rand, 0, 1, 0.3);
     const light = pick(rand, 2, 0, 0.5);
     if (part !== 2) {
-      fill(-6, -6, 0, 5, 0, 1, stone);
-      fill(5, 5, 0, 5, 0, 1, stone);
+      fill(-6, -6, 0, 5, 0, 0, stone);
+      fill(5, 5, 0, 5, 0, 0, stone);
     }
-    if (part !== 1) fill(-5, 4, 6, 6, 0, 1, light);
+    if (part !== 1) fill(-5, 4, 6, 6, 0, 0, light);
     const geo = voxGeo(v, { unit: VOX, palette: CLIFF, origin: { x: 0, y: 0, z: -VOX } });
     // The grippable stone uses the same occupied slabs as the rendered voxels.
     // Keeping this small table avoids triangle queries in every wall probe.
     geo.climbBoxes = new Float32Array(climbBoxes);
     geo.jambCenterX = 2.75;
-    geo.frontZ = 0.5;
-    geo.openingBounds = { minX: -2.5, maxX: 2.5, floorY: 0, ceilingY: 3, minZ: -0.5, maxZ: 0.5 };
+    geo.frontZ = 0;
+    geo.openingBounds = { minX: -2.5, maxX: 2.5, floorY: 0, ceilingY: 3, minZ: -0.5, maxZ: 0 };
     return geo;
   });
   const mirrorPanel = cached(() => {
@@ -326,13 +332,12 @@
   const sealedCaveFace = variants((variant) => {
     const rand = mulberry32(419), stone = vox(), parts = [];
     const mossColors = ["#6f7d3e", "#7b8945", "#65733a"];
-    // Match both rim depth layers with a continuous stone core: merged voxels drop internal faces so the
-    // seal cannot open slits where different block depths meet.
-    const backZ = -0.52, stoneFront = backZ + VOX * 2;
+    // Match the rim's single depth layer with a continuous stone core.
+    const backZ = -0.52, stoneFront = backZ + VOX;
     let frontZ = stoneFront;
     for (let y = 0; y < 6; y++) for (let x = 0; x < 10; x++) {
       const color = (x + y * 2 + Math.floor(rand() * 2)) % CLIFF.length;
-      stone.set(x - 5, y, 0, color); stone.set(x - 5, y, 1, color);
+      stone.set(x - 5, y, 0, color);
     }
     parts.push(voxGeo(stone, { unit: VOX, palette: CLIFF, origin: { x: 0, y: 0, z: backZ } }));
     // Grass caps continue the hill steps' quarter-voxel growth in connected patches, not flecks.

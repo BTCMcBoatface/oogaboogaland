@@ -300,217 +300,6 @@
     }, vox.has, emit);
     return geo;
   };
-  // The same voxel map as a cartoon body: every exposed face kept whole, with its own colour and glow, on shared
-  // lattice corners, then the corners relaxed by Taubin smoothing (a shrink step and a slightly larger inflate step a
-  // pass, so the form rounds without losing volume), each held within TOON_HOLD cells of its lattice point so thin
-  // parts never fold through. Shade speckle is painted out: a cell whose colour is only a near shade (within
-  // TOON_SHADE) of the colour most of its neighbours wear takes that colour, so fur and skin read as flat paint while
-  // eyes, pupils, stripes and belts, which differ far more, stay. The shape depends only on which cells are filled, so
-  // palette twins match face for face. The blocky bake rides along as `collisionGeometry` and `toonShell`, the shell
-  // that physics, picks and fits read (`shellOf`).
-  const TOON_PASSES = 20, TOON_SHRINK = 0.5, TOON_INFLATE = -0.53, TOON_HOLD = 2.5, TOON_SHADE = 70;
-  // Cells by integer key (the toon mesher's corner key), coordinates alongside in map order, so the hot loops never
-  // build a string.
-  const toonKey = (x, y, z) => ((x + 512) * 1024 + y + 512) * 1024 + z + 512;
-  const toonCells = (vox) => {
-    const occ = new Map(), xyz = new Int32Array(vox.map.size * 3), colour = [];
-    let o = 0;
-    for (const [k, c] of vox.map) {
-      voxCoords(k, CELL);
-      occ.set(toonKey(CELL[0], CELL[1], CELL[2]), c);
-      xyz[o++] = CELL[0]; xyz[o++] = CELL[1]; xyz[o++] = CELL[2];
-      colour.push(c);
-    }
-    return { occ, xyz, colour };
-  };
-  const toonPaint = ({ occ, xyz, colour }, rgb, emissive) => {
-    const paint = new Array(colour.length), tally = new Map();
-    for (let v = 0; v < colour.length; v++) {
-      const x = xyz[v * 3], y = xyz[v * 3 + 1], z = xyz[v * 3 + 2], c = colour[v];
-      tally.clear();
-      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
-        const n = occ.get(toonKey(x + dx, y + dy, z + dz));
-        if (n !== undefined) tally.set(n, (tally.get(n) || 0) + 1);
-      }
-      let best = c, most = 0;
-      for (const [n, count] of tally) if (count > most || count === most && n === c) { best = n; most = count; }
-      const a = rgb[c], b = rgb[best];
-      const near = best !== c && !emissive[c] && !emissive[best] && Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < TOON_SHADE;
-      paint[v] = near ? best : c;
-    }
-    return paint;
-  };
-  const TOON_SIDES = [
-    [0, 1, 0, [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]]], [0, -1, 0, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]],
-    [1, 0, 0, [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]], [-1, 0, 0, [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]],
-    [0, 0, 1, [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]], [0, 0, -1, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]]]
-  ];
-  const toonSmooth = (vox, options) => {
-    const { unit, palette, origin = { x: 0, y: 0, z: 0 }, emissive = {} } = options;
-    const rgb = palette.map((c) => typeof c === "string" ? hexToRgb(c) : c);
-    const cells = toonCells(vox), { occ, xyz } = cells, paint = toonPaint(cells, rgb, emissive);
-    const index = new Map(), lattice = [], quads = [], colours = [];
-    const corner = (x, y, z) => {
-      const key = toonKey(x, y, z);
-      let i = index.get(key);
-      if (i === undefined) { i = lattice.length / 3; index.set(key, i); lattice.push(x, y, z); }
-      return i;
-    };
-    for (let v = 0; v < paint.length; v++) {
-      const x = xyz[v * 3], y = xyz[v * 3 + 1], z = xyz[v * 3 + 2];
-      for (const [dx, dy, dz, pts] of TOON_SIDES) {
-        if (occ.has(toonKey(x + dx, y + dy, z + dz))) continue;
-        for (const p of pts) quads.push(corner(x + p[0], y + p[1], z + p[2]));
-        colours.push(paint[v]);
-      }
-    }
-    // Every edge runs one lattice step along an axis, so a corner has at most six neighbours, kept in the order first met.
-    const n = lattice.length / 3, links = new Int32Array(n * 6), degree = new Uint8Array(n);
-    const link = (a, b) => {
-      for (let k = a * 6, end = k + degree[a]; k < end; k++) if (links[k] === b) return;
-      links[a * 6 + degree[a]++] = b;
-    };
-    for (let q = 0; q < quads.length; q += 4) for (let e = 0; e < 4; e++) {
-      const a = quads[q + e], b = quads[q + (e + 1) % 4];
-      link(a, b); link(b, a);
-    }
-    let pos = Float64Array.from(lattice), next = new Float64Array(pos.length);
-    for (let pass = 0; pass < TOON_PASSES * 2; pass++) {
-      const f = pass & 1 ? TOON_INFLATE : TOON_SHRINK;
-      for (let i = 0; i < n; i++) {
-        let sx = 0, sy = 0, sz = 0;
-        const m = degree[i];
-        for (let k = i * 6, end = k + m; k < end; k++) { const j = links[k] * 3; sx += pos[j]; sy += pos[j + 1]; sz += pos[j + 2]; }
-        const o = i * 3;
-        next[o] = Math.max(lattice[o] - TOON_HOLD, Math.min(lattice[o] + TOON_HOLD, pos[o] + f * (sx / m - pos[o])));
-        next[o + 1] = Math.max(lattice[o + 1] - TOON_HOLD, Math.min(lattice[o + 1] + TOON_HOLD, pos[o + 1] + f * (sy / m - pos[o + 1])));
-        next[o + 2] = Math.max(lattice[o + 2] - TOON_HOLD, Math.min(lattice[o + 2] + TOON_HOLD, pos[o + 2] + f * (sz / m - pos[o + 2])));
-      }
-      [pos, next] = [next, pos];
-    }
-    const geo = geometry();
-    geo.smooth = true;
-    for (let i = 0; i < n; i++) pushVert(geo, origin.x + pos[i * 3] * unit, origin.y + pos[i * 3 + 1] * unit, origin.z + pos[i * 3 + 2] * unit);
-    for (let q = 0; q < quads.length; q += 4) face(geo, quads.slice(q, q + 4), rgb[colours[q / 4]], { emissive: emissive[colours[q / 4]] || 0 });
-    geo.toonShell = geo.collisionGeometry = voxelGeometry(vox, options);
-    return geo;
-  };
-  // A voxel part as one smooth cartoon shape, the way the island's props are built: sliced a cell at a time along its
-  // long axis (upright unless another axis is half as long again), each slice fitted with the ellipse inside its
-  // cells, the profile eased along the axis and closed with domes, LOFT_SIDES round. Each face wears the paint of the
-  // surface cell nearest it (after the speckle is painted out), so a character's hat, mask, stripes and eyes carry
-  // over as painted patterns. The shape depends only on which cells are filled, so palette twins match face for face,
-  // and the blocky bake rides along as `toonShell`, the shell physics, picks and fits read (`shellOf`).
-  const LOFT_SIDES = 16, LOFT_FULL = 1.12, LOFT_DOME = [[0.3, 0.92], [0.12, 0.62], [0.02, 0.28]];
-  // `fit(slice, span)` optionally scales a slice's ellipse (slice 0 at the low end), for a part whose cells are
-  // chunkier than its cartoon (an Ooga's shoulder pad and fist); `reach` shortens it toward its pivot (the Ooga arm).
-  const toonLoft = (vox, options, fit = null, reach = 1) => {
-    const { unit, palette, origin = { x: 0, y: 0, z: 0 }, emissive = {} } = options;
-    const rgb = palette.map((c) => typeof c === "string" ? hexToRgb(c) : c);
-    const cells = toonCells(vox), { occ, xyz } = cells, paint = toonPaint(cells, rgb, emissive), count = paint.length;
-    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    for (let v = 0; v < count; v++) for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], xyz[v * 3 + d]); hi[d] = Math.max(hi[d], xyz[v * 3 + d]); }
-    const ext = [0, 1, 2].map((d) => hi[d] - lo[d] + 1);
-    const a = ext[0] > ext[1] * 1.5 && ext[0] >= ext[2] ? 0 : ext[2] > ext[1] * 1.5 ? 2 : 1, b = (a + 1) % 3, c = (a + 2) % 3;
-    // Per slice: centre and half-extent across b and c, in cells.
-    const span = ext[a], slice = new Float64Array(span * 4), seen = new Uint8Array(span);
-    const mins = new Float64Array(span * 2).fill(Infinity), maxs = new Float64Array(span * 2).fill(-Infinity);
-    for (let v = 0; v < count; v++) {
-      const s = xyz[v * 3 + a] - lo[a], pb = xyz[v * 3 + b], pc = xyz[v * 3 + c];
-      seen[s] = 1;
-      mins[s * 2] = Math.min(mins[s * 2], pb); maxs[s * 2] = Math.max(maxs[s * 2], pb + 1);
-      mins[s * 2 + 1] = Math.min(mins[s * 2 + 1], pc); maxs[s * 2 + 1] = Math.max(maxs[s * 2 + 1], pc + 1);
-    }
-    for (let s = 0; s < span; s++) {
-      let src = s;
-      for (let d = 1; !seen[src] && d < span; d++) src = seen[s - d] ? s - d : seen[s + d] ? s + d : src;
-      slice[s * 4] = (mins[src * 2] + maxs[src * 2]) / 2; slice[s * 4 + 1] = (mins[src * 2 + 1] + maxs[src * 2 + 1]) / 2;
-      const scale = LOFT_FULL * (fit ? fit(s, span) : 1);
-      slice[s * 4 + 2] = (maxs[src * 2] - mins[src * 2]) / 2 * scale; slice[s * 4 + 3] = (maxs[src * 2 + 1] - mins[src * 2 + 1]) / 2 * scale;
-    }
-    const eased = new Float64Array(slice.length);
-    for (let s = 0; s < span; s++) for (let k = 0; k < 4; k++) {
-      const p = slice[Math.max(0, s - 1) * 4 + k], q = slice[s * 4 + k], r = slice[Math.min(span - 1, s + 1) * 4 + k];
-      eased[s * 4 + k] = (p + 2 * q + r) / 4;
-    }
-    // Rings along the axis: domes at both ends round each slice's ellipse.
-    const rings = [];
-    const ring = (t, s, scale) => rings.push(t, eased[s * 4], eased[s * 4 + 1], eased[s * 4 + 2] * scale, eased[s * 4 + 3] * scale);
-    for (let i = LOFT_DOME.length - 1; i >= 0; i--) ring(lo[a] + LOFT_DOME[i][0], 0, LOFT_DOME[i][1]);
-    for (let s = 0; s < span; s++) ring(lo[a] + s + 0.5, s, 1);
-    for (let i = 0; i < LOFT_DOME.length; i++) ring(hi[a] + 1 - LOFT_DOME[i][0], span - 1, LOFT_DOME[i][1]);
-    const geo = geometry(), P = [0, 0, 0], ringCount = rings.length / 5;
-    geo.smooth = true;
-    const put = (t, pb, pc) => { P[a] = t; P[b] = pb; P[c] = pc; return pushVert(geo, origin.x + P[0] * unit, origin.y + P[1] * unit, origin.z + P[2] * unit); };
-    for (let r = 0; r < ringCount; r++) {
-      const o = r * 5;
-      for (let i = 0; i < LOFT_SIDES; i++) {
-        const th = i / LOFT_SIDES * Math.PI * 2;
-        put(rings[o], rings[o + 1] + rings[o + 3] * Math.cos(th), rings[o + 2] + rings[o + 4] * Math.sin(th));
-      }
-    }
-    const first = rings, last = (ringCount - 1) * 5;
-    const tipLo = put(lo[a], first[1], first[2]), tipHi = put(hi[a] + 1, rings[last + 1], rings[last + 2]);
-    const faces = [];
-    for (let r = 0; r + 1 < ringCount; r++) for (let i = 0; i < LOFT_SIDES; i++) {
-      const j = (i + 1) % LOFT_SIDES;
-      faces.push([r * LOFT_SIDES + i, r * LOFT_SIDES + j, (r + 1) * LOFT_SIDES + j, (r + 1) * LOFT_SIDES + i]);
-    }
-    for (let i = 0; i < LOFT_SIDES; i++) {
-      const j = (i + 1) % LOFT_SIDES;
-      faces.push([tipLo, j, i]);
-      faces.push([tipHi, (ringCount - 1) * LOFT_SIDES + i, (ringCount - 1) * LOFT_SIDES + j]);
-    }
-    // Wind outward: the first side face's normal must point away from its ring's centre.
-    const V = geo.verts, f0 = faces[0];
-    let nx = 0, ny = 0, nz = 0;
-    for (let k = 0; k < f0.length; k++) {
-      const p = f0[k] * 3, q = f0[(k + 1) % f0.length] * 3;
-      nx += (V[p + 1] - V[q + 1]) * (V[p + 2] + V[q + 2]); ny += (V[p + 2] - V[q + 2]) * (V[p] + V[q]); nz += (V[p] - V[q]) * (V[p + 1] + V[q + 1]);
-    }
-    P[a] = 0; P[b] = Math.cos(0.5 / LOFT_SIDES * Math.PI * 2); P[c] = Math.sin(0.5 / LOFT_SIDES * Math.PI * 2);
-    if (nx * P[0] + ny * P[1] + nz * P[2] < 0) for (const f of faces) f.reverse();
-    // Paint: the nearest surface cell's colour, measured from the face's middle in cell units.
-    const surface = [];
-    for (let v = 0; v < count; v++) {
-      const x = xyz[v * 3], y = xyz[v * 3 + 1], z = xyz[v * 3 + 2];
-      if (!occ.has(toonKey(x + 1, y, z)) || !occ.has(toonKey(x - 1, y, z)) || !occ.has(toonKey(x, y + 1, z)) || !occ.has(toonKey(x, y - 1, z)) || !occ.has(toonKey(x, y, z + 1)) || !occ.has(toonKey(x, y, z - 1))) surface.push(v);
-    }
-    for (const f of faces) {
-      let mx = 0, my = 0, mz = 0;
-      for (const i of f) { mx += V[i * 3]; my += V[i * 3 + 1]; mz += V[i * 3 + 2]; }
-      mx = (mx / f.length - origin.x) / unit - 0.5; my = (my / f.length - origin.y) / unit - 0.5; mz = (mz / f.length - origin.z) / unit - 0.5;
-      let best = surface[0], d2 = Infinity;
-      for (const v of surface) {
-        const dx = xyz[v * 3] - mx, dy = xyz[v * 3 + 1] - my, dz = xyz[v * 3 + 2] - mz, d = dx * dx + dy * dy + dz * dz;
-        if (d < d2) { d2 = d; best = v; }
-      }
-      face(geo, f, rgb[paint[best]], { emissive: emissive[paint[best]] || 0 });
-    }
-    geo.toonShell = geo.collisionGeometry = voxelGeometry(vox, options);
-    // `reach` shortens the part toward its pivot (y 0), drawn and shell alike, so what hits it matches what shows.
-    if (reach !== 1) for (const g of [geo, geo.toonShell]) for (let i = 1; i < g.verts.length; i += 3) g.verts[i] *= reach;
-    return geo;
-  };
-  // A superellipsoid mass appended to a smooth geometry: `e` 2 is an ellipsoid, higher squares it off toward a
-  // rounded box (the cartoon heads' skulls), `tilt` leans it about z (brows). Rows run pole to pole, wound outward.
-  const blob = (geo, cx, cy, cz, rx, ry, rz, rgb, emissive = 0, e = 2, tilt = 0, rows = 8, around = 12) => {
-    const sp = (w) => Math.sign(w) * Math.pow(Math.abs(w), 2 / e), ct = Math.cos(tilt), st = Math.sin(tilt);
-    const base = geo.verts.length / 3;
-    for (let i = 0; i <= rows; i++) {
-      const lat = -Math.PI / 2 + Math.PI * i / rows, cl = sp(Math.cos(lat)), sl = sp(Math.sin(lat));
-      for (let j = 0; j < around; j++) {
-        const lon = Math.PI * 2 * j / around, x = cl * sp(Math.cos(lon)) * rx, y = sl * ry, z = cl * sp(Math.sin(lon)) * rz;
-        pushVert(geo, cx + x * ct - y * st, cy + x * st + y * ct, cz + z);
-      }
-    }
-    for (let i = 0; i < rows; i++) for (let j = 0; j < around; j++) {
-      const a = base + i * around + j, b = base + i * around + (j + 1) % around;
-      face(geo, [a, a + around, b + around, b], rgb, { emissive });
-    }
-    return geo;
-  };
-  const shellOf = (geo) => geo.toonShell || geo;
   const clamp255 = (v) => Math.max(0, Math.min(255, Math.round(v)));
   const shade = (hex, k) => hexToRgb(hex).map((v) => clamp255(v * k));
   const mixRgb = (a, b, t) => a.map((v, i) => clamp255(v + (b[i] - v) * t));
@@ -800,14 +589,6 @@
   };
   // Resting club angles: x tilts the head forward, z rolls it; carry is the working hang.
   const CLUB_REST = { x: 0.95, z: 0 };
-  const ARM_GIRTH = 0.9;
-  // The Ooga arm drawn and hit this much shorter from the shoulder, and the hand with it: HAND is the grip point down
-  // the arm (fractions of height) that the rifle, the raised club and melee reach use, CLUB_HAND the club's and
-  // snack's mount. Everything held in a hand goes through these.
-  const ARM_REACH = 0.93, HAND = 0.625 * ARM_REACH, CLUB_HAND = 0.62 * ARM_REACH;
-  // The cartoon club leans forward out of the fist about its grip, in every pose. Only the drawn club turns: its
-  // `toonShell`, which swings, reaches and hits read, keeps the club's old line.
-  const CLUB_LEAN = 0.3;
   // The shared body every contributor gets. A character file (src/characters/<handle>.js)
   // adds its own look through `dress` hooks, each called with the build kit `k` at a fixed
   // point, so the hashed jitter draws in the same order for every build:
@@ -867,9 +648,9 @@
     // Each voxel map is kept with what it was baked from, so a second colourway
     // can bake the same maps again under another palette.
     const bakes = [];
-    const vg = (v, origin, emissive, fit = null, reach = 1) => {
-      const geo = toonLoft(v, { unit: u, palette, origin, emissive }, fit, reach);
-      bakes.push({ v, origin, emissive, geo, fit, reach });
+    const vg = (v, origin, emissive) => {
+      const geo = voxelGeometry(v, { unit: u, palette, origin, emissive });
+      bakes.push({ v, origin, emissive, geo });
       return geo;
     };
     const parts = {};
@@ -944,18 +725,13 @@
     fingerVox.set(2, 1, 4, P.skin);
     const fingerGeometry = vg(fingerVox, { x: -1.5 * u, y: -u, z: -1.5 * u });
     const armX = k.armX = 0.29 * h * belly + 0.09 * h;
-    // The cartoon arm (`toonLoft`): the shoulder pad (rows 8-10) and the fist (rows 0-1) drawn slimmer than their
-    // cells, and a narrow wrist (row 2) so the hand reads. ARM_GIRTH slims the whole arm and fist and ARM_REACH shortens it
-    // from the shoulder; everything held goes through HAND and CLUB_HAND, so a fist still closes on its grip.
-    k.armReach = ARM_REACH;
-    const ARM_FIT = k.armFit = (s) => ARM_GIRTH * (s <= 1 ? 0.84 : s === 2 ? 0.8 : s >= 8 ? 0.8 : 1);
     const arm = (side) => {
       const node = createNode({
         position: { x: side * armX, y: 0.46 * h, z: 0 },
         rotation: { x: -0.2, y: 0, z: side * 0.1 },
-        geometry: vg(armVox(), { x: -1.5 * u, y: -11 * u, z: -1.5 * u }, undefined, ARM_FIT, ARM_REACH)
+        geometry: vg(armVox(), { x: -1.5 * u, y: -11 * u, z: -1.5 * u })
       });
-      const fingers = createNode({ position: { x: 0, y: -10 * u * ARM_REACH, z: 0 }, geometry: fingerGeometry, quaternion: BL.math.quat.create() });
+      const fingers = createNode({ position: { x: 0, y: -10 * u, z: 0 }, geometry: fingerGeometry, quaternion: BL.math.quat.create() });
       BL.math.quat.fromEuler(fingers.quaternion, 0, -side * Math.PI / 2, 0);
       parts[side < 0 ? "fingersL" : "fingersR"] = fingers;
       addChild(node, fingers);
@@ -971,17 +747,17 @@
     const clubRest = club.rest || CLUB_REST, clubCarry = club.carry || clubRest;
     const skins = {
       club: club.default ? { default: club.default, gold: club.gold }
-        : { default: turnedX(toonLoft(clubV, { unit: u, palette: club.palette || CLUB_PALETTE, origin: clubOrigin }), CLUB_LEAN), gold: turnedX(toonLoft(clubV, { unit: u, palette: club.goldPalette || GOLD_CLUB_PALETTE, origin: clubOrigin }), CLUB_LEAN) },
+        : { default: voxelGeometry(clubV, { unit: u, palette: club.palette || CLUB_PALETTE, origin: clubOrigin }), gold: voxelGeometry(clubV, { unit: u, palette: club.goldPalette || GOLD_CLUB_PALETTE, origin: clubOrigin }) },
       gun: { default: gunGeometry(h, GUN_PALETTE), gold: gunGeometry(h, GOLD_GUN_PALETTE) }
     };
     parts.club = createNode({
-      position: { x: 0, y: -CLUB_HAND * h, z: 0.08 * h },
+      position: { x: 0, y: -0.62 * h, z: 0.08 * h },
       rotation: { x: clubRest.x, y: 0, z: clubRest.z },
       geometry: skins.club.default
     });
     addChild(parts.armL, parts.club);
     parts.snack = createNode({
-      position: { x: 0, y: -CLUB_HAND * h, z: 0.18 * h },
+      position: { x: 0, y: -0.62 * h, z: 0.18 * h },
       scale: { x: BANANA_AMMO_SCALE, y: BANANA_AMMO_SCALE, z: BANANA_AMMO_SCALE },
       rotation: { x: 0.4, y: 0, z: 1.2 },
       geometry: bananaGeometry(),
@@ -1003,18 +779,9 @@
     addChild(root, parts.gun);
     if (dress.gear) dress.gear(k);
     const headVox = makeVox();
-    let customSkull = false;
-    // Cells a dress hook writes into the head, kept to lift onto the cartoon head as the character's own pieces.
-    const hooked = new Set();
-    const tracked = (hook) => {
-      const before = new Map(headVox.map), result = hook();
-      for (const [key, col] of headVox.map) if (before.get(key) !== col) hooked.add(key);
-      return result;
-    };
     {
       const v = headVox;
-      customSkull = !!(dress.skull && dress.skull(k, v));
-      if (!customSkull) {
+      if (!(dress.skull && dress.skull(k, v))) {
         v.fill(0, 6, 0, 5, 0, 5, skinJ);
         v.fill(1, 5, 0, 1, 6, 6, skinJ);
       }
@@ -1026,11 +793,6 @@
       } else if (face === "smirk") {
         v.set(3, 1, 6, P.nose);
         v.fill(2, 4, 0, 0, 6, 6, P.spot);
-      } else if (face === "smile") {
-        // A wide open grin: teeth over the dark of the mouth.
-        v.fill(3, 3, 2, 3, 6, 6, P.nose);
-        v.fill(1, 5, 0, 0, 5, 5, P.spot);
-        v.fill(2, 4, 1, 1, 5, 5, P.white);
       } else if (face === "beard") {
         v.fill(0, 6, 0, 1, 5, 7, jit(P.hair, P.stubble, 0.25));
         v.fill(1, 5, -2, -1, 5, 7, (x, y) => y === -2 && rand() < 0.35 ? null : rand() < 0.15 ? P.hairDk : P.hair);
@@ -1048,7 +810,7 @@
       }
       // Ears on a bare head; hair covers them otherwise.
       if (!hairy && !dress.skull) for (const x of [-1, 7]) v.fill(x, x, 2, 3, 2, 3, P.skinDk);
-      if (dress.crown) tracked(() => dress.crown(k, v));
+      if (dress.crown) dress.crown(k, v);
       for (const [key, c] of [...v.map]) {
         if (c !== P.hair && c !== P.hairDk) continue;
         voxCoords(key, CELL);
@@ -1059,7 +821,7 @@
       if (hairy) {
         for (let x = 0; x <= 6; x++) for (let z = 0; z <= 5; z++) if (rand() < 0.08) v.set(x, 9, z, rand() < 0.5 ? P.hair : P.hairDk);
       }
-      if (!(dress.eyes && tracked(() => dress.eyes(k, v)))) {
+      if (!(dress.eyes && dress.eyes(k, v))) {
         const eye = traits.eyeColor ? color(traits.eyeColor) : P.white;
         if (traits.eyeGlow) k.headEmissive = { [eye]: traits.eyeGlow };
         const eyes = traits.wideEyes ? [[0, 2], [4, 6]] : [[0, 1], [5, 6]];
@@ -1075,139 +837,12 @@
         v.set(1, 2, 5, P.black);
         v.set(5, 2, 5, P.black);
       }
-      if (dress.mark) tracked(() => dress.mark(k, v));
+      if (dress.mark) dress.mark(k, v);
     }
     const headOrigin = { x: -3.5 * u, y: 0, z: -3 * u };
     // Dress hooks define any glowing face cells for both the head and portrait.
     const headEmissive = k.headEmissive;
-    // The cartoon head, drawn from the traits in the head's frame (cell (x, y, z) sits at headOrigin + cell * u, the face
-    // toward +z): a squared-off skull, big eyes on the character's own eye cells (whites or its eye colour, pupils and a
-    // catch light, or lids when closed), brows, the face its traits name (nose and mouth, smirk, or nose and beard),
-    // ears on a bare head and hair in soft masses. Colours a dress hook added (masks, hats, marks) are lifted out of the
-    // cells and smoothed on top; a hook that replaced the skull keeps its own head, smoothed. Built per palette, so a
-    // second colourway is the same shape. The voxel bake is its `toonShell`, the shell fits and hits read.
-    const hairy = !traits.bald && !traits.hairless;
-    const faceKind = traits.face || (traits.slim || traits.cleanShaven ? "nose" : "beard");
-    // Look options the cartoon head alone reads: a mouth colour, winged liner on open eyes, a chin-length bob (one shell
-    // round the back and sides that frames the face), and `noMouth` for a character that brings its own.
-    const mouth = traits.lips ? color(traits.lips) : P.spot, bob = traits.hairStyle === "bob";
-    // The inside of an open grin, deep red so it never reads as a moustache.
-    const grin = faceKind === "smile" ? color("#5c1b22") : P.spot;
-    const eyeKeys = new Set(eyeCells.map(([x, y]) => voxKey(x, y, 5)));
-    const X = (cx) => headOrigin.x + cx * u, Y = (cy) => headOrigin.y + cy * u, Z = (cz) => headOrigin.z + cz * u;
-    const SKULL = { x: 0, y: Y(3), z: Z(3.1), rx: 3.75 * u, ry: 3.35 * u, rz: 3.05 * u, e: 2.6 };
-    // The skull's front surface at (x, y), so the features sit on it.
-    const frontZ = (x, y) => {
-      const f = 1 - Math.pow(Math.abs(x / SKULL.rx), SKULL.e) - Math.pow(Math.abs((y - SKULL.y) / SKULL.ry), SKULL.e);
-      return SKULL.z + SKULL.rz * Math.pow(Math.max(0, f), 1 / SKULL.e);
-    };
-    // The jaw under the face, and the face's front wherever the jaw stands proud of the skull, so a mouth sits on it.
-    const CHIN = { y: Y(1.1), z: Z(5.2), rx: 2.7 * u, ry: 1.35 * u, rz: 1.3 * u, e: 2.3 };
-    const faceZ = (x, y) => {
-      const f = 1 - Math.pow(Math.abs(x / CHIN.rx), CHIN.e) - Math.pow(Math.abs((y - CHIN.y) / CHIN.ry), CHIN.e);
-      return Math.max(frontZ(x, y), f > 0 ? CHIN.z + CHIN.rz * Math.pow(f, 1 / CHIN.e) : -Infinity);
-    };
-    // `headStretch` draws the head that much taller from its base and `headWiden` that much wider and deeper about its
-    // middle (the shell keeps its size).
-    const designHead = (vox, pal, closed) => {
-      const geo = drawHead(vox, pal, closed), stretch = traits.headStretch || 1, widen = traits.headWiden || 1, v = geo.verts;
-      if (stretch !== 1 || widen !== 1) for (let i = 0; i < v.length; i += 3) {
-        v[i] *= widen;
-        v[i + 1] *= stretch;
-        v[i + 2] = SKULL.z + (v[i + 2] - SKULL.z) * widen;
-      }
-      return geo;
-    };
-    const drawHead = (vox, pal, closed) => {
-      const emissive = headEmissive || {}, glow = (i) => emissive[i] || 0, c = (i) => pal[i];
-      const geo = geometry();
-      geo.smooth = true;
-      if (customSkull) return toonSmooth(vox, { unit: u, palette: pal, origin: headOrigin, emissive: headEmissive });
-      blob(geo, SKULL.x, SKULL.y, SKULL.z, SKULL.rx, SKULL.ry, SKULL.rz, c(P.skin), 0, SKULL.e, 0, 10, 16);
-      blob(geo, 0, CHIN.y, CHIN.z, CHIN.rx, CHIN.ry, CHIN.rz, c(P.skin), 0, CHIN.e);
-      // Eyes, one per side, from the cells the head painted as eyes.
-      for (const side of [-1, 1]) {
-        const cells = eyeCells.filter(([x]) => (x < 3.5) === (side < 0));
-        if (!cells.length) continue;
-        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-        for (const [x, y] of cells) { x0 = Math.min(x0, x); x1 = Math.max(x1, x + 1); y0 = Math.min(y0, y); y1 = Math.max(y1, y + 1); }
-        const ex = X((x0 + x1) / 2), ey = Y((y0 + y1) / 2), rx = (x1 - x0) * 0.55 * u, ry = (y1 - y0) * 0.6 * u, ez = frontZ(ex, ey);
-        // The colour most of the eye's cells wear: its first cell can be the pupil.
-        const tally = new Map();
-        for (const [x, y] of cells) { const col = vox.get(x, y, 5); tally.set(col, (tally.get(col) || 0) + 1); }
-        let white = P.white, most = 0;
-        for (const [col, n] of tally) if (n > most) { most = n; white = col; }
-        if (closed) {
-          const lid = k.lid !== null ? k.lid : P.skinDk;
-          blob(geo, ex, ey - 0.1 * u, ez - 0.05 * u, rx * 1.05, ry * 0.55, 0.3 * u, c(lid), glow(lid));
-          continue;
-        }
-        blob(geo, ex, ey, ez - 0.1 * u, rx, ry, 0.35 * u, c(white), glow(white));
-        if (traits.liner) {
-          blob(geo, ex, ey + ry * 0.85, ez + 0.1 * u, rx * 1.02, 0.14 * u, 0.12 * u, c(P.black));
-          blob(geo, ex + side * (rx + 0.2 * u), ey + ry * 0.75, frontZ(ex + side * (rx + 0.2 * u), ey) + 0.05 * u, 0.55 * u, 0.13 * u, 0.1 * u, c(P.black), 0, 2, side * 0.45);
-        }
-        if (!traits.noPupils) {
-          const pr = Math.min(rx, ry) * 0.55;
-          blob(geo, ex - side * 0.12 * u, ey - 0.08 * u, ez + 0.2 * u, pr, pr * 1.15, 0.12 * u, c(P.black));
-          blob(geo, ex - side * 0.12 * u + pr * 0.35, ey + pr * 0.45, ez + 0.3 * u, pr * 0.3, pr * 0.3, 0.06 * u, c(P.white), 0.4);
-        }
-        if (!traits.noBrow) blob(geo, ex, Y(y1 + 0.55), frontZ(ex, Y(y1 + 0.55)) + 0.05 * u, rx * 1.25, 0.38 * u, 0.4 * u, c(P.hair), 0, 2.4, side * 0.22);
-      }
-      // The face its traits name.
-      const noseY = Y(2.9), noseZ = frontZ(0, noseY);
-      if (faceKind === "nose" || faceKind === "smirk") {
-        blob(geo, 0, noseY, noseZ + 0.35 * u, 0.62 * u, 0.85 * u, 0.62 * u, c(P.nose));
-        const mx = faceKind === "smirk" ? 0.45 * u : 0;
-        if (!traits.noMouth) blob(geo, mx, Y(0.7), faceZ(mx, Y(0.7)), 1.15 * u, traits.lips ? 0.34 * u : 0.26 * u, 0.18 * u, c(mouth), 0, 2, faceKind === "smirk" ? 0.25 : 0);
-      } else if (faceKind === "smile") {
-        blob(geo, 0, noseY, noseZ + 0.35 * u, 0.62 * u, 0.85 * u, 0.62 * u, c(P.nose));
-        // The grin, laid on the face: a wide dark mouth with teeth along its top.
-        const my = Y(0.9), mz = faceZ(0, my);
-        if (!traits.noMouth) {
-          blob(geo, 0, my, mz - 0.02 * u, 1.7 * u, 0.6 * u, 0.2 * u, c(grin), 0, 2.4);
-          blob(geo, 0, my + 0.24 * u, mz + 0.06 * u, 1.35 * u, 0.24 * u, 0.12 * u, c(P.white), 0, 2.4);
-        }
-      } else if (faceKind === "beard") {
-        blob(geo, 0, noseY, noseZ + 0.45 * u, 0.85 * u, 1.0 * u, 0.8 * u, c(k.nose[0]));
-        blob(geo, 0, Y(0.4), Z(6.0), 3.7 * u, 2.1 * u, 1.6 * u, c(P.hair), 0, 2.2);
-        blob(geo, 0, Y(-1.2), Z(6.1), 2.7 * u, 1.7 * u, 1.25 * u, c(P.hairDk), 0, 2);
-        // `beardLong`: on down to the chest in two more tapering masses.
-        if (traits.beardLong) {
-          blob(geo, 0, Y(-3.4), Z(6.2), 2.3 * u, 1.9 * u, 1.15 * u, c(P.hair), 0, 2.1);
-          blob(geo, 0, Y(-5.4), Z(6.3), 1.5 * u, 1.5 * u, 0.9 * u, c(P.hairDk), 0, 2);
-        }
-      }
-      if (hairy) {
-        blob(geo, 0, Y(6.3), Z(2.6), 4.15 * u, 1.9 * u, 3.9 * u, c(P.hair), 0, 2.3);
-        if (bob) blob(geo, 0, Y(2.6), Z(1.9), 4.45 * u, 3.7 * u, 3.85 * u, c(P.hair), 0, 2.4);
-        else {
-          blob(geo, 0, traits.slim ? Y(1.2) : Y(3.4), Z(-0.6), 4.05 * u, traits.slim ? 5.4 * u : 3.2 * u, 1.7 * u, c(P.hair), 0, 2.2);
-          for (const side of [-1, 1]) blob(geo, side * 3.9 * u, Y(3.9), Z(1.6), 0.95 * u, 2.1 * u, 2.4 * u, c(P.hair), 0, 2.2);
-        }
-        for (const [tx, tz, tr] of [[-1.6, 2.2, 1.1], [0.4, 3.4, 1.25], [1.9, 1.6, 1.0]]) blob(geo, tx * u, Y(7.7), Z(tz), tr * u, 0.9 * u, tr * u, c(P.hairDk), 0, 2);
-      } else for (const side of [-1, 1]) blob(geo, side * 3.95 * u, Y(2.6), Z(3), 0.55 * u, 0.95 * u, 0.75 * u, c(P.skinDk));
-      // What a dress hook wrote, smoothed on top.
-      const extra = makeVox();
-      for (const [key, col] of vox.map) if (hooked.has(key) && !eyeKeys.has(key)) extra.map.set(key, col);
-      if (extra.map.size) {
-        const acc = toonSmooth(extra, { unit: u, palette: pal, origin: headOrigin, emissive: headEmissive }), at = geo.verts.length / 3;
-        for (const value of acc.verts) geo.verts.push(value);
-        for (const f of acc.faces) geo.faces.push({ ...f, i: f.i.map((i) => i + at) });
-      }
-      return geo;
-    };
-    const headBake = (vox, closed) => {
-      const geo = designHead(vox, palette, closed);
-      geo.toonShell = geo.collisionGeometry = voxelGeometry(vox, { unit: u, palette, origin: headOrigin, emissive: headEmissive });
-      bakes.push({ v: vox, origin: headOrigin, emissive: headEmissive, geo, rebake: (alt) => {
-        const twin = designHead(vox, alt, closed);
-        twin.toonShell = twin.collisionGeometry = voxelGeometry(vox, { unit: u, palette: alt, origin: headOrigin, emissive: headEmissive });
-        return twin;
-      } });
-      return geo;
-    };
-    const headOpen = headBake(headVox, false);
+    const headOpen = vg(headVox, headOrigin, headEmissive);
     // Each character may widen the central-face crop to retain a hat or hair.
     // Bounds are in the same voxel coordinates as the character's head hooks.
     const portraitVox = makeVox();
@@ -1218,11 +853,11 @@
       const x = CELL[0], y = CELL[1], z = CELL[2];
       if (x >= portraitMin[0] && x <= portraitMax[0] && y >= portraitMin[1] && y <= portraitMax[1] && z >= portraitMin[2] && z <= portraitMax[2]) portraitVox.map.set(k, c);
     }
-    const portraitHead = headBake(portraitVox, false);
+    const portraitHead = vg(portraitVox, headOrigin, headEmissive);
     const closedVox = makeVox();
     for (const [key, c] of headVox.map) closedVox.map.set(key, c);
     for (const [x, y] of eyeCells) closedVox.set(x, y, 5, k.lid !== null ? k.lid : y === 2 ? P.skinDk : P.skin);
-    const headClosed = headBake(closedVox, true);
+    const headClosed = vg(closedVox, headOrigin, k.headEmissive);
     parts.head = createNode({ position: { x: 0, y: 0.5 * h, z: 0.02 * h }, geometry: headOpen });
     const hatY = dress.hatY ? dress.hatY(k) : (traits.hatY || (traits.bald ? 6 : 9)) * u;
     parts.hat = createNode({ position: { x: 0, y: hatY, z: 0 }, scale: { x: h, y: h, z: h }, visible: false });
@@ -1246,7 +881,7 @@
       tint = new Map();
       for (const bake of bakes) {
         if (!live.has(bake.geo) || tint.has(bake.geo)) continue;
-        const twin = bake.rebake ? bake.rebake(alt) : toonLoft(bake.v, { unit: u, palette: alt, origin: bake.origin, emissive: bake.emissive }, bake.fit, bake.reach);
+        const twin = voxelGeometry(bake.v, { unit: u, palette: alt, origin: bake.origin, emissive: bake.emissive });
         tint.set(bake.geo, twin).set(twin, bake.geo);
       }
     }
@@ -1909,5 +1544,5 @@
     }
     glass.push(box({ w: W, h: tall, d: W, color: tint, emissive: 1, offset: { x, y: mid, z } }));
   };
-  BL.models = { beam, forwardLathe, turn, shaded, torus, along, chain, railParts, columnParts, deckGrid, deckPosts, deckParts, stairParts, lanternParts, LANTERN_GLASS, geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, glassVessel, attachGlassShell, tube, ring, polyline, merge, forward, moved, turnedX, turnedY, turnedZ, prism, cached, variants, noShadow, makeVox, voxelGeometry, toonLoft, toonSmooth, blob, shellOf, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, CLUB_LEAN, ARM_REACH, HAND, CLUB_HAND, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
+  BL.models = { beam, forwardLathe, turn, shaded, torus, along, chain, railParts, columnParts, deckGrid, deckPosts, deckParts, stairParts, lanternParts, LANTERN_GLASS, geometry, pushVert, face, voxCoords, box, bevelBox, panel, lathe, glassVessel, attachGlassShell, tube, ring, polyline, merge, forward, moved, turnedX, turnedY, turnedZ, prism, cached, variants, noShadow, makeVox, voxelGeometry, voxelFaces, banana, bananaGeometry, bananaTileGeometry, bananaPileCoreGeometry, bananaPileRadiusScale, bananaPileHeightOffset, BANANA_AMMO_SCALE, BANANA_PILE_PROFILE, particleGeometry, spareMagazine, caveman, CLUB_PALETTE, GOLD_CLUB_PALETTE, labRoom, buildableGeos, crate, die, dieRotationFor, SWAG, TIER_COLORS };
 })();

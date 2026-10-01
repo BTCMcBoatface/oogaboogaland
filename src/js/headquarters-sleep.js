@@ -13,7 +13,7 @@
   const graphs = new WeakMap();
   const create = ({ island, beds, walkable = null, surfaceRoute = null }) => {
     const cached = graphs.get(island), reuse = !!cached && cached.bedIds.length === beds.length;
-    const H = island.headquarters, points = reuse ? cached.points : [], edges = reuse ? cached.edges : [], bedNodes = new Map(), surface = [];
+    const H = island.headquarters, points = reuse ? cached.points : [], edges = reuse ? cached.edges : [], bedNodes = new Map(), surface = [], exits = reuse ? cached.exits : [];
     const floorAt = (x, y, z) => island.supportAt(x, z, y, STEP, -120, RADIUS);
     const clear = (x, y, z, lift = STEP) => island.clearAt(x, y + lift, z, RADIUS, HEIGHT - lift) && island.ceilingAt(x, y, z, RADIUS) >= y + HEIGHT - 1e-7;
     const segment = (a, b, surfaceOnly = false, lift = STEP) => {
@@ -72,6 +72,7 @@
       const upper = ring(11, H.floor, 48), lower = ring(7, H.basement.floor, 48);
       for (const ramp of H.ramps) {
         const m = island.mouths.find((mouth) => mouth.id === ramp.id), apron = node(m.apron.x, 0, m.apron.z), route = chain(ramp.samples);
+        exits.push(apron);
         joinRing(apron, surface); requireLink(apron, route.first); joinRing(route.last, upper);
       }
       for (const ramp of H.basement.ramps) {
@@ -85,7 +86,7 @@
         requireLink(approach, entrance); requireLink(entrance, center); requireLink(center, end);
         bedNodes.set(bed, end);
       }
-      graphs.set(island, { points, edges, bedIds: beds.map((bed) => bedNodes.get(bed)) });
+      graphs.set(island, { points, edges, exits, bedIds: beds.map((bed) => bedNodes.get(bed)) });
     }
     // Search storage belongs to this visit and is reused for each state change.
     const size = points.length, distance = new Float64Array(size), previous = new Int32Array(size), visited = new Uint8Array(size);
@@ -142,7 +143,7 @@
         yield;
       }
     };
-    const plan = function* (x, y, z, bed, toBed, homeX = 0, homeZ = -16) {
+    const plan = function* (x, y, z, bed, toBed, homeX = 0, homeZ = -16, exitAtApron = false) {
       const from = { x, y, z }, starts = [], ends = [];
       yield* attach(from, y >= -0.1, starts);
       let target = null;
@@ -150,6 +151,9 @@
         const id = bedNodes.get(bed);
         if (id === undefined) return null;
         ends.push({ id, cost: 0 });
+      } else if (exitAtApron) {
+        // Chilling Oogas leave the HQ ramp at its apron, then head directly to a rest spot.
+        for (const id of exits) ends.push({ id, cost: 0 });
       } else {
         target = { x: homeX, y: island.surfaceAt(homeX, homeZ), z: homeZ };
         yield* attach(target, true, ends);
@@ -193,7 +197,7 @@
         }
       }
       const smooth = yield* rounded(simplified);
-      if (surfaceRoute) {
+      if (surfaceRoute && !exitAtApron) {
         let join = -1;
         if (toBed) {
           for (let i = 0; i < smooth.length && smooth[i].y >= -1e-7; i++) join = i;

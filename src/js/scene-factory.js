@@ -121,7 +121,7 @@
   let shared = null, feed = null, mock = null, unsubscribe = null, leaving = false, dust = null;
   // The Ooga the visitor walked in as: one playable actor from the shared crew, and the world it carries.
   let people = null, avatar = null, playerWorld = null;
-  let scene = null;
+  let scene = null, greeter = null;
   const targets = [];
   const SAT_POS = { x: 0, y: 0, z: 0 }, SAT_ROT = { x: 0, y: 0, z: 0 }, SAT_SCALE = { x: 1, y: 1, z: 1 };
   const SAT_M = mat4.create();
@@ -390,6 +390,7 @@
     go("hub");
   };
   const onKey = (e) => {
+    if (greeter && greeter.onKey(e)) return true;
     if ((e.key === "x" || e.key === "X") && !e.repeat && pilot.modeAction("mode-toggle")) return true;
     if ((e.key === "1" || e.key === "2") && pilot.weaponMode(Number(e.key))) return true;
     if (e.key === "g" || e.key === "G") return pilot.weaponAction("weapon-toggle");
@@ -780,6 +781,8 @@
     });
     const tipFor = (hit) => {
       const o = hit.owner, tip = TIPS[o.kind];
+      if (o.kind === "greeter") return "Factory foreman · T to talk";
+      if (o.kind === "greeter-choice") return "Factory tour · tap to choose";
       if (o.kind === "line" || o.kind === "tunnel") {
         const b = o.place, c = b.line && mock.snapshot.channels.find((ch) => ch.id === b.line);
         return o.kind === "line" ? `Channel ${b.letter}${c ? ` · peer ${c.peer}` : ""}` : `Peer tunnel${c ? ` · ${c.peer}` : ""}`;
@@ -796,6 +799,8 @@
         if (!hit) return;
         const o = hit.owner;
         if (o.kind === "exit") return leaveCave();
+        if (o.kind === "greeter") return greeter.greet();
+        if (o.kind === "greeter-choice") return greeter.choose(o.choice);
         if (o.preset) pilot.goPreset(o.preset);
         const tip = TIPS[o.kind];
         if (tip) hud.toast(tip[1]);
@@ -806,7 +811,7 @@
     hud.onAction((action) => {
       if (action === "leave") leaveCave();
       else if (action === "reset-view") pilot.goPreset("entrance");
-      else if (action === "act") pilot.action();
+      else if (action === "act") { if (!greeter || !greeter.act()) pilot.action(); }
       else if (action.startsWith("mode-")) pilot.modeAction(action);
       else if (action.startsWith("weapon-") || action === "magazine-swap") pilot.weaponAction(action);
     });
@@ -828,7 +833,7 @@
       // Keep the visitor's weapons and magazines across the doorway. The
       // factory has no banana pile, so its private pile level stays zero.
       playerWorld = { level: 0, weapons: world.weapons, magazine: world.magazine };
-      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor, flyable: flyableFor, ceilingAt: ceilingFor, ladders: LAYOUT.ladders, onBodyMove: resolveLanding, clipProjectileTarget, absorbProjectile, reloadPolicy };
+      const shared = { root, input, hud, game, world: playerWorld, playerName, fx, viewYaw: 0, groundAt: groundFor, walkable: walkableFor, flyable: flyableFor, ceilingAt: ceilingFor, ladders: LAYOUT.ladders, onBodyMove: resolveLanding, clipProjectileTarget, absorbProjectile, reloadPolicy, useNear: () => greeter ? greeter.act() : false };
       shared.onModelChange = () => {
         if (!avatar) return;
         scene.gate.phase.body.refresh(avatar.root);
@@ -864,13 +869,17 @@
     unsubscribe = feed.subscribe(onEvent);
     refreshBoards(scene);
     leaving = false;
+    greeter = BL.factoryGreeter.create({ parent: root, input, fx, feed,
+      visitor: () => people && people.player === avatar ? avatar : null,
+      demoRunning: () => feed.reading.contract === "obl.factory.demo.v1" || feed.reading.contract === null && !!shared.mock, leaveCave });
+    if (!avatar) greeter.greet();
 
     factoryScene.root = root;
     factoryScene.camera = camera;
     factoryScene.input = input;
     factoryScene.debug = {
       hud, camera, controls: pilot.controls, pilot, crew: people, cavemen: people ? people.cavemen : null,
-      factory: { feed, mock, get scene() { return scene; }, simulate(seconds, dt = 1 / 30) { for (let t = 0; t < seconds; t += dt) shared.tick(dt); } }
+      factory: { feed, mock, greeter, get scene() { return scene; }, simulate(seconds, dt = 1 / 30) { for (let t = 0; t < seconds; t += dt) shared.tick(dt); } }
     };
   };
 
@@ -1226,6 +1235,7 @@
       s.refreshAt = 1;
       refreshBoards(s);
     }
+    greeter.update(dt, elapsed);
     stepTweens(dt);
     fx.update(dt, elapsed);
   };
@@ -1235,6 +1245,8 @@
   const leave = () => {
     // Whoever walked in walks back out as themselves: the island takes the same Ooga back at this mouth.
     if (avatar) world.pilot = avatar.traits.name;
+    greeter.dispose();
+    greeter = null;
     unsubscribe();
     unsubscribe = null;
     for (const node of [scene.switchLabel]) if (node.owned) {
@@ -1270,6 +1282,7 @@
       scene.gate.phase.liveGeometry(set);
     }
     if (avatar) set.add(avatar.headOpen).add(avatar.headClosed);
+    if (greeter) greeter.liveGeometry(set);
   };
   const stats = () => {
     let nodes = 0;

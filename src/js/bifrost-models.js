@@ -6,7 +6,7 @@
 //
 // A window is a row in `WINDOWS` and a slot in `SLOTS`, in the same order. A `travel` row walks through to its
 // scene, and looks through a short passage lined with the field's blue onto a picture of that world (the scene
-// takes the picture); a world not open yet is a `mirror`, a reflector linked to the next mirror in the hall.
+// takes the picture); an open scene may also be reached through a mirror. Unassigned mirrors link to the next mirror.
 // Opening a world is changing its row, and giving the scene its picture and stand-in.
 //
 // The name is carved in raised gilt letters (`word`), chiselled strokes swept along each letter's centre line,
@@ -43,7 +43,7 @@
   const WINDOWS = [
     { id: "west", kind: "mirror" },
     { id: "dsb", kind: "travel", scene: "dsb", name: "DSB Land", label: "DSB", tint: "#3f8cff" },
-    { id: "north", kind: "mirror" },
+    { id: "north", kind: "mirror", scene: "poker", name: "The Ember Den", label: "EMBER DEN" },
     { id: "east", kind: "mirror" }
   ];
   const SLOTS = [-1.95, -2.75, 2.75, 1.95];

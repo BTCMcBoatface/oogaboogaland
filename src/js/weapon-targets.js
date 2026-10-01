@@ -4,8 +4,6 @@
   const BL = window.BL = window.BL || {}, { mat4 } = BL.math;
   const EPS = 1e-7, geometries = new WeakMap();
   const geometryOf = geometry => {
-    // A cartoon character part is hit on its blocky voxel shell (`models.toonLoft`, the cartoon heads), so contacts stay as they were.
-    geometry = BL.models.shellOf(geometry);
     let result = geometries.get(geometry);
     if (result) return result;
     const verts = geometry.verts, triangles = [], boxes = [], order = [], nodes = [];
@@ -120,7 +118,9 @@
     };
     const eligible = (target, ignore, includeNonWeapon = false) => {
       const { node, owner } = target;
-      return !!node.geometry && owner.active !== false && (includeNonWeapon || owner.weaponType !== "none") && (!ignore || owner.cave !== ignore)
+      return !!node.geometry && owner.active !== false && (includeNonWeapon || owner.weaponType !== "none")
+        && (!ignore || owner.cave !== ignore && owner.entry?.owner !== ignore
+          && (!ignore.owner || owner.cave !== ignore.owner) && !(ignore.gorilla && owner.kind === "clanker"))
         && !(node.mirror && (node.mirrorPortal || node.mirrorReveal >= 1)) && refreshWorld(node);
     };
     const sync = node => {

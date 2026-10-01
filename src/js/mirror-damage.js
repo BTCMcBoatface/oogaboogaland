@@ -4,8 +4,8 @@
   const BL = window.BL = window.BL || {};
   const { mat4, mulberry32, hexToRgb, sortByKey, sortScratch } = BL.math;
   const { createNode, addChild, removeChild, boundsOf } = BL.scene;
-  const PANEL_DAMAGE = 20, PANEL_HEALTH = 2, PANEL_LIMIT = 48, DEBRIS_LIMIT = 48, DEBRIS_LIFE = 1.2, HEAL_DELAY = 3, HEAL_RATE = 2;
-  const MAX_DAMAGE = PANEL_DAMAGE + PANEL_LIMIT * PANEL_HEALTH, DAMAGE_STEP = 0.5, STATE_LIMIT = MAX_DAMAGE / DAMAGE_STEP;
+  const PANEL_DAMAGE = 100, PANEL_HEALTH = 8, PANEL_LIMIT = 50, DEBRIS_LIMIT = 50, DEBRIS_LIFE = 1.2, HEAL_DELAY = 3, HEAL_RATE = 8;
+  const MAX_DAMAGE = PANEL_DAMAGE + PANEL_LIMIT * PANEL_HEALTH, DAMAGE_STEP = 2, STATE_LIMIT = MAX_DAMAGE / DAMAGE_STEP;
   const PANEL_HEAL_RATE = HEAL_RATE / PANEL_LIMIT;
   const BROKEN_HEAL_DELAY = 120;
   const CRACK_HEAL_TIME = 1.5, CRACK_STEPS = 6, REPAIR_STEPS = 96, REPAIR_CACHES = 2;
@@ -397,7 +397,7 @@
       sortByKey(order, 0, pieces.length, keys, 1, 0, hitSort);
       if (preserved && Number.isFinite(keys[order[0]])) {
         // Other panels retain their exact repair and crack contours. Further
-        // force is absorbed by the nearest remaining glass, two HP per pane.
+        // force is absorbed by the nearest remaining glass, eight HP per pane.
         fractureDamage[order[0]] = Math.max(fractureDamage[order[0]], state.crackDamage); fractureLevel[order[0]] = 1;
       }
       for (let i = 0; i < pieces.length && remaining > 0 && Number.isFinite(keys[order[i]]); i++) {

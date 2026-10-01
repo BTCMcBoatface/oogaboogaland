@@ -170,9 +170,10 @@
   };
   // Through a window to its world, as the same Ooga, once a transition is free to start.
   const travel = (w) => {
-    if (leaving || !go(w.row.scene)) return;
-    leaving = true;
+    if (leaving) return;
     world.pilot = avatar.traits.name;
+    if (!go(w.row.scene, null, w.linked)) return;
+    leaving = true;
     pilot.setActive(false);
   };
   const onKey = (e) => {
@@ -265,16 +266,17 @@
     const winOpening = { minX: -WINDOW.halfW, maxX: WINDOW.halfW, floorY: 0, ceilingY: WINDOW_TOP };
     WINDOWS.forEach((row, i) => {
       const f = BM.frameOf(i), kind = row.kind === "travel" && !BL.scenes[row.scene] ? "mirror" : row.kind;
+      const linked = kind === "mirror" && !!row.scene && !!BL.scenes[row.scene];
       const node = createNode({ position: { x: f.x, y: 0, z: f.z }, rotation: { x: 0, y: f.ry, z: 0 } }), stone = createNode({ geometry: BM.archStone() });
       const neon = createNode({ geometry: BM.archGlow(), sightHidden: true });
       addChild(node, stone, neon);
-      if (kind === "travel") {
+      if (kind === "travel" || linked) {
         const label = FM.label(row.label, "", { height: 1.1 }), board = createNode({ position: { x: 0, y: WINDOW_TOP + BM.FRAME.band + 1.15, z: BM.FRAME.front + 0.2 } });
         addChild(board, createNode({ geometry: BM.hanger(label.width, 1.35, BM.FRAME.front + 0.2) }), createNode({ geometry: label.back }), createNode({ geometry: label.face }));
         addChild(node, board);
       }
       addChild(root, node);
-      const w = { row, kind, node, neon, ribs: null, rim: null, rims: null, tint: null, sn: Math.sin(f.bearing), c: Math.cos(f.bearing), phase: null, body: null, face: null, picture: null, light: -1, near: 0, hum: Math.random() * 0.3, transform: null, yaw: 0, crossings: 0 };
+      const w = { row, kind, linked, node, neon, ribs: null, rim: null, rims: null, tint: null, sn: Math.sin(f.bearing), c: Math.cos(f.bearing), phase: null, body: null, face: null, picture: null, light: -1, near: 0, hum: Math.random() * 0.3, transform: null, yaw: 0, crossings: 0 };
       if (kind === "travel") {
         const passage = BM.passage();
         w.rims = Array.from({ length: BM.RIM_STEPS }, (_, k) => BM.portalRim(row.tint, k));
@@ -300,7 +302,7 @@
       // A reflective face owns its contact atlas; the hidden ripple field
       // cannot sample contacts. Travel fields use their existing atlas.
       w.body = w.face ? BL.mirrorBody.create(w.face, new Map()) : w.phase.body;
-      w.tip = kind === "travel" ? `${row.name} · ${TIPS.travel[0]}` : TIPS.mirror[0];
+      w.tip = kind === "travel" || linked ? `${row.name} · walk through to travel` : TIPS.mirror[0];
       s.windows.push(w);
       s.kinds.push(kind);
       input.add(stone, { kind: "window", window: w }, { radius: 3 });
@@ -308,7 +310,7 @@
     });
     // Closed-world mirrors form a loop. One rigid transform per doorway
     // preserves its local crossing point and turns inward travel into an exit.
-    const mirrors = s.windows.filter((w) => w.kind === "mirror");
+    const mirrors = s.windows.filter((w) => w.kind === "mirror" && !w.linked);
     for (let i = 0; i < mirrors.length; i++) {
       const w = mirrors[i], other = mirrors[(i + 1) % mirrors.length];
       const yaw = other.node.rotation.y - w.node.rotation.y + Math.PI, c = Math.cos(yaw), sn = Math.sin(yaw);
@@ -414,7 +416,8 @@
         if (o.kind === "window") {
           const w = o.window;
           if (PRESETS[w.row.id]) pilot.goPreset(w.row.id);
-          return hud.toast(w.kind === "travel" && !avatar ? "Only an Ooga can cross. Walk one in from the island." : TIPS[w.kind][1]);
+          return hud.toast((w.kind === "travel" || w.linked) && !avatar ? "Only an Ooga can cross. Walk one in from the island."
+            : w.linked ? `Walk through the mirror to ${w.row.name}.` : TIPS[w.kind][1]);
         }
         if (o.kind === "core") {
           pilot.goPreset("core");
@@ -450,8 +453,12 @@
       for (const w of scene.windows) w.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
       // Back from a world, out of its window: standing in front of it, facing the mechanism. In from the island: through
       // the field at the tunnel's end.
-      const from = scene.windows.find((w) => w.kind === "travel" && w.row.scene === ctx.from);
+      const from = scene.windows.find((w) => (w.kind === "travel" || w.linked) && w.row.scene === ctx.from);
+      const preview = ctx.from === null && new URLSearchParams(location.search).get("debug") === "1"
+        && new URLSearchParams(location.search).get("bifrostMirror") === "poker"
+        ? scene.windows.find((w) => w.row.scene === "poker" && w.linked) : null;
       if (from) standBefore(from, 2.8);
+      else if (preview) standBefore(preview, 3.4, true);
       else if (ctx.from === "hub") pilot.navigate(GATE);
     }
     lightUp(scene);
@@ -467,11 +474,11 @@
   };
 
   // Stands the Ooga `out` metres in from a window's face, facing the mechanism, with the camera behind it.
-  const standBefore = (w, out) => {
+  const standBefore = (w, out, faceMirror = false) => {
     const d = HALL.r - out, x = w.sn * d, z = w.c * d;
     BACK.position.x = x; BACK.position.y = 0; BACK.position.z = z;
     BACK.target.x = x; BACK.target.y = 1; BACK.target.z = z;
-    BACK.yaw = Math.atan2(w.sn, w.c);
+    BACK.yaw = Math.atan2(w.sn, w.c) + (faceMirror ? Math.PI : 0);
     pilot.navigate(BACK);
   };
   // Where the Ooga stands against a window: how far past the wall's face (`along`) and how far across its opening.
@@ -499,6 +506,7 @@
         const t = -from / (to - from), across = (previousX + (p.x - previousX) * t) * w.c - (previousZ + (p.z - previousZ) * t) * w.sn;
         const bottom = previousY + (p.y - previousY) * t - avatar.baseY;
         if (bottom < -0.12 || !BM.inArch(across, bottom + avatar.bodyHeight, WINDOW.halfW, WINDOW.spring)) continue;
+        if (w.linked) { travel(w); return; }
         const m = w.transform, x = p.x, z = p.z, vx = avatar.leap.vx, vz = avatar.leap.vz;
         p.x = m[0] * x + m[8] * z + m[12]; p.z = m[2] * x + m[10] * z + m[14];
         avatar.root.rotation.y += w.yaw;

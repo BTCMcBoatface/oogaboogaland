@@ -252,7 +252,7 @@
   const UNDER_SPHERE_CENTER = DEPTH - UNDER_SPHERE_RADIUS;
   const MAX_HEIGHT = 8;
   const BLUFF = 6;
-  const MOUTH = { w: 5, h: 3, depth: 5 };
+  const MOUTH = { w: 5, h: 3, depth: 5, front: 0.5 };
   const ROOM = { w: 6, h: 4, from: 2.5, to: 6.5 };
   const PATH_HALF = 0.75;
   const RING_HALF = PATH_HALF * 1.5;
@@ -482,6 +482,7 @@
       for (const f of frames) {
         const dx = wx - f.x, dz = wz - f.z;
         const along = dx * f.ox + dz * f.oz, across = Math.abs(dz * f.ox - dx * f.oz);
+        // Use the recessed edge of diagonal cliff cells for the wall plane; the half-metre entrance rim projects from it.
         if (along > -f.e && across < 5) bluff = Math.max(bluff, (1 - smooth((across - 3) / 2)) * (1 - smooth((along - BLUFF_LEN) / 2)));
         else if (f.lean && along > -APRON && across < 3.5) {
           apron = true;
@@ -636,7 +637,7 @@
           const dx = wx - f.x, dz = wz - f.z;
           const along = dx * f.ox + dz * f.oz, across = Math.abs(dz * f.ox - dx * f.oz);
           const room = along > chamber.from - e && along < chamber.to + e && across < chamber.w / 2 + e;
-          if (!room && !(along > -0.5 && along < MOUTH.depth + e && across < MOUTH.w / 2 + e)) continue;
+          if (!room && !(along > -MOUTH.front && along < MOUTH.depth + e && across < MOUTH.w / 2 + e)) continue;
           const gyTop = SURFACE - 1 + Math.round((room ? chamber.h : MOUTH.h) / UNIT);
           for (let gy = SURFACE; gy <= gyTop; gy++) {
             grid.set(gx, gy, gz, 0);
@@ -1907,6 +1908,16 @@
       }
       return false;
     };
+    // The rainforest approach has no painted path, but all three terrace cuts must stay clear of scenery.
+    const overlapsStairs = (x, z, radius) => {
+      if (z + radius >= STAIR_TERRACE.from - 1 && Math.abs(x) <= STAIR_TERRACE.halfWidth + STAIR_TERRACE.blend + radius) return true;
+      const timechainAlong = x * TIMECHAIN_X + z * TIMECHAIN_Z;
+      if (timechainAlong + radius >= TIMECHAIN.from - 1
+        && Math.abs(x * TIMECHAIN_Z - z * TIMECHAIN_X) <= TIMECHAIN.halfWidth + TIMECHAIN.blend + radius) return true;
+      const poolAlong = x * POOL_X + z * POOL_Z;
+      return poolAlong + radius >= POOL_APPROACH.from - 1 && poolAlong - radius <= POOL_APPROACH.to + 0.5
+        && Math.abs(x * POOL_Z - z * POOL_X) <= POOL_APPROACH.halfWidth + POOL_APPROACH.blend + radius;
+    };
     // Walking centerlines reuse the rendered path mask's bends; master curves stay fixed and navigation clips
     // them to the growing ring.
     const centerlines = spokes.map((s) => {
@@ -2359,6 +2370,7 @@
       sightBytes: rampSight.byteLength + windowSightPlanes.byteLength + windowSightRefs.byteLength,
       windowPiecesAt: (x, z) => windowColumns[column(x, z)],
       isPath,
+      overlapsStairs,
       isGrassAt,
       onLand,
       mouths,
