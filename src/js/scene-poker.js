@@ -227,7 +227,7 @@
     if (seatTable >= 0 && !pendingStand) sit(session.tables[seatTable].snapshot().seats.findIndex(s => s?.id === HERO));
     panel = BL.pokerHud.create(action, select); setTheme(theme.id); refresh(); setView(seatTable >= 0 && !pendingStand);
     scene.root = root; scene.camera = camera; scene.input = input;
-    scene.debug = { pilot, hud, crew: people, cavemen: people.cavemen, controls: pilot.controls, poker: { session, room, action, select, snapshots } };
+    scene.debug = { camera, pilot, hud, crew: people, cavemen: people.cavemen, controls: pilot.controls, poker: { session, room, action, select, snapshots } };
     if (new URLSearchParams(location.search).get("pokerLive") === "1") action("connect");
   };
   const update = (dt, elapsed) => {

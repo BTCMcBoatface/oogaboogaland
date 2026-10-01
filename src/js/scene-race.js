@@ -78,6 +78,7 @@
 
   const buildTrack = (id) => {
     if (track) {
+      fx.clearParticles();
       removeChild(root, track.root);
       track.dispose();
     }

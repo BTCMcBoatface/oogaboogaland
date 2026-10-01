@@ -285,7 +285,7 @@
   const torchFlame = cached(() => noShadow(box({ w: 0.28, h: 0.3, d: 0.28, color: "#ffb13b", emissive: 1 })));
 
   // The hub's approved cartoon palm: segmented flaring trunk and V-folded notched fronds.
-  const palm = (i) => BL.dressing.palm(i);
+  const palm = (i) => BL.dressing.palm(i, true);
   // Rounded cartoon boulders: two or three squat smooth stones leaning together, a cushion of weed or moss on top.
   const stoneHeap = (seed, size, hex, dark, cap, capH = 0.2) => {
     const g = soft(), rand = mulberry32(seed);

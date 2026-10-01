@@ -1651,6 +1651,14 @@
       "factoryWalking": {
         "passed": 127,
         "total": 127
+      },
+      "poker": {
+        "passed": 134,
+        "total": 134
+      },
+      "gorillaInactiveRoofs": {
+        "passed": 125,
+        "total": 125
       }
     },
     "canvasTapDelayedHandlerMs": [
@@ -1658,6 +1666,84 @@
       476.8000000002794
     ],
     "performanceGridExperiment": "Reverted: no measured improvement; original thresholds retained.",
-    "fullSuite": "Pending after follow-up changes; preceding full run was 640/679."
+    "fullSuite": "Pending after follow-up changes; preceding full run was 640/679.",
+    "lowerFloorCutaway": {
+      "passed": 141,
+      "total": 152,
+      "status": "Unresolved after correcting rendered-node fixture"
+    }
+  },
+  "raceScenery": {
+    "defaultFingerprintsBefore": {
+      "palm0": "216d06d86360572074a2ac663026c40ffbd92dcb67c8eb2d6812e649d2a1fe4a",
+      "palm1": "a0cae02387a6b19ceb1e182b46530e1d5ef97d7cf856cc6eaddc8f020e0a72fb",
+      "palm2": "441bfb85a12df38af217c37595def5e6f2b872709e680a5adbdd61fc312cf474",
+      "bush0": "0ac114ca2eb841808789c59f9f7dc9435f15ad8aeaf2fbd52522724fab48d665",
+      "bush1": "62bcbb92ee92805ccede37b75ccaf2fef35271688dea0cc7ca2a8cc66e9ad8bf",
+      "bush2": "680451f91376f87d25bdbcc349ece6390be0aebdc596ae1bed0969726a6bfa4d"
+    },
+    "defaultFingerprintsAfter": {
+      "palm0": "216d06d86360572074a2ac663026c40ffbd92dcb67c8eb2d6812e649d2a1fe4a",
+      "palm1": "a0cae02387a6b19ceb1e182b46530e1d5ef97d7cf856cc6eaddc8f020e0a72fb",
+      "palm2": "441bfb85a12df38af217c37595def5e6f2b872709e680a5adbdd61fc312cf474",
+      "bush0": "0ac114ca2eb841808789c59f9f7dc9435f15ad8aeaf2fbd52522724fab48d665",
+      "bush1": "62bcbb92ee92805ccede37b75ccaf2fef35271688dea0cc7ca2a8cc66e9ad8bf",
+      "bush2": "680451f91376f87d25bdbcc349ece6390be0aebdc596ae1bed0969726a6bfa4d"
+    },
+    "beforeCosts": {
+      "grass": {
+        "count": 322,
+        "faces": 20286
+      },
+      "flowerTuft": {
+        "count": 138,
+        "faces": 8694
+      },
+      "palm": {
+        "count": 105,
+        "faces": 99750
+      },
+      "bush": {
+        "count": 144,
+        "faces": 248758
+      },
+      "lagoonRock": {
+        "count": 18,
+        "faces": 5652
+      }
+    },
+    "afterCosts": {
+      "grass": {
+        "count": 322,
+        "faces": 20286
+      },
+      "flowerTuft": {
+        "count": 138,
+        "faces": 8694
+      },
+      "palm": {
+        "count": 105,
+        "faces": 30240
+      },
+      "bush": {
+        "count": 144,
+        "faces": 26994
+      },
+      "lagoonRock": {
+        "count": 18,
+        "faces": 5652
+      }
+    },
+    "tracksValidation": {
+      "passed": 129,
+      "total": 129
+    },
+    "fullRaceValidation": {
+      "passed": 143,
+      "total": 143,
+      "console": "clean"
+    },
+    "visualChange": "Only race scenery selects coarse meshes; full detail default meshes are unchanged.",
+    "particleFix": "Track replacement clears live dust and sparks from the removed world and trims the existing idle pool; the original node budget passes after real driving."
   }
 }

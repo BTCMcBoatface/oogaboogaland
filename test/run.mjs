@@ -2262,7 +2262,7 @@ const raceTracks = ["race tracks", async (b) => {
     record(`race tracks: ${id} builds fast into culled sectors with checkpoints clear of its gaps`, t.ms < 900 && t.samples > 300 && t.length > 600 && t.sectors >= 12 && t.chunks > 20 && t.checkpoints === 8 && t.first === 0 && !t.gapNearCheck && t.maxStep < 0.8 && t.faces > 15000 && t.faces < 120000 && t.bananas >= 30 && t.crates >= 6 && t.pads >= 2 && t.map >= 100 && t.grid === Math.max(8, CAST) && t.gridHeight && t.spectators > 12 && t.records < 320, JSON.stringify(t));
   }
   record("race tracks: the two outdoor tracks carry a sky and the gorge lights its torches", built.bay.sky && built.peak.sky && !built.gorge.sky && built.gorge.torches >= 20 && built.bay.torches === 0, JSON.stringify({ bay: built.bay.sky, gorge: [built.gorge.sky, built.gorge.torches], peak: built.peak.sky }));
-  const swapped = await b.evaluate(`(() => { const B = window.__ooga; const r0 = B.renderer.stats.records; document.querySelector('[data-track="bay"]').click(); B.housekeep(); const r1 = B.renderer.stats.records; return { r0, r1, nodes: B.stats().allNodes }; })()`);
+  const swapped = await b.evaluate(`(() => { const B = window.__ooga; const r0 = B.renderer.stats.records; document.querySelector('[data-track="bay"]').click(); B.housekeep(); const r1 = B.renderer.stats.records; return { r0, r1, nodes: B.stats().allNodes, pool: B.stats().pool, particles: B.stats().particles }; })()`);
   record("race tracks: switching tracks releases the old track's GPU records", swapped.r1 <= swapped.r0 + 5 && swapped.nodes < 900, JSON.stringify(swapped));
 }];
 
@@ -4392,7 +4392,7 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
             }
           }
           lowerFloorsOrdered = lowerFloorsOrdered && lowerFloorOrdered();
-          structureHidden ||= !!H.node.cutawayWholeHidden || H.entrances.some(entry => entry.node.cutawayWholeHidden);
+          structureHidden ||= !!D.headquarters.node.cutawayWholeHidden || D.headquarters.entrances.some(entry => entry.node.cutawayWholeHidden);
           if (!a.root.cutawayWholeHidden) visibleFrames++;
           wholeHidden = Math.max(wholeHidden, B.crew.list.filter(cave => cave.root.cutawayWholeHidden).length + D.props.filter(prop => prop.node.cutawayWholeHidden).length);
           wholeBarrels = Math.max(wholeBarrels, D.props.filter(prop => prop.prop === "barrel" && prop.node.cutawayWholeHidden).length);
@@ -6159,7 +6159,7 @@ scene("hub", { label: "gorilla inactive roofs", query: "status=chillin", steps: 
         const d = (x - roof.x) ** 2 + (z - roof.z) ** 2;
         if (y >= roof.y - 0.55 && d < distance && Math.abs(B.island.surfaceAt(x, z) - y) <= 0.1) { distance = d; nearest = roof; }
       }
-      if (nearest?.status === "dark") inactive++;
+      if (nearest?.status === "dark" || nearest?.status === "headquarters") inactive++;
       else if (nearest) violations.push({ name: e.owner.traits.name, kind, cave: nearest.id, x, y, z });
       else if (!inactiveMouths.some(m => Math.hypot(x - m.x, z - m.z) < 16))
         violations.push({ name: e.owner.traits.name, kind, cave: "outside inactive frontage", x, y, z });
@@ -6173,7 +6173,7 @@ scene("hub", { label: "gorilla inactive roofs", query: "status=chillin", steps: 
     }
     return { goals, inactive, violations };
   })()`);
-  record("gorilla lounging: resting goals and settled poses stay on inactive cave roofs or their nearby frontage", r.goals > 0 && r.violations.length === 0, JSON.stringify(r));
+  record("gorilla lounging: resting goals and settled poses stay on inactive cave or HQ roofs, or nearby inactive frontage", r.goals > 0 && r.violations.length === 0, JSON.stringify(r));
 } }] });
 scene("hub", { label: "gorilla rooftop hop", query: "status=chillin", steps: [{ name: "gorilla rooftop hop", why: "rule: a neighbouring rooftop outing uses a supported jump across the saddle and stays on the upper level", run: async (b) => {
   const rows = await b.evaluate(`(() => {
@@ -6904,7 +6904,10 @@ scene("poker", { query: "character=portlandhodl", steps: [{ name: "poker floor a
   record("poker walking: spectators move with WASD from two camera angles", allWalk(walking), JSON.stringify(walking));
   const r = await b.evaluate(`(() => {
     const B = __ooga, P = BL.scenes.poker.debug.poker, click = a => document.querySelector('[data-poker-action="' + a + '"]').click();
-    const count = P.room.tables.length, seats = P.room.tables.every(t => t.chairs.length === 9), dealers = P.room.tables.every(t => t.agent.parts.torso.children.length >= 4);
+    const suit = BL.pokerModels.geometry(P.session.theme);
+    const count = P.room.tables.length, seats = P.room.tables.every(t => t.chairs.length === 9), dealers = P.room.tables.every(t =>
+      t.agent.parts.torso.children.some(n => n.geometry === suit.jacket)
+      && [t.agent.parts.armL, t.agent.parts.armR].every(arm => [suit.sleeve, suit.cuff].every(g => arm.children.some(n => n.geometry === g))));
     P.select(0); click("join"); for (let i = 0; i < 4; i++) click("bots"); click("start");
     const t = P.session.tables[0], privateCards = t.snapshot().seats.every(s => s.cards.every(c => c === null));
     let guard = 0; while (t.playing && guard++ < 500) { if (t.snapshot("local-player").legal) click("call"); B.advance(0.81, 1 / 30); }

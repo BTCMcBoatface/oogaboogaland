@@ -154,7 +154,7 @@
       decor: [
         { build: (i) => raceModels.palm(i % 3), p: 0.22, near: [3, 16], scale: [0.85, 1.3], big: true, solid: SOLID.palm },
         { build: (i) => raceModels.lagoonRock(i % 2), p: 0.05, near: [6, 22], scale: [0.7, 1.1], big: true, solid: SOLID.lagoonRock },
-        { build: (i) => hubModels.bush(i % 3), p: 0.3, near: [2.5, 14], scale: [0.9, 1.4], big: true },
+        { build: (i) => hubModels.bush(i % 3, true), p: 0.3, near: [2.5, 14], scale: [0.9, 1.4], big: true },
         { build: () => hubModels.grass(), p: 0.9, near: [1.5, 18], scale: [1.2, 2], big: false },
         { build: () => hubModels.flowerTuft(), p: 0.35, near: [2, 12], scale: [1, 1.5], big: false }
       ],

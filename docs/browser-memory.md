@@ -46,6 +46,14 @@ The next repair batch passes the melee check (127/127), Timechain on both render
 
 Timechain's two Canvas taps were rejected because slow frames delayed handlers by 456–477 ms. Gesture duration now uses input event timestamps; the driver queues a real 40 ms press/release without waiting for a slow frame between them. All six wall details open through pointer events on both renderers. The original tap-duration and performance thresholds remain unchanged. A finer outline grid was measured and reverted because it did not improve performance. The unit suite remains 123/123.
 
+Poker now passes 134/134 checks: its intro keeps the lobby behind it, its debug camera follows the scene contract, and the dealer assertion verifies the actual jacket, sleeves and cuffs. Desktop movement, local settlement, private cards, fallback drawing, phone controls and return visits pass.
+
+Race scenery now selects coarse versions of the existing palm and bush builders. Palm face count is 288 instead of 950; the measured bay build retains the same 105 palms and 144 bushes, reducing their faces from 348,508 to 57,234. All six default palm/bush SHA-256 fingerprints remain identical, so detailed scenery elsewhere retains its exact geometry, colours, normals and sway. The existing race-track checks pass 129/129 with the 120,000-face and 900-node limits unchanged; the complete race suite now passes 143/143. Replacing a track clears that removed world's live dust and sparks and trims the idle pool, making the unchanged node budget hold after real driving.
+
+Correcting the lower-floor fixture to read rendered headquarters nodes instead of layout data exposes eleven additional cutaway/weather failures (141/152 targeted checks pass). These are unresolved and are not suppressed.
+
+The gorilla resting check passes 125/125 after matching the authored allowance for HQ roofs; it still rejects active cave roofs and unrelated frontage. The next full-suite run will update the remaining failure ledger.
+
 This change remains a draft pending clean full-suite/performance validation. It must not close #93 or be represented as a complete solution to its full checklist.
 
 ## Checks for a maintainer
