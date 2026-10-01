@@ -1760,6 +1760,18 @@
           "birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset",
           "carry orbit: upper floors stay hidden in both lower-level camera handoffs and return after shoulder settles"
         ]
+      },
+      "focusedAfterColumnOwnershipCorrection": {
+        "passed": 149,
+        "total": 152,
+        "seconds": 82.5,
+        "remainingFailures": 3,
+        "log": "untracked/issue-93/failure-fix-cutaway-9.log",
+        "failures": [
+          "birds-eye combat: basement entrances open at HQ while the remaining route stays covered until descent",
+          "birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset",
+          "carry orbit: upper floors stay hidden in both lower-level camera handoffs and return after shoulder settles"
+        ]
       }
     },
     "cameraFollowup": {
@@ -1800,7 +1812,12 @@
       "rampWindowCrossingFaces": 6382,
       "rampWindowCrossingFacesPreserved": true,
       "remainingRampWindowOwnershipFailures": 2266,
-      "status": "Node diagnosis; focused browser validation remains pending. Upper-route ownership overrides require investigation."
+      "status": "Browser ownership check passes: native corridor stations and upper-route priority are inherited from canonical terrain columns; extended window stations and immutable base fragments retain their existing checks.",
+      "canonicalRampWindowFragments": {
+        "checked": 7180,
+        "matchingColumnOwner": 7180,
+        "mismatches": 0
+      }
     },
     "rampMarkerDirection": {
       "actualSourceBuilder": true,

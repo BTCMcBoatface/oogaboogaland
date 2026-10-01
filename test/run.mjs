@@ -4289,8 +4289,17 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
       if (!face.headquartersWindowReveal || !face.cutawayPathKey || window?.kind !== "ramp") continue;
       rampWindowFaces++;
       const decoded = decodePath(face.cutawayPathKey);
-      rampWindowFaceOwnership = rampWindowFaceOwnership && decoded.owners === 1 && window?.kind === "ramp"
-        && decoded.channel === window.cutawayChannel && windowStations[decoded.channel].has(decoded.station);
+      // Inside a corridor, the fragment inherits that column's station; an
+      // overlapping upper route keeps ownership over a basement window.
+      // The extended columns above separately prove authored window stations.
+      let x = 0, z = 0;
+      for (const index of face.i) { x += verts[index * 3]; z += verts[index * 3 + 2]; }
+      x /= face.i.length; z /= face.i.length;
+      const gx = Math.floor((x - paths.origin.x) / paths.unit), gz = Math.floor((z - paths.origin.z) / paths.unit);
+      const column = gx * paths.height + gz;
+      rampWindowFaceOwnership = rampWindowFaceOwnership && decoded.owners === 1
+        && gx >= 0 && gx < paths.width && gz >= 0 && gz < paths.height
+        && face.cutawayPathKey === paths.keys[column];
       let below = false, above = false;
       for (const index of face.i) {
         const y = verts[index * 3 + 1];
