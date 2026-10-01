@@ -3691,10 +3691,13 @@
   const updateBirdsEyeCutaway = (dt) => {
     clearCutawayHidden();
     const gorilla = clankerPlay && clankerPlay.active, player = gorilla ? clankerPlay.player : pilot.player;
-    const cameraMix = player ? gorilla ? clankerPlay.birdsEyeMix : pilot.birdsEyeMix : 0;
+    // Release stops following immediately, but the last floor must scan back
+    // into view rather than restoring all rock and weather in one frame.
+    const cameraMix = player ? gorilla ? clankerPlay.birdsEyeMix : pilot.birdsEyeMix
+      : Math.max(0, RENDER_OPTS.cutawayFade - dt / 0.3);
     const overhead = player && (gorilla ? clankerPlay.birdsEye : pilot.birdsEye);
     const subterranean = player && player.root.position.y - (gorilla ? 0 : player.baseY) < -STEP_MAX;
-    const showRampMarkers = cameraMix > 0.5;
+    const showRampMarkers = !!player && cameraMix > 0.5;
     for (const lintel of headquartersRimLintels) lintel.visible = !showRampMarkers;
     for (const marker of headquarters.rampMarkers) {
       marker.node.visible = marker.frame.visible = marker.arrow.visible = showRampMarkers;
@@ -3710,7 +3713,7 @@
     const mix = cameraMix;
     // A perspective handoff can finish its projection blend before the eye
     // clears the ceiling. Keep the cut until the actual camera is inside again.
-    const active = !!player && (overhead || mix > 0
+    const active = mix > 0 || !!player && (overhead
       || subterranean && camera.position.y > birdsEyeCeiling(player, gorilla));
     // Below ground, camera interpolation must never restore upstairs rock or
     // props. Floor/ramp progress still moves the cut as the character travels.
@@ -3729,7 +3732,7 @@
       return;
     }
     const hq = island.headquarters;
-    if (active) {
+    if (player) {
       const p = player.root.position, fresh = player !== cutawayPlayer || !Number.isFinite(cutawayProgress);
       // Hop is relative to the next supporting floor, including the abyss
       // sentinel. Only world-space feet describe the level actually on screen.
@@ -3760,7 +3763,7 @@
     // Scan between floor ceilings across the ramp's travel so upper levels
     // peel away progressively instead of switching in a narrow midpoint band.
     // Head clearance remains authoritative during a jump, jet flight or fall.
-    if (active) {
+    if (player) {
       let target = cutawayLevel <= 1 ? lerp(CUTAWAY_TOP, hq.ceiling - 0.06, cutawayLevel)
         : lerp(hq.ceiling - 0.06, hq.basement.ceiling - 0.06, cutawayLevel - 1);
       if (feet < hq.basement.floor - STEP_MAX) target = Math.min(target, birdsEyeCeiling(player, gorilla));

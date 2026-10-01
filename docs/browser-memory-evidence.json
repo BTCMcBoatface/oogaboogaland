@@ -1666,11 +1666,77 @@
       476.8000000002794
     ],
     "performanceGridExperiment": "Reverted: no measured improvement; original thresholds retained.",
-    "fullSuite": "Pending after follow-up changes; preceding full run was 640/679.",
+    "fullSuite": {
+      "commit": "b3dec02",
+      "passed": 666,
+      "total": 703,
+      "failed": 37,
+      "minutes": 17.6,
+      "failures": [
+        "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+        "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+        "work movement cave trips: every surface trail connects to the ring and completes in both directions, including LF and Mine above buried HQ ramps",
+        "rainforest approach: Oogas walk onto the bridge and back without stopping or jumping, including the reported W-S Bitcoin combat position",
+        "gorilla crowd: three overlapping NPC trunks step apart without jumping or relocation, and converging walkers keep their trunks apart",
+        "lab flask: pickup completes without circling, and the final magazine sends its clanker to the next cave immediately without a return job",
+        "lab work: exclusive regular and overflow jobs animate correctly, and coworkers take room routes out together without a doorway stall",
+        "gorilla rooftop hop: neighbouring roofs are reached in both directions by continuous jumps with real upper-level footing and no relocation",
+        "gorilla wall handoff: jumping during an edge mount and grabbing the wall again cannot resume the previous mount or drift away from the wall",
+        "gorilla edge first descent: both active cave faces mount once, jump sideways halfway down and land away from the entrance without remounting or relocation",
+        "gorilla roof descent: the autonomous OBL roof departure reaches the main floor without climbing back onto the roof or relocation",
+        "mirror clanker: the safe chamber expands, entry continues straight inward, runs cross from side to side at varied depths behind the glass, and a compact glyphed lever is mounted within reach on the back wall",
+        "gorilla traversal: crates, barrels and rocks keep a continuous grounded gallop, an autonomous gorilla leaves a destroyed raised prop, fresh presses jump immediately and once more in air without held repeats or cancellation exploits, low cover permits an all-fours retreat, and a stalled stroller walks around tall scenery",
+        "gorilla camera: carry and combat share first-person, shoulder and distant views; Right Shift swaps shoulder, Q rotates birds-eye and N faces north; combat has a white-ring crosshair and release restores the head without moving the camera",
+        "gorilla wall destination: a roof gorilla reaches the clicked lower lateral wall grip through continuous climbing without relocation or terrain penetration",
+        "gorilla wall destination: a second click moves the hanging gorilla sideways along the wall without dismounting, teleporting or entering stone",
+        "gorilla wall grip: lowered hands contact the uneven cave rim throughout their cycle without any rendered mesh penetrating stone",
+        "birds-eye combat camera",
+        "birds-eye combat: surface and hills retain their terrain, caves use local roof cuts, and HQ and basement use the current floor's global section",
+        "birds-eye combat: each downhill ramp has a dense entrance label and a separate arrow fitted to its surface, hidden outside bird's-eye view",
+        "birds-eye combat: HQ and B1 read upright left-to-right through a full camera turn and every entrance exposes its complete downhill arrow",
+        "birds-eye combat: ramp-window cutaway columns extend beyond the raw ramp, keep their authored route station, and retain real window fragments in the terrain base",
+        "birds-eye combat: overlapping ramp cells belong to the upper path and retained voxel floors stay in the immutable terrain base",
+        "birds-eye combat: basement entrances open at HQ while the remaining route stays covered until descent",
+        "birds-eye combat: inward zoom switches at relative height 21 with the same head clearance on the surface, hills, HQ and basement",
+        "birds-eye combat: zoom leaves section meshes cached, translated islands share the exact world cut height, and terrain and centered landmarks stay unchanged",
+        "birds-eye combat: the pile, HQ hearth and basement center align on screen at every selected floor despite their different elevations",
+        "birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset",
+        "carry orbit: upper floors stay hidden in both lower-level camera handoffs and return after shoulder settles",
+        "birds-eye combat: releasing the actor completes a bounded weather fade and upward rock scan after the camera stops following",
+        "birds-eye combat: WebGL2 and Canvas weather fade independently of rock cuts and reverse to the same coverage without mutating scene nodes or geometry",
+        "birds-eye combat: low-floor clouds render below the camera with a continuous visual offset while their world transforms and physical positions remain unchanged",
+        "birds-eye lower-floor targets",
+        "DSB plaza webgl2: Shop purchases still work",
+        "dsb gameplay webgl2",
+        "dsb lifecycle",
+        "factory lifecycle"
+      ],
+      "status": "Failed; subsequent cutaway repairs require validation"
+    },
     "lowerFloorCutaway": {
       "passed": 141,
       "total": 152,
       "status": "Unresolved after correcting rendered-node fixture"
+    },
+    "cutawayFollowup": {
+      "focusedBeforeWeatherOwnerCorrection": {
+        "passed": 143,
+        "total": 152
+      },
+      "isolatedRendering": {
+        "passed": 4,
+        "total": 4,
+        "console": [],
+        "actualHubWeatherNodes": 48,
+        "actualHubCloudNodes": 78,
+        "weatherPreserved": true
+      },
+      "repairs": [
+        "Retain the last actor cut height while release fades over 0.3 seconds; hide ramp markers when no actor remains.",
+        "Exclude complete relief-window roots from the weather fixture.",
+        "Keep identical cloud shading while comparing shader offset with physical translation."
+      ],
+      "status": "Release fade and isolated rendering pass; remaining camera/cutaway failures and fresh full validation remain outstanding."
     }
   },
   "raceScenery": {

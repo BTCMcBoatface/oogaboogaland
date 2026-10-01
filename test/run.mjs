@@ -4555,7 +4555,10 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
     const restored = P.player === a && P.mode === "birds-eye" && P.birdsEyeMix === 1 && Math.abs(a.root.position.y - a.baseY - H.basement.floor) < 0.2;
     const landmarks = [B.altar.node.position, B.headquarters.firepit.position, H.basement.hole].map(p => [p.x, p.z]);
     const clouds = [], weather = [];
-    const visit = n => { if (n.geometry?.cutawayPreserve) clouds.push(n); if (n.geometry?.cutawayHide) weather.push(n); for (const child of n.children) visit(child); };
+    // Relief windows include an ordinary front mesh as well as projective
+    // batches. Neither is part of the weather deck.
+    const reliefRoots = [D.factory?.batches.hall.parent, D.bifrost?.window?.root];
+    const visit = n => { if (reliefRoots.includes(n)) return; if (n.geometry?.cutawayPreserve) clouds.push(n); if (n.geometry?.cutawayHide) weather.push(n); for (const child of n.children) visit(child); };
     visit(BL.scenes.hub.root);
     const immutable = I.geometry === geometry && I.geometry.verts === verts && verts.every((v, i) => v === originalVerts[i]) && source.data === data && data.every((v, i) => v === originalData[i]);
     const cache = entries.map(e => ({ ...e.cap.stats }));
@@ -4721,12 +4724,13 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
         const loweredPoint = [cloudPoint[0], cloudPoint[1] - 8, cloudPoint[2]];
         const cloudLowered = read({ cutawayCloudY: 0, cutawayCloudMix: 1 }, [loweredPoint])[0];
         const cloudWorldUnchanged = top.world.every((v, i) => v === cloudWorld[i]) && Object.keys(cloudPosition).every(k => top.position[k] === cloudPosition[k]);
-        top.matrixCloud = false; top.position.y = 0;
+        // Keep cloud shading in both samples; only the translation differs.
+        top.position.y = 0;
         const cloudReference = read({}, [loweredPoint])[0];
         top.position.y = 8; top.matrixCloud = true; camera.position.y = 12;
         const middlePoint = [cloudPoint[0], cloudPoint[1] - 4, cloudPoint[2]];
         const cloudMiddle = read({ cutawayCloudY: 0, cutawayCloudMix: 0.5 }, [middlePoint])[0];
-        top.matrixCloud = false; top.position.y = 4;
+        top.position.y = 4;
         const cloudMiddleReference = read({}, [middlePoint])[0];
         ground.visible = true; camera.position.y = 20; camera.target.y = 0;
         top.geometry = roof; top.position.y = 5;
