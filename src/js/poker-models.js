@@ -2,6 +2,7 @@
 (() => {
   "use strict";
   const BL = window.BL, M = BL.models, S = BL.scene;
+  const EXIT_Z = 35.2 + BL.bifrostModels.MIRROR_Z;
   const TABLES = Array.from({ length: 10 }, (_, i) => ({ x: i % 2 ? 11 : -11, z: 24 - Math.floor(i / 2) * 12 }));
   const SEATS = Array.from({ length: 9 }, (_, i) => {
     const a = -Math.PI / 2 + 0.55 + i * (Math.PI * 2 - 1.1) / 8;
@@ -186,7 +187,7 @@
       S.addChild(group, agent.root);
       const dealCard = node(g.back, 0, 1.5, -2.4); dealCard.visible = false; S.addChild(group, dealCard);
       S.addChild(root, group);
-      tables.push({ root: group, base, top, rim, felt, pinstripe, chairs, chips, backs, board, button, agent, dealCard, actors: new Array(12).fill(null), version: -1, pulse: 0 });
+      tables.push({ root: group, base, top, rim, felt, pinstripe, chairs, chips, backs, board, button, agent, dealCard, actors: new Array(SEATS.length).fill(null), version: -1, pulse: 0 });
     }
     let current = null;
     const setTheme = id => {
@@ -219,7 +220,8 @@
   };
   const walkable = (ax, az, bx, bz, y, height, actor) => {
     const r = actor?.bodyRadius || 0.4;
-    if (Math.abs(bx) > 23 - r || Math.abs(bz) > 35.5 - r) return false;
+    const rear = Math.abs(bx) < BL.bifrostModels.WINDOW.halfW - r ? EXIT_Z + 1.05 - r : 35.5 - r;
+    if (Math.abs(bx) > 23 - r || bz < -35.5 + r || bz > rear) return false;
     // A swept ellipse catches a fast step through a table, not just its endpoint.
     for (const t of TABLES) {
       const rx = 4.85 + r, rz = 3.25 + r, x = (ax - t.x) / rx, z = (az - t.z) / rz;
@@ -234,5 +236,5 @@
     }
     return true;
   };
-  BL.pokerModels = { TABLES, SEATS, geometry, card, build, walkable };
+  BL.pokerModels = { TABLES, SEATS, EXIT_Z, geometry, card, build, walkable };
 })();

@@ -133,11 +133,11 @@
     worldClock.dateTime = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
     worldClock.setAttribute("aria-label", `${Number.isFinite(clockTime) || clockDaylen > 0 ? "Ooga Booga time" : "Local time"} ${text}`);
   };
-  const go = (id, place = null) => {
+  const go = (id, place = null, instant = false) => {
     const next = scenes[id];
     if (!next) throw new Error(`Unknown scene "${id}"`);
     if (transition) return false;
-    transition = { next, place, out: true, t: 0 };
+    transition = { next, place, out: true, t: 0, instant };
     return true;
   };
   const router = routerMod.create(scenes, window.BL.routes, go);
@@ -202,6 +202,13 @@
     if (DEBUG && renderer.stats.records > live.size) throw new Error(`${next.id}: ${renderer.stats.records} GPU records for ${live.size} live geometries`);
   };
   const stepTransition = (dt) => {
+    if (transition.instant) {
+      const { next, place } = transition;
+      swap(next, place);
+      transition = null;
+      fade = 0;
+      return;
+    }
     transition.t += dt;
     if (transition.out) {
       fade = Math.min(1, transition.t / FADE);

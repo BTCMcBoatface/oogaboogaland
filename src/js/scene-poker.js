@@ -6,7 +6,7 @@
     direct: [0.88, 0.77, 0.58], directStrength: 0.38, ambientFloor: 0.48, sun: { x: 0.2, y: 1, z: 0.3 },
     shadowCenter: { x: 0, y: 1.5, z: 0 }, shadowExtent: 35, bloomStrength: 0.24,
     lights: new Float32Array(BL.glRenderer.POINT_LIGHT_CAPACITY * 8), lightCount: 13 };
-  let root, camera, input, hud, panel, pilot, fx, people, avatar, room, portal, world, session, go;
+  let root, camera, input, hud, panel, pilot, fx, people, avatar, room, mirror, world, session, go;
   let leaving = false, timer = 0, selected = 0, pendingStand = false, seatTable = -1, shownCountdown = -1;
   const targets = [], snapshots = new Array(10);
   let HERO = "local-player", connecting = false;
@@ -21,7 +21,7 @@
     session.theme = theme.id;
     renderOpts.sky = theme.sky; renderOpts.ground = theme.ground; renderOpts.direct = theme.direct; renderOpts.ambientFloor = theme.ambient;
   };
-  const leaveFloor = () => { if (leaving) return; if (session.live && seatTable >= 0) { panel.notice("Stand between hands before leaving. You can walk the floor while connected."); return; } leaving = true; go("hub"); };
+  const leaveFloor = () => { if (leaving) return; if (session.live && seatTable >= 0) { panel.notice("Stand between hands before leaving. You can walk the floor while connected."); return; } if (go("bifrost", null, true)) leaving = true; };
   const setView = focused => {
     panel.setFocused(focused); pilot.controls.reset();
     pilot.setActive(!focused && (seatTable < 0 || pendingStand));
@@ -45,7 +45,7 @@
     const t = session.tables[i], view = room.tables[i], s = t.snapshot(i === seatTable && !pendingStand ? HERO : null);
     snapshots[i] = s; view.version = t.version; view.pulse = 0.7;
     if (s.result && completed[i] !== s.hand) { completed[i] = s.hand; nextHand[i] = 5; }
-    for (let j = 0; j < 12; j++) {
+    for (let j = 0; j < PM.SEATS.length; j++) {
       const p = s.seats[j], slot = PM.SEATS[j];
       view.backs[j].visible = !!p && p.inHand && !p.folded && s.phase !== "showdown";
       view.chips[j].visible = !!p && p.stack > 0;
@@ -174,6 +174,7 @@
   };
   const enter = ctx => {
     world = ctx.world; go = ctx.go; leaving = false; timer = 0; HERO = "local-player"; connecting = false;
+    if (ctx.from === "bifrost") document.querySelector('[data-intro="poker"]').hidden = true;
     session = world.poker || (world.poker = { tables: Array.from({ length: 10 }, () => R.create()), selected: 0, pendingStand: false });
     if (!session.autoDeal) session.autoDeal = new Array(10).fill(true);
     theme = Themes.get(session.theme || Themes.load());
@@ -198,9 +199,22 @@
     fx = BL.fx.create({ root, input, hooks, hud, game: ctx.game, world, renderer: ctx.renderer, camera, overlay: ctx.overlay, tickerAt: { x: 0, y: 5, z: -34 } });
     room = PM.build(theme.id); S.addChild(root, room.root);
     for (let i = 0; i < 10; i++) { input.add(room.tables[i].top, { kind: "poker", index: i }); targets.push(room.tables[i].top); }
-    // An upright Ooga Portal is a secondary-room entrance, not a repository cave.
-    portal = BL.oogaPortal.create({ radius: 2.5, outerRadius: 3, position: { x: 0, y: 3.1, z: 35.2 }, rotation: { x: Math.PI / 2, y: 0, z: 0 }, receiving: true });
-    S.addChild(root, portal.root); input.add(portal.ring, { kind: "poker-exit" }); targets.push(portal.ring);
+    // The return mirror is set into the far wall, facing down the central aisle.
+    const BM = BL.bifrostModels, face = BM.mirror(4);
+    const frame = S.createNode({ position: { x: 0, y: 0, z: 35.2 }, rotation: { x: 0, y: Math.PI, z: 0 } });
+    const stone = S.createNode({ geometry: BM.archStone() });
+    const glass = S.createNode({ geometry: face.glass, position: { x: 0, y: 0, z: -BM.MIRROR_Z }, sightHidden: true, rippleTint: [0.3, 0.62, 1] });
+    const label = BL.factoryModels.label("BIFROST", "", { height: 1.1 });
+    const board = S.createNode({ position: { x: 0, y: BM.WINDOW_TOP + BM.FRAME.band + 1.15, z: BM.FRAME.front + 0.2 } });
+    S.addChild(board, S.createNode({ geometry: BM.hanger(label.width, 1.35, BM.FRAME.front + 0.2) }), S.createNode({ geometry: label.back }), S.createNode({ geometry: label.face }));
+    S.addChild(frame, stone, S.createNode({ geometry: BM.archGlow(), sightHidden: true }), S.createNode({ geometry: face.backing }), glass, board);
+    S.addChild(root, frame);
+    const opening = { minX: -BM.WINDOW.halfW, maxX: BM.WINDOW.halfW, floorY: 0, ceilingY: BM.WINDOW_TOP };
+    const phase = BL.labPhase.create(frame, { x: 0, z: 35.2, ry: Math.PI, floorY: 0, room: { w: 2 * BM.WINDOW.halfW, h: BM.WINDOW_TOP, from: 0, to: 1 } }, opening, -BM.MIRROR_Z, [0.3, 0.62, 1]);
+    phase.node.visible = false;
+    glass.mirrorRipples = phase.ripples;
+    mirror = { phase, glass, body: BL.mirrorBody.create(glass, new Map()) };
+    input.add(stone, { kind: "poker-exit" }); targets.push(stone);
     const requested = new URLSearchParams(location.search).get("character");
     const name = [world.pilot, requested].find(n => BL.contributors.activeRoster.some(c => c.name === n)) || BL.contributors.activeRoster[0].name;
     world.pilot = null;
@@ -209,6 +223,7 @@
     people = shared.crew = BL.crew.create(shared); pilot.bind(shared); avatar = people.cavemen.get(name);
     avatar.root.position.x = 0; avatar.root.position.y = avatar.baseY; avatar.root.position.z = 29;
     avatar.root.rotation.y = Math.PI; pilot.possess(avatar);
+    mirror.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
     if (seatTable >= 0 && !pendingStand) sit(session.tables[seatTable].snapshot().seats.findIndex(s => s?.id === HERO));
     panel = BL.pokerHud.create(action, select); setTheme(theme.id); refresh(); setView(seatTable >= 0 && !pendingStand);
     scene.root = root; scene.camera = camera; scene.input = input;
@@ -218,8 +233,10 @@
   const update = (dt, elapsed) => {
     pilot.readInput(dt);
     if (!panel.focused && (seatTable < 0 || pendingStand)) people.update(dt, elapsed);
-    pilot.update(dt); portal.update();
-    if (!leaving && (seatTable < 0 || pendingStand) && Math.abs(avatar.root.position.x) < 2 && avatar.root.position.z > 34) leaveFloor();
+    pilot.update(dt);
+    mirror.phase.update(dt, elapsed); mirror.body.update(dt); mirror.body.time = mirror.phase.ripples.time;
+    if (!leaving && (seatTable < 0 || pendingStand) && Math.abs(avatar.root.position.x) < BL.bifrostModels.WINDOW.halfW
+      && avatar.root.position.z > PM.EXIT_Z) leaveFloor();
     // All ten table lights fit the lowest renderer tier; selected table goes first.
     const near = selected, lights = renderOpts.lights;
     for (let slot = 0; slot < 10; slot++) {
@@ -274,17 +291,17 @@
     session.selected = selected; session.pendingStand = pendingStand;
     if (session.live) session.live.dispose();
     world.pilot = avatar.traits.name;
-    world.oogaPortalTravel = { from: "poker", to: "hub", arrival: "pit", name: world.pilot };
     for (const t of room.tables) t.agent.dispose();
     people.dispose(); fx.dispose(); pilot.dispose();
     for (const n of targets) input.remove(n); targets.length = 0;
-    portal.dispose(); panel.dispose(); hud.dispose();
+    mirror.phase.dispose(); mirror.body.dispose(); mirror.glass.mirrorRipples = null;
+    panel.dispose(); hud.dispose();
     while (root.children.length) S.removeChild(root, root.children[root.children.length - 1]);
     const count = input.targetCount; input.dispose();
     document.body.removeAttribute("data-poker-seated");
     document.body.removeAttribute("data-poker-table-view");
     scene.input = scene.debug = null;
-    hud = panel = pilot = fx = people = avatar = room = portal = input = session = world = go = null;
+    hud = panel = pilot = fx = people = avatar = room = mirror = input = session = world = go = null;
     snapshots.fill(null);
     return { targets: count };
   };

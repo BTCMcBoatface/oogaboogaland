@@ -1,4 +1,4 @@
-# Banana Poker floor
+# The Ember Den poker floor
 
 Implemented against OogaBoogaX/oogaboogaland `rock`, inspected source snapshot
 `e1c69776153a05794b3fc6da6af9b584a7820ebf`.
@@ -37,10 +37,10 @@ Build with `npm run build`, then open `oogaboogaland.html`, or run
 `npm run serve` and open `http://127.0.0.1:8080/?scene=poker`.
 For a direct file preview, append `?scene=poker` to the file URL.
 
-In the island, possess an Ooga, go down to the headquarters basement, choose
-**Banana Poker Floor** on an Ooga Portal destination screen, switch the portal
-on with a wall lever, and enter. The floor returns the same character through
-the basement arrival route. Repository caves are unchanged.
+In the island, possess an Ooga and enter ₿IFRÖST. Walk through The Ember Den's
+mirror beside the DSB Land window. The same Ooga appears directly in the room,
+without a title card or transition animation. The return mirror brings them
+back to ₿IFRÖST.
 
 **Quick Play** takes a free seat, adds enough computer opponents for four
 players and deals. Or choose any of the ten lobby rows, take a specific seat,
@@ -84,7 +84,7 @@ table. Taking a second seat requires leaving the first.
 the aisle immediately. Their remaining turns automatically check when free and
 fold when facing a bet; their seat releases after settlement. Already all-in
 chips remain eligible. Escape returns from the focused view to the floor, then
-leaves through the portal. Leaving the scene pauses its local tables; returning
+leaves through the return mirror to ₿IFRÖST. Leaving the scene pauses its local tables; returning
 resumes them. Reloading resets the session-only chips.
 
 ## Visual revision: Gatsby meets Ooga Booga Land
@@ -123,8 +123,8 @@ The original Banana Club remains the default.
 | Jungle Ruins | Mossy limestone bands, hanging vines, rune stones and fern-green felt. |
 | Moonstone Hollow | Pale mineral bands, silver trim, cool lanterns and violet felt. |
 
-These decorate the existing underground floor reached through the basement Ooga
-Portal; no repository cave slot is claimed. The cave finishes follow the mine's
+These decorate the underground floor reached through ₿IFRÖST's Ember Den mirror;
+no repository cave slot is claimed. The cave finishes follow the mine's
 banded-rock architecture, with lanterns, vines and rune stones from the shared
 `BL.dressing` kit. Glowing fissures are visual decoration, not walking hazards.
 New wall formations sit beyond the existing spectator movement boundary, and
@@ -240,7 +240,7 @@ Blocked: the three registered poker browser sessions (`poker floor and play`,
 `DevTools socket closed: Chrome is gone`. No browser assertions completed.
 The hub browser suite has not been run. Screenshots/performance/120 simultaneous
 human players have not been validated. A maintainer should play-test the floor,
-phone controls, and basement portal round trip before accepting or publishing.
+phone controls, and ₿IFRÖST mirror round trip before accepting or publishing.
 
 For integration, apply the supplied patch to the pinned base or reconcile the
 changed source/document/test files onto the latest `rock`. Do not overwrite
