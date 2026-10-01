@@ -3658,6 +3658,9 @@
       // the stable baseline; proximity may only reveal farther ahead.
       const levelProgress = clamp(cutawayProgress - (channel >= 2 ? 1 : 0), 0, 1);
       let hi = Math.max(initial, 1 + Math.round(levelProgress * 254));
+      // Before the global scan reaches below HQ, only the travelled lower
+      // route may extend. Height progress must not open the other route early.
+      if (channel >= 2 && lowerCoverDepth <= paths.unit) hi = initial;
       if (channel === cutawayTravelChannel && lo <= 255) {
         const station = 1 + Math.round(clamp(cutawayTravelStation / paths.lengths[channel], 0, 1) * 254);
         // The globally scanned prefix remains visibly open behind the player.
@@ -3711,10 +3714,11 @@
       marker.node.rotation.y = Math.atan2(-x, -z);
     }
     const mix = cameraMix;
-    // A perspective handoff can finish its projection blend before the eye
-    // clears the ceiling. Keep the cut until the actual camera is inside again.
+    // Carry can finish its projection blend before the camera handoff ends.
+    // Restore rock only after shoulder settles with the eye inside the ceiling.
     const active = mix > 0 || !!player && (overhead
-      || subterranean && camera.position.y > birdsEyeCeiling(player, gorilla));
+      || subterranean && (camera.position.y > birdsEyeCeiling(player, gorilla)
+        || !gorilla && (pilot.mode === "orbit" || pilot.shoulderEntryMix < 1)));
     // Below ground, camera interpolation must never restore upstairs rock or
     // props. Floor/ramp progress still moves the cut as the character travels.
     const rockMix = active && subterranean ? 1 : mix;

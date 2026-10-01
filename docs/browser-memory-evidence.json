@@ -1740,9 +1740,12 @@
       "repairs": [
         "Retain the last actor cut height while release fades over 0.3 seconds; hide ramp markers when no actor remains.",
         "Exclude complete relief-window roots from the weather fixture.",
-        "Keep identical cloud shading while comparing shader offset with physical translation."
+        "Keep identical cloud shading while comparing shader offset with physical translation.",
+        "Do not extend an inactive basement route before the global scan reaches below HQ; the travelled route retains its ahead-of-player opening.",
+        "Keep underground rock cut in carry orbit and through shoulder entry; restore once shoulder settles with its eye inside the ceiling.",
+        "Exclude the terminal settled shoulder frame from the carry-entry measurement, require at least ten in-progress frames, and retain the explicit restored-state check."
       ],
-      "status": "Release fade and isolated rendering pass; remaining camera/cutaway failures and fresh full validation remain outstanding.",
+      "status": "Focused run passes 151/152. Straight-down shoulder expectation and fresh full validation remain unresolved.",
       "focusedAfterWeatherAndFloorCorrection": {
         "passed": 145,
         "total": 152,
@@ -1772,6 +1775,24 @@
           "birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset",
           "carry orbit: upper floors stay hidden in both lower-level camera handoffs and return after shoulder settles"
         ]
+      },
+      "focusedAfterBasementAndCarryRepairs": {
+        "passed": 151,
+        "total": 152,
+        "seconds": 82.8,
+        "remainingFailures": 1,
+        "log": "untracked/issue-93/failure-fix-cutaway-11.log",
+        "failures": [
+          "birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset"
+        ]
+      },
+      "remainingShoulderDiagnosis": {
+        "actorFeet": -12.5,
+        "settledCameraY": -7.947757272570218,
+        "ceilingY": -8.5,
+        "projectionMix": 0,
+        "rockMix": 1,
+        "status": "The straight-down shoulder eye remains above the basement ceiling. The remaining assertion expects an uncut ceiling and projection-timed rock fade; unresolved."
       }
     },
     "cameraFollowup": {

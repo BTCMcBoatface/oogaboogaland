@@ -4568,11 +4568,17 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
       carryRoofs.hiddenMarkers = carryRoofs.hiddenMarkers && D.headquarters.rampMarkers.every(marker => !marker.node.visible);
     }
     P.hooks.onZoom(0.99);
+    let carryEntryFrames = 0;
     for (let i = 0; i < 120 && P.shoulderEntryMix < 1; i++) {
       B.advance(1 / 60, 1 / 60);
+      // The terminal frame is settled shoulder, where the next check requires
+      // restoration. Measure the handoff only while it is still in progress.
+      if (P.shoulderEntryMix === 1) break;
+      carryEntryFrames++;
       carryRoofs.in = carryRoofs.in && P.mode === "shoulder" && B.renderOpts.cutawayFade === 1
         && B.renderOpts.cutawayMaxY < H.ceiling - 0.5;
     }
+    carryRoofs.in = carryRoofs.in && carryEntryFrames >= 10;
     B.advance(1, 1 / 60);
     carryRoofs.settled = P.mode === "shoulder" && P.shoulderEntryMix === 1 && B.renderOpts.cutawayFade === 0;
     toggle(); P.hooks.onZoom(1.2); B.advance(1, 1 / 60);
