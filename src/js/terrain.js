@@ -2081,6 +2081,25 @@
         cutawayPathKey: pathKey, cutawayPathBottom: pathKey ? cutawayPathBottoms[cutawayColumn] : undefined,
         cutawayWindowMask: birdseyeWindowMask[cutawayColumn], cutawayWindowColumn: birdseyeWindowMask[cutawayColumn] ? cutawayColumn : -1 });
     }
+    // Weld exact shared positions only after every ramp and window has been appended. Keep double precision:
+    // these coordinates also define collision and sight boundaries, not just the GPU's float positions.
+    {
+      const source = geometry.verts, vertices = [], indices = new Uint32Array(source.length / 3), shared = new Map();
+      for (let i = 0; i < source.length; i += 3) {
+        const x = source[i], y = source[i + 1], z = source[i + 2];
+        const key = (Object.is(x, -0) ? "-0" : x) + "," + (Object.is(y, -0) ? "-0" : y) + "," + (Object.is(z, -0) ? "-0" : z);
+        let index = shared.get(key);
+        if (index === undefined) {
+          index = vertices.length / 3;
+          shared.set(key, index);
+          vertices.push(x, y, z);
+        }
+        indices[i / 3] = index;
+      }
+      for (const face of geometry.faces) for (let i = 0; i < face.i.length; i++) face.i[i] = indices[face.i[i]];
+      for (const line of geometry.lines) for (let i = 0; i < line.i.length; i++) line.i[i] = indices[line.i[i]];
+      geometry.verts = new Float64Array(vertices);
+    }
     const rockCaves = compactCaveLabels(matrixCaves, geometry, grid, UNIT, ORIGIN);
     matrixCaves = null;
     // Four half-spaces give each continuous ramp's triangular footprint and sloping top; its column supplies the

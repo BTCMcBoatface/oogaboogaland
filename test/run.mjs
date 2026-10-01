@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
@@ -1558,6 +1559,8 @@ const { autoQualityProbe } = (() => {
   const autoQualityProbe = () => {
     const source = readFileSync(new URL("../src/js/director.js", import.meta.url), "utf8");
     const controller = source.slice(source.indexOf("  const perf ="), source.indexOf("  const WARMUP"));
+    const opening = source.slice(source.indexOf("  const COARSE ="), source.indexOf("  const $ ="));
+    const initial = (deviceMemory, coarse = false) => runInNewContext(`${opening}\nINITIAL_QUALITY`, { navigator: { deviceMemory }, window: { matchMedia: () => ({ matches: coarse }) } });
     const create = (quality = "high", renderedFrames = 100) => {
       const changes = [], state = { focused: true, now: 0 };
       const renderer = { kind: "webgl2", quality, setQuality(value) { this.quality = value; changes.push(value); } };
@@ -1588,13 +1591,20 @@ const { autoQualityProbe } = (() => {
     const crawling = create(); crawling.boot(crawling.low * 1.2);
     const floor = create("low"); floor.boot(floor.low * 2); floor.boot(floor.medium * 0.3);
     const phone = create("medium"); phone.boot((phone.medium + phone.low) / 2);
+    const memory = create(initial(8)); memory.boot(memory.medium * 0.5);
+    const memorySlow = create(initial(4)); memorySlow.boot(memorySlow.low * 1.2);
     return { healthy: healthy.changes.length === 0, gpuBound: bound.changes[0] === "medium",
       reactsIn: slowAt, reactsFast: slowAt <= 2500, ignoresSpikes: spike.changes.length === 0,
       bounded: bounded.changes.join("|") === "medium|low", warmup: warming.changes.length === 0,
       ignoresPauses: excluded.changes.length === 0, fallback: fallback.changes.length === 0,
       bootFast: fast.changes.length === 0, bootMedium: middling.changes.join("|") === "medium",
       bootLow: crawling.changes.join("|") === "low", bootOneWay: floor.changes.length === 0,
-      bootKeepsCoarse: phone.changes.length === 0 };
+      bootKeepsCoarse: phone.changes.length === 0,
+      bootMemory: [0.25, 0.5, 1, 2, 4, 8].every((gb) => initial(gb) === "medium")
+        && [undefined, 0, -1, NaN, Infinity, "8", 16, 32].every((gb) => initial(gb) === "high")
+        && initial(undefined, true) === "medium" && initial(32, true) === "medium"
+        && memory.renderer.quality === "medium" && memory.changes.length === 0
+        && memorySlow.changes.join("|") === "low" };
   };
   return { autoQualityProbe };
 })();
@@ -3073,7 +3083,7 @@ const adaptiveQualityChecks = async () => {
   record("adaptive quality: a GPU-bound machine is seen through delivered frames and loses a tier within two seconds", r.healthy && r.gpuBound && r.reactsFast, JSON.stringify(r));
   record("adaptive quality: warmup, transitions, background frames and isolated spikes do not lower quality", r.warmup && r.ignoresPauses && r.ignoresSpikes && r.fallback, JSON.stringify(r));
   record("adaptive quality: steps one tier at a time and stops at the lowest", r.bounded, JSON.stringify(r));
-  record("adaptive quality: boot cost seeds the opening tier, only ever downward", r.bootFast && r.bootMedium && r.bootLow && r.bootOneWay && r.bootKeepsCoarse, JSON.stringify(r));
+  record("adaptive quality: memory and boot cost seed the opening tier, only ever downward", r.bootMemory && r.bootFast && r.bootMedium && r.bootLow && r.bootOneWay && r.bootKeepsCoarse, JSON.stringify(r));
 };
 // ---- Scenes ----
 // A scene is the unit of testing: one Chrome session running that scene's steps, side by side with the
@@ -8168,6 +8178,29 @@ const unitChecks = async () => {
   // Scene state built directly instead of booted; seed 1 matches scene-hub.js.
   // Sealed cave guides need the hub's seal nodes, so probes reading them stay in the browser tier.
   const island = BL.terrain.island({ seed: 1 });
+  {
+    // #93: share duplicate vertices without rounding the ramp/window boundaries. This fingerprint is the
+    // expanded face stream from the unmodified seed-1 island, so vertex storage and indices may change.
+    const geo = island.geometry;
+    let count = 0;
+    for (const face of geo.faces) count += 1 + face.i.length * 3;
+    const expanded = new Float64Array(count);
+    let at = 0;
+    for (const face of geo.faces) {
+      expanded[at++] = face.i.length;
+      for (const i of face.i) {
+        expanded[at++] = geo.verts[i * 3];
+        expanded[at++] = geo.verts[i * 3 + 1];
+        expanded[at++] = geo.verts[i * 3 + 2];
+      }
+    }
+    const hash = createHash("sha256").update(new Uint8Array(expanded.buffer)).digest("hex");
+    record("terrain memory: compact cached vertices preserve every authored face coordinate and winding exactly",
+      geo.verts instanceof Float64Array && geo.verts.byteLength < 1957458 * 4
+        && hash === "cdc680af3864bf0f0b067c5dd39240163cb9c3ba421b42ca43c7e0d095dbd2df"
+        && BL.terrain.island({ seed: 1 }) === island, JSON.stringify({ vertices: geo.verts.length / 3, bytes: geo.verts.byteLength, hash }));
+  }
+
   {
     const expected = {
       c11: [6.25, 0.75, 6.75], c10: [6.25, 0.75, 6.75], c9: [7, 0.5, 6.75],

@@ -1,0 +1,1004 @@
+{
+  "baseCommit": "3ae9b275474662e446f1bfe05571a75dde607cbf",
+  "renderbuffers": {
+    "before": {
+      "result": [
+        {
+          "quality": "high",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 32,
+          "renderbuffers": [
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 4,
+              "actual": 4
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 4,
+              "actual": 4
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 4,
+              "actual": 4
+            },
+            {
+              "w": 1024,
+              "h": 1024,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "bytes": 128883232
+        },
+        {
+          "quality": "medium",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 32,
+          "renderbuffers": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 768,
+              "h": 768,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "bytes": 50959296
+        },
+        {
+          "quality": "low",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 32,
+          "renderbuffers": [
+            {
+              "w": 512,
+              "h": 512,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "bytes": 1048576
+        }
+      ],
+      "heap": {
+        "usedSize": 201909632,
+        "totalSize": 214646784,
+        "embedderHeapUsedSize": 5840808,
+        "backingStorageSize": 153375994
+      },
+      "logs": []
+    },
+    "after": {
+      "startup": {
+        "quality": "medium",
+        "memory": 32,
+        "renderbuffers": [
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 768,
+            "h": 768,
+            "requested": 0,
+            "actual": 0
+          }
+        ],
+        "bytes": 50959296
+      },
+      "result": [
+        {
+          "quality": "high",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 32,
+          "renderbuffers": [
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1024,
+              "h": 1024,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "bytes": 66538768
+        },
+        {
+          "quality": "medium",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 32,
+          "renderbuffers": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 768,
+              "h": 768,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "bytes": 50959296
+        },
+        {
+          "quality": "low",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 32,
+          "renderbuffers": [
+            {
+              "w": 512,
+              "h": 512,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "bytes": 1048576
+        }
+      ],
+      "heap": {
+        "usedSize": 200530504,
+        "totalSize": 212287488,
+        "embedderHeapUsedSize": 5845632,
+        "backingStorageSize": 153192697
+      },
+      "logs": []
+    },
+    "memory-8": {
+      "startup": {
+        "quality": "medium",
+        "memory": 8,
+        "renderbuffers": [
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 768,
+            "h": 768,
+            "requested": 0,
+            "actual": 0
+          }
+        ],
+        "allocations": [
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          }
+        ],
+        "bytes": 50959296
+      },
+      "result": [
+        {
+          "quality": "high",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 8,
+          "renderbuffers": [
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1024,
+              "h": 1024,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "allocations": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            }
+          ],
+          "bytes": 66538768
+        },
+        {
+          "quality": "medium",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 8,
+          "renderbuffers": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 768,
+              "h": 768,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "allocations": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            }
+          ],
+          "bytes": 50959296
+        },
+        {
+          "quality": "low",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 8,
+          "renderbuffers": [
+            {
+              "w": 512,
+              "h": 512,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "allocations": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            }
+          ],
+          "bytes": 1048576
+        }
+      ],
+      "heap": {
+        "usedSize": 202778028,
+        "totalSize": 220151808,
+        "embedderHeapUsedSize": 6350800,
+        "backingStorageSize": 153870353
+      },
+      "logs": []
+    }
+  },
+  "terrain": {
+    "before": {
+      "geometry": {
+        "numbers": 1957458,
+        "vertices": 652486,
+        "faces": 167600,
+        "type": "Array",
+        "bytes": 15659664,
+        "hash": "2a572d33f96e74a8183ecbe9b36827b5d40d7f7dc4f02dc4bfbae37651e8e8b5",
+        "timing": {
+          "boot": 865,
+          "renderer": 954,
+          "island": 3108,
+          "props": 4245,
+          "rockGuides": 5998,
+          "pile": 6138,
+          "cavemen": 6252,
+          "qr": 6311,
+          "guides": 8052,
+          "visibility-start": 8055,
+          "visibility": 8364,
+          "covered-view-start": 8364,
+          "covered-view": 8477,
+          "ready": 8477,
+          "frame1": 8479,
+          "drawn": 8824,
+          "frame2": 8949,
+          "frame3": 8990
+        }
+      },
+      "heap": {
+        "usedSize": 199929908,
+        "totalSize": 209666048,
+        "embedderHeapUsedSize": 5391840,
+        "backingStorageSize": 153191892
+      },
+      "sight": {
+        "counts": {
+          "voxel": 120,
+          "window": 120,
+          "main": 120,
+          "basement": 120
+        },
+        "rays": 1525,
+        "certifiedRays": 325,
+        "clearBoxes": 385,
+        "boxRays": 3080,
+        "boxPoints": 10395,
+        "solidBoxes": 151,
+        "solidPoints": 4077,
+        "fragmentWindows": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "fragmentBoxes": 90,
+        "fragmentAirBoxes": 90,
+        "fragmentPoints": 2430,
+        "failures": [],
+        "seamCovered": true,
+        "outside": true,
+        "throughIsland": true,
+        "shaft": true
+      },
+      "visits": [
+        {
+          "scene": "hub",
+          "stats": {
+            "visibleNodes": 1628,
+            "allNodes": 2791,
+            "tweens": 0,
+            "targets": 622,
+            "particles": 0,
+            "pool": 0,
+            "bubbles": 0,
+            "zzz": 9,
+            "damageNumbers": 0,
+            "crates": 0,
+            "built": 0,
+            "slots": 302,
+            "shown": 1000,
+            "rendered": 194,
+            "deliveries": 0,
+            "pendingDrops": 0,
+            "dropsStarted": 0,
+            "dropsLanded": 0,
+            "landedBananaValue": 0,
+            "dropPool": 96,
+            "dropRate": 72,
+            "spillPool": 32,
+            "spilling": 0,
+            "butterflies": 8,
+            "fireflies": 0,
+            "embers": 4,
+            "surfaceEmbers": 0,
+            "headquartersEmbers": 4,
+            "breakablesProps": 26,
+            "breakablesBroken": 0,
+            "breakablesRewards": 0,
+            "breakablesRevealing": 0,
+            "rainDrops": 0,
+            "strikes": 0,
+            "gl": {
+              "records": 714,
+              "active": 708,
+              "mirrorResources": 4,
+              "imageTextures": 1,
+              "rippleBodyTextures": 0,
+              "shadowResources": 4,
+              "shadowSize": 1024,
+              "shadowPassCount": 131,
+              "shadowFinite": true,
+              "shadowDraws": 227,
+              "shadowStatic": 140,
+              "shadowStaticRebuilds": 11,
+              "culled": 718,
+              "drawn": 37550,
+              "suppressed": 0,
+              "rippleSurfaces": 1,
+              "rippleWaves": 2
+            },
+            "dom": 2830
+          },
+          "records": 714,
+          "vertices": 652486
+        },
+        {
+          "scene": "hub",
+          "stats": {
+            "visibleNodes": 1620,
+            "allNodes": 2777,
+            "tweens": 0,
+            "targets": 622,
+            "particles": 0,
+            "pool": 0,
+            "bubbles": 0,
+            "zzz": 9,
+            "damageNumbers": 0,
+            "crates": 0,
+            "built": 0,
+            "slots": 302,
+            "shown": 1000,
+            "rendered": 194,
+            "deliveries": 0,
+            "pendingDrops": 0,
+            "dropsStarted": 0,
+            "dropsLanded": 0,
+            "landedBananaValue": 0,
+            "dropPool": 96,
+            "dropRate": 72,
+            "spillPool": 32,
+            "spilling": 0,
+            "butterflies": 8,
+            "fireflies": 0,
+            "embers": 4,
+            "surfaceEmbers": 0,
+            "headquartersEmbers": 4,
+            "breakablesProps": 26,
+            "breakablesBroken": 0,
+            "breakablesRewards": 0,
+            "breakablesRevealing": 0,
+            "rainDrops": 0,
+            "strikes": 0,
+            "gl": {
+              "records": 714,
+              "active": 708,
+              "mirrorResources": 4,
+              "imageTextures": 1,
+              "rippleBodyTextures": 0,
+              "shadowResources": 4,
+              "shadowSize": 512,
+              "shadowPassCount": 234,
+              "shadowFinite": true,
+              "shadowDraws": 227,
+              "shadowStatic": 140,
+              "shadowStaticRebuilds": 19,
+              "culled": 728,
+              "drawn": 37532,
+              "suppressed": 0,
+              "rippleSurfaces": 1,
+              "rippleWaves": 3
+            },
+            "dom": 2830
+          },
+          "records": 714,
+          "vertices": 652486
+        }
+      ],
+      "logs": [
+        "[log.warning] Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently"
+      ]
+    },
+    "after": {
+      "geometry": {
+        "numbers": 540111,
+        "vertices": 180037,
+        "faces": 167600,
+        "type": "Float64Array",
+        "bytes": 4320888,
+        "hash": "2a572d33f96e74a8183ecbe9b36827b5d40d7f7dc4f02dc4bfbae37651e8e8b5",
+        "timing": {
+          "boot": 219,
+          "renderer": 2120,
+          "island": 3604,
+          "props": 4273,
+          "rockGuides": 5281,
+          "pile": 5325,
+          "cavemen": 5397,
+          "qr": 5429,
+          "guides": 6482,
+          "visibility-start": 6485,
+          "visibility": 6730,
+          "covered-view-start": 6730,
+          "covered-view": 6788,
+          "ready": 6788,
+          "frame1": 6789,
+          "drawn": 7012,
+          "frame2": 7496,
+          "frame3": 7545
+        }
+      },
+      "heap": {
+        "usedSize": 183085316,
+        "totalSize": 187105280,
+        "embedderHeapUsedSize": 5404120,
+        "backingStorageSize": 157514335
+      },
+      "sight": {
+        "counts": {
+          "voxel": 120,
+          "window": 120,
+          "main": 120,
+          "basement": 120
+        },
+        "rays": 1525,
+        "certifiedRays": 325,
+        "clearBoxes": 385,
+        "boxRays": 3080,
+        "boxPoints": 10395,
+        "solidBoxes": 151,
+        "solidPoints": 4077,
+        "fragmentWindows": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "fragmentBoxes": 90,
+        "fragmentAirBoxes": 90,
+        "fragmentPoints": 2430,
+        "failures": [],
+        "seamCovered": true,
+        "outside": true,
+        "throughIsland": true,
+        "shaft": true
+      },
+      "visits": [
+        {
+          "scene": "hub",
+          "stats": {
+            "visibleNodes": 1630,
+            "allNodes": 2791,
+            "tweens": 0,
+            "targets": 622,
+            "particles": 0,
+            "pool": 0,
+            "bubbles": 0,
+            "zzz": 9,
+            "damageNumbers": 0,
+            "crates": 0,
+            "built": 0,
+            "slots": 302,
+            "shown": 1000,
+            "rendered": 194,
+            "deliveries": 0,
+            "pendingDrops": 0,
+            "dropsStarted": 0,
+            "dropsLanded": 0,
+            "landedBananaValue": 0,
+            "dropPool": 96,
+            "dropRate": 72,
+            "spillPool": 32,
+            "spilling": 0,
+            "butterflies": 8,
+            "fireflies": 0,
+            "embers": 4,
+            "surfaceEmbers": 0,
+            "headquartersEmbers": 4,
+            "breakablesProps": 26,
+            "breakablesBroken": 0,
+            "breakablesRewards": 0,
+            "breakablesRevealing": 0,
+            "rainDrops": 0,
+            "strikes": 0,
+            "gl": {
+              "records": 716,
+              "active": 710,
+              "mirrorResources": 4,
+              "imageTextures": 1,
+              "rippleBodyTextures": 0,
+              "shadowResources": 4,
+              "shadowSize": 1024,
+              "shadowPassCount": 119,
+              "shadowFinite": true,
+              "shadowDraws": 227,
+              "shadowStatic": 140,
+              "shadowStaticRebuilds": 9,
+              "culled": 779,
+              "drawn": 37490,
+              "suppressed": 0,
+              "rippleSurfaces": 1,
+              "rippleWaves": 3
+            },
+            "dom": 2830
+          },
+          "records": 716,
+          "vertices": 180037
+        },
+        {
+          "scene": "hub",
+          "stats": {
+            "visibleNodes": 1629,
+            "allNodes": 2791,
+            "tweens": 0,
+            "targets": 622,
+            "particles": 0,
+            "pool": 0,
+            "bubbles": 0,
+            "zzz": 9,
+            "damageNumbers": 0,
+            "crates": 0,
+            "built": 0,
+            "slots": 302,
+            "shown": 1000,
+            "rendered": 194,
+            "deliveries": 0,
+            "pendingDrops": 0,
+            "dropsStarted": 0,
+            "dropsLanded": 0,
+            "landedBananaValue": 0,
+            "dropPool": 96,
+            "dropRate": 72,
+            "spillPool": 32,
+            "spilling": 0,
+            "butterflies": 8,
+            "fireflies": 0,
+            "embers": 4,
+            "surfaceEmbers": 0,
+            "headquartersEmbers": 4,
+            "breakablesProps": 26,
+            "breakablesBroken": 0,
+            "breakablesRewards": 0,
+            "breakablesRevealing": 0,
+            "rainDrops": 0,
+            "strikes": 0,
+            "gl": {
+              "records": 715,
+              "active": 709,
+              "mirrorResources": 4,
+              "imageTextures": 1,
+              "rippleBodyTextures": 0,
+              "shadowResources": 4,
+              "shadowSize": 1024,
+              "shadowPassCount": 220,
+              "shadowFinite": true,
+              "shadowDraws": 227,
+              "shadowStatic": 140,
+              "shadowStaticRebuilds": 16,
+              "culled": 766,
+              "drawn": 37503,
+              "suppressed": 0,
+              "rippleSurfaces": 1,
+              "rippleWaves": 3
+            },
+            "dom": 2830
+          },
+          "records": 715,
+          "vertices": 180037
+        }
+      ],
+      "logs": [
+        "[log.warning] Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently"
+      ]
+    },
+    "checks": {
+      "fingerprint": true,
+      "rays": true,
+      "boxes": true,
+      "fragments": true,
+      "repeatVisits": true
+    }
+  },
+  "unitGeometry": [
+    {
+      "name": "terrain memory: compact cached vertices preserve every authored face coordinate and winding exactly",
+      "ok": true,
+      "detail": {
+        "vertices": 180056,
+        "bytes": 4321344,
+        "hash": "cdc680af3864bf0f0b067c5dd39240163cb9c3ba421b42ca43c7e0d095dbd2df"
+      }
+    }
+  ],
+  "quality": {
+    "healthy": true,
+    "gpuBound": true,
+    "reactsIn": 2125,
+    "reactsFast": true,
+    "ignoresSpikes": true,
+    "bounded": true,
+    "warmup": true,
+    "ignoresPauses": true,
+    "fallback": true,
+    "bootFast": true,
+    "bootMedium": true,
+    "bootLow": true,
+    "bootOneWay": true,
+    "bootKeepsCoarse": true,
+    "bootMemory": true
+  }
+}
