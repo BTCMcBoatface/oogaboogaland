@@ -4374,7 +4374,7 @@
     const canvas = document.createElement("canvas");
     canvas.width = POOL_BOARD_W;
     canvas.height = POOL_BOARD_H;
-    const c2 = canvas.getContext("2d", { alpha: false });
+    const c2 = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
     const board = {
       title, help: "Live Bitcoin data. Arrow keys flip the pages.", canvas, count: pages.length, index: 0, version: 0, caption: "", note: "",
       go(i) {

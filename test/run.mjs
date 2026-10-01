@@ -3658,7 +3658,7 @@ const hubJumbotron = { name: "hub jumbotron", why: "rule: the rotation runs rece
   record("hub jumbotron: a draft PR draws a different ticker row than the same PR undrafted", r.differs, JSON.stringify({ differs: r.differs }));
 } };
 // The healthiest of its kind, so a prop an earlier step shot at is never the one measured.
-const nextTo = (prop, gap, yaw = "-Math.PI / 2", pitch = 0.3) => `(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const r = B.headquarters.breakables.list.filter((r) => r.owner.prop === "${prop}" && r.owner.active && !r.broken).sort((a, b) => b.health - a.health)[0]; window.__target = r; const t = r.owner.node.position; B.pilot.navigate({ position: { x: t.x - ${gap}, y: a.root.position.y, z: t.z }, yaw: ${yaw}, pitch: ${pitch}, dist: 4 }); B.advance(0.3, 1 / 60); return r.health; })()`;
+const nextTo = (prop, gap, yaw = "-Math.PI / 2", pitch = 0.3) => `(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const r = B.headquarters.breakables.list.filter((r) => r.owner.prop === "${prop}" && r.owner.active && !r.broken).sort((a, b) => b.health - a.health)[0]; window.__target = r; const t = r.owner.node.position; B.pilot.navigate({ position: { x: t.x - ${gap}, y: a.root.position.y - a.baseY, z: t.z }, yaw: ${yaw}, pitch: ${pitch}, dist: 4 }); B.advance(0.3, 1 / 60); return r.health; })()`;
 const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage, so a box breaks in one, a barrel in two and a rock in four, and the prop comes back", run: async (b) => {
   const swings = {};
   await tapKey(b, "1");
@@ -3677,6 +3677,14 @@ const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage
   await b.evaluate(nextTo("rock", 1.175));
   const recharge = await b.evaluate(`(() => {
     const B = window.__ooga, crew = B.crew, a = crew.player, r = window.__target;
+    const center = BL.scene.boundsOf(r.owner.node.geometry).center, matrix = r.owner.node.world;
+    // The recovery check measures contacts, so aim at the prop rather than
+    // retaining the preceding free swing's camera direction.
+    const aim = () => Object.assign(B.camera.target, {
+      x: matrix[0] * center[0] + matrix[4] * center[1] + matrix[8] * center[2] + matrix[12],
+      y: matrix[1] * center[0] + matrix[5] * center[1] + matrix[9] * center[2] + matrix[13],
+      z: matrix[2] * center[0] + matrix[6] * center[1] + matrix[10] * center[2] + matrix[14]
+    });
     const rows = [], overlay = document.getElementById("overlay").getContext("2d"), labels = [];
     const fillText = overlay.fillText;
     overlay.fillText = function(text, x, y) { if (this.fillStyle === "#ff4545") labels.push(String(text)); return fillText.call(this, text, x, y); };
@@ -3686,27 +3694,27 @@ const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage
         if (wait) B.advance(wait, 0.01);
         r.health = r.maxHealth;
         const before = r.health;
-        crew.swingWeapon(a, true, true);
+        aim(); crew.swingWeapon(a, true, true);
         crew.releaseSwing(a, false, true, true);
         rows.push({ wait, damage: before - r.health, after: crew.meleePower(a) });
       }
       B.advance(0.2, 0.01);
       const recovered = crew.meleePower(a);
-      crew.selectWeapon(a, 2); crew.selectWeapon(a, 1);
+      crew.selectWeapon(2, a); crew.selectWeapon(1, a);
       r.health = r.maxHealth;
       const before = r.health;
-      crew.swingWeapon(a);
+      aim(); crew.swingWeapon(a);
       const last = before - r.health;
-      crew.selectWeapon(a, 2); crew.selectWeapon(a, 1);
+      crew.selectWeapon(2, a); crew.selectWeapon(1, a);
       const switched = crew.meleePower(a);
       r.health = r.maxHealth;
       const health = r.health;
-      crew.swingWeapon(a);
+      aim(); crew.swingWeapon(a);
       B.advance(0.01, 0.01);
       const finalDamage = health - r.health;
       B.advance(0.2, 0.01);
       r.health = r.maxHealth;
-      crew.swingWeapon(a, true, true);
+      aim(); crew.swingWeapon(a, true, true);
       a.weapon.meleeCharge = 1;
       const chargedBefore = r.health;
       crew.releaseSwing(a, false, true);
@@ -5610,8 +5618,23 @@ for (const fallback of [false, true]) scene("hub", { label: "timechain " + (fall
       }
     }
     const edgeX = p.x + dir.x * (BL.timechainModels.SITE.radius + 2), edgeZ = p.z + dir.z * (BL.timechainModels.SITE.radius + 2);
-    let path = true;
-    for (let r = B.path.ringOuterRadius + 1; r < p.rim; r += 0.25) path = path && B.island.isPath(dir.x * r, dir.z * r);
+    // Follow the terrain's painted centreline, including its stair bends.
+    let route = null, nearest = Infinity;
+    for (const line of B.island.path.centerlines) {
+      const end = line[line.length - 1];
+      if (!end) continue;
+      const distance = Math.hypot(end.x - dir.x * p.rim, end.z - dir.z * p.rim);
+      if (distance < nearest) { nearest = distance; route = line; }
+    }
+    let path = !!route && nearest < 2, samples = 0;
+    for (let i = 0; route && i < route.length; i++) {
+      const point = route[i], radius = Math.hypot(point.x, point.z);
+      if (i) path &&= Math.hypot(point.x - route[i - 1].x, point.z - route[i - 1].z) < 0.5;
+      if (radius >= B.path.ringOuterRadius + 1 && radius < p.rim) {
+        path &&= B.island.isPath(point.x, point.z); samples++;
+      }
+    }
+    path &&= samples > 20 && Math.hypot(route[0].x, route[0].z) < B.path.ringOuterRadius;
     return { name: c.traits.name, display: c.contributor.display, distance: Math.hypot(c.root.position.x - p.x, c.root.position.z - p.z), feet: c.root.position.y - c.baseY, floor: p.y, failures, path, edge: S.supportAt(edgeX, edgeZ, p.y, p.y, c), x: c.root.position.x, z: c.root.position.z };
   })()`);
   record("timechain: Sani arrives safely, both shores are walkable and the edge has no invisible floor", result.name === "SaniExp" && result.display === "Sani" && result.distance < 5 && Math.abs(result.feet - result.floor) < 0.1 && !result.failures.length && result.edge < -50, JSON.stringify(result));
@@ -5685,7 +5708,7 @@ scene("hub", { label: "timechain resident", steps: [{ name: "timechain resident"
   })()`);
   record("timechain: Sani types in his recliner, spins with his laptop independently of frame rate, and beer gear hugs the sphere wall", result.centered && result.sideStations && result.before.facingScreen && result.controlled && result.released && result.typing && result.stopped && result.slow.together && result.fast.together && result.slow.angle > 1 && Math.abs(result.slow.angle - result.fast.angle) < 1e-7 && [result.before, result.sitting, result.after].every(s => s.visible && s.seated && s.distance < 0.001 && s.lean < -0.1 && s.leg < -0.5), JSON.stringify(result));
   const beer = await b.evaluate(`(() => {
-    const B = __ooga, T = BL.scenes.hub.debug.timechainIsland, c = B.cavemen.get('SaniExp'), beer = T.beer;
+    const B = __ooga, D = BL.scenes.hub.debug, T = D.timechainIsland, c = B.cavemen.get('SaniExp'), beer = T.beer;
     const cycle = rate => {
       beer.pause(); Object.assign(beer.state, { litres: 0.5, sips: 0, refills: 0 });
       let empty = false, filling = false, walked = false, previous = 0, increasing = true, drinkArm = 0;
@@ -6906,7 +6929,7 @@ scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&a
 scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
 scene("hub", { label: "side panel", query: "pos=0", steps: [hubSheetPersistence] });
-scene("hub", { label: "clock and block height", query: "pos=0&hour=9", steps: [hubBlockHeight] });
+scene("hub", { label: "clock and block height", query: "pos=0&time=0900", steps: [hubBlockHeight] });
 scene("hub", { label: "canvas2d", query: "canvas2d=1", steps: [canvasTour] });
 scene("hub", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("hub", { required: ["#joy-move", "#joy-look", "#sheet-toggle", "#sheet-bananas"], sheet: true })] });
 scene("lab", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("lab", { required: ["#joy-move", "#joy-look", ".leave"] })] });
@@ -7552,7 +7575,8 @@ scene("dsb", { label: "dsb shared player", url: hubPage(dist), steps: [{ name: "
   await b.key("v");
   record("dsb shared player: TV opens with weapons suspended", await b.evaluate('__ooga.dsb.tv.isOpen && !__ooga.dsb.avatar.weapon.triggerHeld'));
   await b.evaluate('document.getElementById("dsb-tv-close").click(); __ooga.advance(0.1)');
-  await place(-7, 30.5); await b.evaluate('document.getElementById("dsb-context").click()');
+  await dsbExit(b);
+  await b.evaluate('__ooga.go("hub"); __ooga.advance(0.6)');
   await untilPage(b, 'B.scene === "hub" && !B.transitioning', 15000);
   const back = await b.evaluate(`({ name: __ooga.pilot.player?.traits.name, ammo: __ooga.pilot.player?.weapon.ammo, spare: __ooga.pilot.player?.weapon.spareAmmo.join(), original: __hubAmmo })`);
   record("dsb shared player: return restores identity and leaves hub ammunition untouched", back.name === "rules-without-rulers" && back.ammo === back.original.ammo && back.spare === back.original.spare, JSON.stringify(back));
@@ -7576,6 +7600,8 @@ scene("dsb", { label: "dsb character continuity", url: hubPage(dist), steps: [{ 
     })()`);
     record("dsb character: " + name + " enters with the canonical model", avatar.name === name && avatar.rebuilt && avatar.canonical, JSON.stringify(avatar));
     await b.key("Escape");
+    await untilPage(b, 'B.scene === "bifrost" && !B.transitioning', 15000);
+    await b.evaluate('__ooga.go("hub"); __ooga.advance(0.6)');
     await untilPage(b, 'B.scene === "hub" && !B.transitioning', 15000);
     const returned = await b.evaluate(`({ name: __ooga.pilot.player?.traits.name, rebuilt: __ooga.pilot.player?.root !== __dsbPreviousRoot })`);
     record("dsb character: " + name + " returns possessed", returned.name === name && returned.rebuilt, JSON.stringify(returned));
@@ -7662,18 +7688,39 @@ const dsbSoak = async (b) => {
     await b.send("HeapProfiler.collectGarbage");
     // Count the page before Chrome's heap-snapshot machinery can add an inspector node.
     const dom = (await b.send("Memory.getDOMCounters")).result;
-    const chunks = [];
-    b.on("HeapProfiler.addHeapSnapshotChunk", (p) => chunks.push(p.chunk));
-    await b.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false });
-    b.on("HeapProfiler.addHeapSnapshotChunk", null);
-    const snap = JSON.parse(chunks.join(""));
-    const { node_fields: fields, node_types: [types] } = snap.snapshot.meta;
-    const iType = fields.indexOf("type"), iSize = fields.indexOf("self_size"), code = types.indexOf("code");
+    // Heap snapshots can exceed Node's string limit. Count the same node
+    // records as chunks arrive, retaining only the header and one number.
+    let header = "", token = "", fields = null, types = null, done = false;
+    let iType = -1, iSize = -1, code = -1, expected = 0, values = 0, type = -1;
     let total = 0, compiled = 0;
-    for (let i = 0; i < snap.nodes.length; i += fields.length) {
-      total += snap.nodes[i + iSize];
-      if (snap.nodes[i + iType] === code) compiled += snap.nodes[i + iSize];
-    }
+    b.on("HeapProfiler.addHeapSnapshotChunk", ({ chunk }) => {
+      if (done) return;
+      if (!fields) {
+        header += chunk;
+        const match = /"nodes"\s*:\s*\[/.exec(header);
+        if (!match) return;
+        const meta = JSON.parse(header.slice(0, match.index) + '"nodes":[]}').snapshot;
+        fields = meta.meta.node_fields; types = meta.meta.node_types[0];
+        iType = fields.indexOf("type"); iSize = fields.indexOf("self_size"); code = types.indexOf("code");
+        expected = meta.node_count * fields.length;
+        chunk = header.slice(match.index + match[0].length); header = "";
+      }
+      for (let i = 0; i < chunk.length; i++) {
+        const ch = chunk[i];
+        if (ch >= "0" && ch <= "9") { token += ch; continue; }
+        if (token) {
+          const value = Number(token), field = values++ % fields.length;
+          if (field === iType) type = value;
+          if (field === iSize) { total += value; if (type === code) compiled += value; }
+          token = "";
+        }
+        if (ch === "]") { done = true; break; }
+      }
+    });
+    try { await b.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false }); }
+    finally { b.on("HeapProfiler.addHeapSnapshotChunk", null); }
+    if (!done || values !== expected || iType < 0 || iSize <= iType || code < 0)
+      throw new Error("Incomplete heap node accounting");
     return { used: (await b.send("Runtime.getHeapUsage")).result.usedSize, objects: total - compiled, code: compiled, nodes: dom.nodes, listeners: dom.jsEventListeners };
   };
   const snapshot = async (stats = null) => {
@@ -7719,17 +7766,22 @@ scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "facto
     };
   })()`);
   // Warm both scenes, so the counts below start from a visit made after the instrumenting.
-  await travel("factory"); await travel("hub"); await settled(); await rendered(2);
+  await travel("factory"); await travel("lab"); await travel("hub"); await settled(); await rendered(2);
   const before = await snapshot(), visits = [];
   for (let i = 0; i < 6; i++) {
-    await travel("factory"); await travel("hub"); await settled(); await rendered(2);
-    visits.push(await b.evaluate(`(() => {
+    await travel("factory");
+    const hall = await b.evaluate('__factoryLife.subscriptions');
+    await travel("lab");
+    const away = await b.evaluate('__factoryLife.subscriptions');
+    await travel("hub"); await settled(); await rendered(2);
+    const visit = await b.evaluate(`(() => {
       const n = __ooga.factory.node;
       return { same: n === __factoryLife.node, subscriptions: __factoryLife.subscriptions, lines: n.placeOf.size, places: n.bays.length + n.stands.length };
-    })()`));
+    })()`);
+    visits.push({ ...visit, hall, away });
   }
   const after = await snapshot(), same = (key) => before.stats[key] === after.stats[key];
-  record("soak: factory cycles: one bounded node survives six round trips, the hall's subscription released, without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.subscriptions === 0 && v.lines <= v.places)
+  record("soak: factory cycles: one bounded node survives six round trips, the hall's subscription released, without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.hall === 1 && v.away === 0 && v.subscriptions === 1 && v.lines <= v.places)
     && same("allNodes") && same("targets") && same("dom") && after.stats.tweens === 0, JSON.stringify({ visits, before: before.stats, after: after.stats }));
   record("soak: factory cycles: GPU records, listeners and retained heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
 } }] });
@@ -8210,7 +8262,7 @@ const unitChecks = async () => {
   {
     const expected = {
       c11: [6.25, 0.75, 6.75], c10: [6.25, 0.75, 6.75], c9: [7, 0.5, 6.75],
-      c1: [6.25, 0.75, 6.75], c2: [6.25, 0.75, 6.75], c3: [7, 0.5, 6.75]
+      c1: [6.25, 0.75, 6.75], c2: [6.25, 0.75, 6.75], c3: [6.5, 0.5, 6.75]
     };
     const column = { caveIndex: 0, floor: 0, ceiling: 0 }, rows = [];
     for (let caveIndex = 0; caveIndex < island.mouths.length; caveIndex++) {
@@ -8410,7 +8462,7 @@ const unitChecks = async () => {
       scattered.push({ x: aim.x, y: aim.y, present: health.damage.contains(aim.x, aim.y), stable: aim.x === repeated.x && aim.y === repeated.y && aim.z === repeated.z });
     }
     health.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0);
-    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === 80 && !health.damage.holes && healthArray.every(value => value === 8);
+    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === BL.mirrorDamage.PANEL_DAMAGE && !health.damage.holes && healthArray.every(value => value === 8);
     health.damage.hit(2, 0.2, 0.1, 0);
     const halfHealth = Array.from(healthArray), halfIntact = !health.damage.holes && !health.damage.active && crackedVertices.every((value, i) => value === health.panel.geometry.verts[i]);
     health.damage.hit(6, 0.2, 0.1, 0);
@@ -8567,7 +8619,7 @@ const unitChecks = async () => {
     record("mirror damage: subsequent impacts choose nearby panes and interrupted repair spends proportional health while dropping only present glass", locality[0].mean < -0.8 && locality[1].mean > 0.8 && locality.every(row => row.count === 4) && wasMissing && regrownCenter && Math.abs(spent - 8) < 1e-9 && shards.length > 0 && shards.length <= maxFragments && samples > 0 && removed > 0 && !overHole && !remoteRemoved && !holeFilled, JSON.stringify({ locality, wasMissing, regrownCenter, spent, maxFragments, shards: shards.length, samples, removed, overHole, remoteRemoved, holeFilled }));
   }
   {
-    const S = BL.scene, root = S.createNode(), owners = [], damage = [], player = {}, system = BL.breakables.create({ root, renderer: {}, fx: { burst() {}, damageNumber(x, y, z, amount) { damage.push({ x, y, z, amount }); } }, crew: { player },
+    const S = BL.scene, root = S.createNode(), owners = [], damage = [], player = { root: S.createNode(), baseY: 0, bodyRadius: 0.3, bodyHeight: 1.7 }, system = BL.breakables.create({ root, renderer: {}, fx: { burst() {}, damageNumber(x, y, z, amount) { damage.push({ x, y, z, amount }); } }, crew: { player },
       deactivate(owner) { owner.active = owner.node.visible = false; }, relocate: () => false, collectReward: () => false });
     for (let i = 0; i < 26; i++) {
       const owner = { kind: "prop", prop: "crate", node: S.createNode({ geometry: BL.models.box({ w: 1, h: 1, d: 1, color: "#888888" }) }), active: true };
@@ -8677,7 +8729,7 @@ const unitChecks = async () => {
   }
   {
     const meshes = solidPropsProbe();
-    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings across tree crowns while preserving the gate's openings`, meshes.length === 14 && meshes.every((row) => row.ok), JSON.stringify(meshes));
+    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings across tree crowns while preserving the gate's openings`, meshes.length === 13 && new Set(meshes.map((row) => row.name)).size === 13 && meshes.every((row) => row.ok), JSON.stringify(meshes));
   }
   {
     const r = windowFlareProbe();

@@ -1300,5 +1300,330 @@
     "bootOneWay": true,
     "bootKeepsCoarse": true,
     "bootMemory": true
+  },
+  "validationRepairs": {
+    "unit": {
+      "passed": 123,
+      "total": 123
+    },
+    "fullBeforeSecondRepairBatch": {
+      "passed": 640,
+      "total": 679,
+      "failedChecks": [
+        "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+        "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+        "work movement cave trips: every surface trail connects to the ring and completes in both directions, including LF and Mine above buried HQ ramps",
+        "rainforest approach: Oogas walk onto the bridge and back without stopping or jumping, including the reported W-S Bitcoin combat position",
+        "timechain: the painted path connects the meadow ring to the bridge over the terraces",
+        "seated gorillas: within one short rest the head and both arms move subtly while the seated footprint and root stay planted",
+        "gorilla crowd: three overlapping NPC trunks step apart without jumping or relocation, and converging walkers keep their trunks apart",
+        "lab flask: pickup completes without circling, and the final magazine sends its clanker to the next cave immediately without a return job",
+        "lab work: exclusive regular and overflow jobs animate correctly, and coworkers take room routes out together without a doorway stall",
+        "gorilla lounging: resting goals and settled poses stay on inactive cave roofs or their nearby frontage",
+        "gorilla rooftop hop: neighbouring roofs are reached in both directions by continuous jumps with real upper-level footing and no relocation",
+        "timechain: the painted path connects the meadow ring to the bridge over the terraces",
+        "timechain canvas2d: six complete wall sections stay visible and open their own details",
+        "gorilla wall handoff: jumping during an edge mount and grabbing the wall again cannot resume the previous mount or drift away from the wall",
+        "gorilla edge first descent: both active cave faces mount once, jump sideways halfway down and land away from the entrance without remounting or relocation",
+        "gorilla roof descent: the autonomous OBL roof departure reaches the main floor without climbing back onto the roof or relocation",
+        "mirror clanker: the safe chamber expands, entry continues straight inward, runs cross from side to side at varied depths behind the glass, and a compact glyphed lever is mounted within reach on the back wall",
+        "gorilla traversal: crates, barrels and rocks keep a continuous grounded gallop, an autonomous gorilla leaves a destroyed raised prop, fresh presses jump immediately and once more in air without held repeats or cancellation exploits, low cover permits an all-fours retreat, and a stalled stroller walks around tall scenery",
+        "gorilla camera: carry and combat share first-person, shoulder and distant views; Right Shift swaps shoulder, Q rotates birds-eye and N faces north; combat has a white-ring crosshair and release restores the head without moving the camera",
+        "gorilla wall destination: a roof gorilla reaches the clicked lower lateral wall grip through continuous climbing without relocation or terrain penetration",
+        "gorilla wall destination: a second click moves the hanging gorilla sideways along the wall without dismounting, teleporting or entering stone",
+        "gorilla wall grip: lowered hands contact the uneven cave rim throughout their cycle without any rendered mesh penetrating stone",
+        "race tracks: bay builds fast into culled sectors with checkpoints clear of its gaps",
+        "race tracks: switching tracks releases the old track's GPU records",
+        "factory floor: from the balcony the widest Ooga on the roster reaches both ends of every stair, every line's deck, each peer tunnel's shield, the switchboard, rebalancer and its operator lane, treasury, watchtower, landing, galleries and the forge",
+        "factory rebalancer: walk onto and off the low drum; a shallow console overlap allows walking out while deeper movement stays blocked",
+        "factory ladders: both climbs hold at rest, cross the lip continuously, descend without reversal and walk away at the bottom; Space jumps off",
+        "poker floor and play",
+        "poker phone: the title card reads in touch words and its go button starts the game, then nothing is clipped, wrapped by accident or off screen, and every control is under a thumb",
+        "hub melee",
+        "birds-eye combat camera",
+        "birds-eye lower floors",
+        "birds-eye combat: basement aim ignores upstairs geometry, hides the distant melee dot and shows orange in range, then melee and secondary fire damage that same target",
+        "birds-eye combat: a full-height zoom reaches shoulder promptly, retains the exact elevated world anchor through the swoop, and fires into the same target",
+        "DSB plaza webgl2: Shop purchases still work",
+        "dsb gameplay webgl2",
+        "dsb shared player: return restores identity and leaves hub ammunition untouched",
+        "dsb character continuity",
+        "factory lifecycle"
+      ]
+    },
+    "focusedChecks": {
+      "dsbPlayer": {
+        "passed": 137,
+        "total": 137
+      },
+      "dsbContinuity": {
+        "passed": 128,
+        "total": 128
+      },
+      "factoryLifecycle": {
+        "passed": 126,
+        "total": 126
+      },
+      "seatedAnimation": {
+        "results": [
+          {
+            "name": "seated gorillas: within one short rest the head and both arms move subtly while the seated footprint and root stay planted",
+            "ok": true,
+            "ranges": [
+              0.05747974387355012,
+              0.025551316659321754,
+              0.1384333256501833
+            ],
+            "compact": true,
+            "displacement": 0
+          }
+        ],
+        "logs": []
+      },
+      "heapCounterChunkSizes": [
+        1,
+        2,
+        3,
+        7,
+        31,
+        197
+      ]
+    },
+    "rayShortcut": {
+      "rays": 15917,
+      "mismatches": 0,
+      "extraBytes": 246016,
+      "timings": [
+        {
+          "lap": 0,
+          "name": "before",
+          "ms": 45.217749999999796,
+          "clear": 3822
+        },
+        {
+          "lap": 0,
+          "name": "after",
+          "ms": 43.8700000000008,
+          "clear": 3822
+        },
+        {
+          "lap": 1,
+          "name": "before",
+          "ms": 49.84895800000049,
+          "clear": 3822
+        },
+        {
+          "lap": 1,
+          "name": "after",
+          "ms": 52.30545799999982,
+          "clear": 3822
+        },
+        {
+          "lap": 2,
+          "name": "before",
+          "ms": 40.95291600000019,
+          "clear": 3822
+        },
+        {
+          "lap": 2,
+          "name": "after",
+          "ms": 33.39758299999994,
+          "clear": 3822
+        },
+        {
+          "lap": 3,
+          "name": "before",
+          "ms": 39.31891700000051,
+          "clear": 3822
+        },
+        {
+          "lap": 3,
+          "name": "after",
+          "ms": 39.377290999999786,
+          "clear": 3822
+        },
+        {
+          "lap": 4,
+          "name": "before",
+          "ms": 39.43354199999976,
+          "clear": 3822
+        },
+        {
+          "lap": 4,
+          "name": "after",
+          "ms": 39.184667000000445,
+          "clear": 3822
+        },
+        {
+          "lap": 5,
+          "name": "before",
+          "ms": 45.04320800000005,
+          "clear": 3822
+        },
+        {
+          "lap": 5,
+          "name": "after",
+          "ms": 41.6498330000004,
+          "clear": 3822
+        },
+        {
+          "lap": 6,
+          "name": "before",
+          "ms": 41.95291600000019,
+          "clear": 3822
+        },
+        {
+          "lap": 6,
+          "name": "after",
+          "ms": 40.02270800000042,
+          "clear": 3822
+        },
+        {
+          "lap": 7,
+          "name": "before",
+          "ms": 48.565459000000374,
+          "clear": 3822
+        },
+        {
+          "lap": 7,
+          "name": "after",
+          "ms": 44.11658400000033,
+          "clear": 3822
+        }
+      ]
+    },
+    "diagnosticProfiles": [
+      {
+        "run": "overlay-profile.log",
+        "measurements": [
+          {
+            "name": "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+            "ok": false,
+            "profile": {
+              "prepare": 0.00897832816876125,
+              "fx": 2.0724458204129648,
+              "collect": 0.48761609908994924,
+              "sight": 0.008049535601120154,
+              "rock": 0,
+              "cover": 0.008359133130395007,
+              "banana": 0.0024767801866235196
+            },
+            "fps": 64.54836131095004,
+            "p95": 31.699999999999818,
+            "max": 61.19999999999982,
+            "worst": {
+              "gap": 47.8000000002794,
+              "at": -28.19999999990705,
+              "updateMs": 21.59999999962747,
+              "renderMs": 7.300000000279397,
+              "overlayMs": 18.399999999906868,
+              "donated": false
+            },
+            "outlined": 0,
+            "samples": 323,
+            "travel": 2.6567000000000043,
+            "donated": false,
+            "particles": 0,
+            "quality": "high"
+          },
+          {
+            "name": "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+            "ok": false,
+            "profile": {
+              "prepare": 0.013749999992433004,
+              "fx": 3.4693749999714782,
+              "collect": 0.9862500000104774,
+              "sight": 11.290000000002328,
+              "rock": 5.47499999999709,
+              "cover": 4.770625000016298,
+              "banana": 0.00812499999301508
+            },
+            "fps": 31.84016238482935,
+            "p95": 50.100000000000364,
+            "max": 70.19999999999891,
+            "worst": {
+              "gap": 56.299999999813735,
+              "at": -17.1000000001859,
+              "updateMs": 1.8000000002793968,
+              "renderMs": 12.799999999813735,
+              "overlayMs": 41.39999999990687,
+              "donated": false
+            },
+            "outlined": 160,
+            "samples": 160,
+            "travel": 2.4296250000000015,
+            "donated": true,
+            "particles": 26,
+            "quality": "low"
+          }
+        ]
+      },
+      {
+        "run": "overlay-profile-column.log",
+        "measurements": [
+          {
+            "name": "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+            "ok": false,
+            "profile": {
+              "prepare": 0.00955414013035453,
+              "fx": 2.20605095542647,
+              "collect": 0.5232484076353039,
+              "sight": 0.008917197448670105,
+              "rock": 0,
+              "cover": 0.009235668792478313,
+              "banana": 0.0031847133772791763
+            },
+            "fps": 62.58346122416556,
+            "p95": 33.79999999999927,
+            "max": 62.899999999999636,
+            "worst": {
+              "gap": 45.5,
+              "at": -29.50000000009277,
+              "updateMs": 20.799999999813735,
+              "renderMs": 6.5,
+              "overlayMs": 17.700000000186265,
+              "donated": false
+            },
+            "outlined": 0,
+            "samples": 314,
+            "travel": 2.7194749999999743,
+            "donated": false,
+            "particles": 0,
+            "quality": "high"
+          },
+          {
+            "name": "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+            "ok": false,
+            "profile": {
+              "prepare": 0.006586826345074677,
+              "fx": 3.1712574850221324,
+              "collect": 1.048502994015322,
+              "sight": 9.626946107763239,
+              "rock": 5.44011976049856,
+              "cover": 5.034131736519696,
+              "banana": 0.007185628740841936
+            },
+            "fps": 33.22854072983221,
+            "p95": 50,
+            "max": 61.80000000000109,
+            "worst": {
+              "gap": 66.70000000018626,
+              "at": 1057.8000000002794,
+              "updateMs": 3.5,
+              "renderMs": 3,
+              "overlayMs": 57,
+              "donated": true
+            },
+            "outlined": 167,
+            "samples": 167,
+            "travel": 2.5699000000000005,
+            "donated": true,
+            "particles": 26,
+            "quality": "low"
+          }
+        ]
+      }
+    ],
+    "completeSuitePassed": false
   }
 }

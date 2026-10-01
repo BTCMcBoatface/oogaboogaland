@@ -594,6 +594,17 @@
           if (filtered && !source.leaderboards[type].length) continue;
           c.push({ name: "leaderboard", params: multi ? { type, scope: "multi" } : { type } });
         }
+        if (!filtered && repoFilter === null && source) {
+          const reference = Date.parse(source.generatedAt) || Date.now();
+          let active = 0;
+          for (const repo of source.repos) {
+            const activity = Date.parse(repo.lastActivityAt);
+            if (!Number.isFinite(activity) || reference - activity > 7 * 24 * 3600 * 1000) continue;
+            c.push({ name: "repo", params: { name: repo.name } });
+            for (const type of types) c.push({ name: "leaderboard", params: { type, repo: repo.name } });
+            if (++active === 6) break;
+          }
+        }
       }
       return c;
     };
@@ -752,7 +763,7 @@
       createReader(state = null) {
         const canvas = document.createElement("canvas");
         canvas.width = BOARD_W; canvas.height = BOARD_H;
-        const context = canvas.getContext("2d", { alpha: false });
+        const context = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
         let filters = { repos: state?.filters?.repos ?? null, users: state?.filters?.users ?? null, types: state?.filters?.types ?? null };
         let rollup = state?.rollup === true;
         let source = filteredModel(model, filters), pages = buildCycle(source, source !== model, filters.repos);

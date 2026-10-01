@@ -28,17 +28,21 @@ The browser's existing terrain sight probe passes all 1,525 rays, 385 clear-box 
 
 Raw post-GC heap figures are included, but a single run does not establish total-tab or retained-heap savings. No frame-rate improvement is claimed.
 
-## Validation limitations
+## Validation status
 
-Build, changed-JavaScript syntax and whitespace checks pass. The targeted geometry and adaptive-quality regressions pass.
+The unit suite now completes with **123/123 checks passing**. Fixture corrections match the current surface-chamber width and mirror damage constant, give the breakable-prop player its required root, and count the thirteen distinct authored solid-prop cases. The solid-prop escape fix lets a body beside a top edge move horizontally out without permitting movement into the face.
 
-The full suite was run on the render-target changes and reported 81 browser failures before crashing in the global tier. Unchanged upstream reproduces the surface-cave dimension failure, mirror-health failure and fatal breakable-prop fixture error (`crew.player` has no root). Additional browser failures have not all been classified against upstream. The suite did not reach its final count or ledger write.
+Canvas contexts used for repeated pixel reads declare `willReadFrequently`. The existing terrain probe now passes with a clean console, an unchanged browser geometry fingerprint, all sight certificates and two return visits. Targeted header-height, jumbotron-cycle and Timechain-residency checks also pass with a clean console. The jumbotron again includes active projects in its unfiltered rotation.
 
-Isolated performance runs on both upstream and the render-target patch fail the existing floor: ordinary movement averages 59.18/59.79 FPS but reaches a 50 ms maximum interval; covered movement averages 32.15/31.75 FPS against the 55 FPS floor. No thresholds were changed. These measurements predate terrain compaction and do not prove its performance.
+The subsequent full run completes: **640/679 checks pass**. It retains every assertion and threshold. Failures include movement performance, walking and climbing, race geometry budgets, factory access, poker layout, and several outdated browser fixtures. The maintainer authorized continuing repairs after the repository's repeated-failure stop. Further corrections and their validation are in progress; this count predates those corrections.
 
-Terrain validation completes the fingerprint, sight probe and return visits, but its console check fails on Chrome's Canvas `getImageData`/`willReadFrequently` warning. The same warning occurs in the upstream terrain run. An earlier driver hang was retried once on a fresh browser. The complete suite has not passed, and has not been rerun after terrain compaction because the repository requires stopping repeated failures rather than retrying them.
+The performance floor still fails. A separate overlay profile attributes the covered view's average cost to sight guides (11.29 ms), rock surfaces (5.47 ms), and cover drawing (4.77 ms), plus effects and collection. Covered movement measured 31.84 FPS against the unchanged 55 FPS floor. These are diagnostic timings, not evidence of a performance improvement.
 
-This change is a draft pending clean full-suite/performance validation. It must not close #93 or be represented as a complete solution to its full checklist.
+The lifecycle runner's heap accounting now consumes snapshot node records incrementally, preserving its object/code totals and memory-growth assertions while avoiding Node's maximum string size. Synthetic snapshots split at six different chunk boundaries produce exact totals. The real factory lifecycle check now passes all 126 assertions (123 global plus three lifecycle/console checks). It measures exactly one subscription in the hall, none in the lab, and one for the hub window, with bounded heap, listeners and GPU records after six trips.
+
+DSB player and character-continuity checks pass (137/137 and 128/128), traversing the current return through ₿IFRÖST before comparing the hub actor. The seated-animation check passes its original ranges, fixed root and compact footprint. A terrain-ray shortcut uses 246,016 additional bytes of cached height bounds; 15,917 deterministic random and boundary-aligned rays match the preceding implementation exactly. All original unit checks pass. The shortcut does not make the movement-performance floor pass.
+
+This change remains a draft pending clean full-suite/performance validation. It must not close #93 or be represented as a complete solution to its full checklist.
 
 ## Checks for a maintainer
 

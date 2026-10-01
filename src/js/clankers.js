@@ -3093,7 +3093,8 @@
         // carries it. No mantle pose or precomputed arc changes the root.
         const remaining = Math.hypot(c.freeTargetX - p.x, c.freeTargetZ - p.z);
         const advance = Math.min(remaining, distance);
-        const x = p.x - sx * advance, z = p.z - sz * advance;
+        const x = remaining ? p.x + (c.freeTargetX - p.x) * advance / remaining : p.x;
+        const z = remaining ? p.z + (c.freeTargetZ - p.z) * advance / remaining : p.z;
         const y = remaining - advance < 0.45 ? Math.max(c.freeTargetY, p.y - distance) : p.y;
         if (climbClear(e, p.x, p.y, p.z, x, y, z, heading, true, true)) {
           p.x = x; p.y = y; p.z = z; c.blocked = 0;

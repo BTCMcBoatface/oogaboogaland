@@ -358,14 +358,14 @@
             if (!BL.convex.sweptCylinder(triangle, x, y, z, toX, toY, toZ, radius, height, toRadius, toHeight)) continue;
             // Animated supports can put the edge of a standing body into a neighbouring mesh. Only an
             // existing contact may separate: fresh faces, inward travel and enclosed centres still block.
+            // A body beside a top edge can lie below its plane while moving horizontally out of contact.
             if (!escape || !BL.convex.sweptCylinder(triangle, x, y, z, x, y, z, radius, height)) return false;
             const ux = triangle[3] - triangle[0], uy = triangle[4] - triangle[1], uz = triangle[5] - triangle[2];
             const vx = triangle[6] - triangle[0], vy = triangle[7] - triangle[1], vz = triangle[8] - triangle[2];
             const nx = (uy * vz - uz * vy) * entry.orientation, ny = (uz * vx - ux * vz) * entry.orientation,
               nz = (ux * vy - uy * vx) * entry.orientation, tolerance = EPS * Math.hypot(nx, ny, nz);
-            const side = nx * (x - triangle[0]) + ny * (y + height / 2 - triangle[1]) + nz * (z - triangle[2]);
             const away = nx * (toX - x) + nz * (toZ - z);
-            if (side < -tolerance || away < -tolerance) return false;
+            if (away < -tolerance) return false;
           }
         }
       }

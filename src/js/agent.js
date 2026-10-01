@@ -787,7 +787,7 @@
           // The free hand rests near the bent knee. Matching its old angle to
           // the reclined chest left it pointing almost horizontally in midair.
           const rest = (leaning ? supporting ? -state.pitch + 1 : -0.55 : onSide ? lower ? -2.3 : -1.08 : reclining ? -0.08 : -state.pitch - 0.801 + l.side * sitShift * 0.1)
-            + (lounge === "sit" ? -0.1 * Math.max(0, Math.sin(restTime * 0.9 + i * Math.PI)) * restMotion
+            + (lounge === "sit" ? -0.14 * Math.max(0, Math.sin(restTime * 0.9 + i * Math.PI)) * restMotion
               : supporting ? 0 : Math.sin(restTime * 0.8 + i) * 0.08 * restMotion);
           limb(arm, rest + (reach - rest) * groomArm, dt);
           const restSide = leaning ? supporting ? l.side * 0.18 : -l.side * 0.12 : onSide ? lower ? -l.side * 0.2 : -l.side * 0.55 : reclining ? l.side * 0.18 : -l.side * 0.12;
