@@ -395,18 +395,20 @@
       labTorso: clipped(geos.labTorso, inside, true), labArm: clipped(geos.labArm, inside, true) };
   };
   const PART_NAMES = ["legL", "legR", "torso", "armL", "armR", "head"];
-  const CLIMB_VERTICES = new WeakMap();
-  const climbVertices = (geometry) => {
-    let samples = CLIMB_VERTICES.get(geometry);
+  const CLIMB_VERTICES = new WeakMap(), CLIMB_CONTACT_VERTICES = new WeakMap();
+  const climbVertices = (geometry, inset = true) => {
+    const cache = inset ? CLIMB_VERTICES : CLIMB_CONTACT_VERTICES;
+    let samples = cache.get(geometry);
     if (samples) return samples;
     const seen = new Set(), values = [], v = geometry.verts, b = boundsOf(geometry);
-    const cx = (b.min[0] + b.max[0]) * 0.0025, cy = (b.min[1] + b.max[1]) * 0.0025, cz = (b.min[2] + b.max[2]) * 0.0025;
+    const center = inset ? 0.0025 : 0, shrink = inset ? 0.995 : 1;
+    const cx = (b.min[0] + b.max[0]) * center, cy = (b.min[1] + b.max[1]) * center, cz = (b.min[2] + b.max[2]) * center;
     for (let i = 0; i < v.length; i += 3) {
       const key = `${v[i]},${v[i + 1]},${v[i + 2]}`;
       if (seen.has(key)) continue;
-      seen.add(key); values.push(v[i] * 0.995 + cx, v[i + 1] * 0.995 + cy, v[i + 2] * 0.995 + cz);
+      seen.add(key); values.push(v[i] * shrink + cx, v[i + 1] * shrink + cy, v[i + 2] * shrink + cz);
     }
-    samples = new Float32Array(values); CLIMB_VERTICES.set(geometry, samples);
+    samples = new Float32Array(values); cache.set(geometry, samples);
     return samples;
   };
 
@@ -1260,7 +1262,7 @@
     // mesh and a short surface witness beside its pad, without moving the
     // shoulder or treating a point inside the stone as valid contact.
     const climbArmContact = (arm, side, preparing, dx, dy, dz, reach = 0.16) => {
-      const vertices = climbVertices(arm.geometry), b = envelopeBounds[side + 3];
+      const vertices = climbVertices(arm.geometry, false), b = envelopeBounds[side + 3];
       const palmY = b.min[1] + (b.max[1] - b.min[1]) * (2 / 14);
       const m = partMatrix(arm), sine = Math.sin(root.rotation.y), cosine = Math.cos(root.rotation.y);
       let contact = false;
@@ -1293,10 +1295,11 @@
         const arm = side ? parts.armR : parts.armL, previous = arm.rotation.x, previousYaw = arm.rotation.y;
         const base = side ? state.climbArmBaseR : state.climbArmBaseL;
         const raised = -2.8 + 0.035 * wave(state.climbStride / 1.2, side ? 0.5 : 0);
-        const vertices = climbVertices(arm.geometry);
+        const vertices = climbVertices(arm.geometry, false);
         let safe = raised, unsafe = raised, found = false;
         for (let attempt = 0; attempt < 14; attempt++) {
-          const refining = unsafe > safe, angle = refining ? (safe + unsafe) * 0.5 : Math.min(-1.9, raised + attempt * 0.1);
+          const refining = unsafe > safe, angle = refining ? (safe + unsafe) * 0.5
+            : !found && attempt ? Math.max(-Math.PI - state.pitch, raised - attempt * 0.1) : Math.min(-1.9, raised + attempt * 0.1);
           arm.rotation.x = base + (angle - base) * blend;
           const m = partMatrix(arm);
           let clear = true;
@@ -1311,8 +1314,13 @@
             if (climbSolidAt(wx, wy, wz) || preparing && climbSolidAt(wx + dx, wy + dy, wz + dz)) { clear = false; break; }
           }
           if (clear) { safe = angle; found = true; }
-          else if (!found) break;
-          else unsafe = angle;
+          else if (!found) {
+            // A raised palm can start inside the rim. Lift it clear before
+            // refining downwards; the initial pose is not a safe fallback.
+            unsafe = angle;
+            if (angle <= -Math.PI - state.pitch) break;
+            continue;
+          } else unsafe = angle;
           // Keep the first higher palm grip instead of lowering both arms to
           // the last clear angle. The ordinary search remains the fallback.
           if (clear && blend > 0.9 && !(state.climbGripRelease & 1 << side)

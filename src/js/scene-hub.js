@@ -6596,6 +6596,47 @@
     out.x = x + sine * forward + cosine * side;
     out.y = y + lift; out.z = z + cosine * forward - sine * side;
   };
+  // Ground-plane fitting can widen a trunk after its center step was admitted.
+  // Reuse the pose preview near peers, retaining the old shape for overlap escape.
+  const CLANKER_PEER_FROM = { root: { scale: { x: 1 } }, gorilla: { torsoSitCompact: false, torsoLabCompact: false, torsoStandCompact: false, torsoQuadCompact: false, torsoRadius: 0 }, height: 0, x: 0, y: 0, z: 0, heading: 0 };
+  let clankerPeerPoseChecked = false, clankerPeerPoseClear = true;
+  const clankerPeerEmptyStone = () => false;
+  const clankerPeerPoseTransition = entry => {
+    if (clankerPeerPoseChecked) return clankerPeerPoseClear;
+    clankerPeerPoseChecked = true;
+    const shape = BL.agent.torso, p = entry.root.position, from = CLANKER_PEER_FROM;
+    for (const other of clankers.list) {
+      if (other === entry || !other.active) continue;
+      const q = other.root.position;
+      if (shape.overlaps(entry, p.x, p.y, p.z, entry.root.rotation.y,
+        other, q.x, q.y, q.z, other.heading, 0.03)
+        && !shape.overlaps(from, from.x, from.y, from.z, from.heading,
+          other, q.x, q.y, q.z, other.heading, 0.03)) return clankerPeerPoseClear = false;
+      if (!shape.separates(entry, from.x, from.y, from.z, from.heading,
+        p.x, p.y, p.z, entry.root.rotation.y, other, q.x, q.y, q.z, other.heading, 0.03))
+        return clankerPeerPoseClear = false;
+    }
+    return true;
+  };
+  const clankerWalkingPeersClear = (entry, dt, x, y, z) => {
+    const p = entry.root.position, nx = p.x, ny = p.y, nz = p.z, heading = entry.root.rotation.y, nextHeading = entry.heading;
+    if (!clankers || entry.controlled || entry.planningRoam || entry.drive.airborne
+      || entry.fire.rolling || clankerEntering(entry) || clankerLabWorker(entry)) return true;
+    let near = false;
+    for (const other of clankers.list) if (other !== entry && other.active
+      && Math.hypot(other.root.position.x - nx, other.root.position.z - nz)
+        < 2 * (entry.root.scale.x + other.root.scale.x) + Math.hypot(nx - x, nz - z)) { near = true; break; }
+    if (!near) return true;
+    const from = CLANKER_PEER_FROM, g = entry.gorilla, copy = from.gorilla;
+    from.x = x; from.y = y; from.z = z; from.heading = heading;
+    from.height = entry.height; from.root.scale.x = entry.root.scale.x;
+    copy.torsoSitCompact = g.torsoSitCompact; copy.torsoLabCompact = g.torsoLabCompact;
+    copy.torsoStandCompact = g.torsoStandCompact; copy.torsoQuadCompact = g.torsoQuadCompact;
+    copy.torsoRadius = g.torsoRadius;
+    clankerPeerPoseChecked = false; clankerPeerPoseClear = true;
+    return g.climbPoseClear(dt, nx, ny, nz, nextHeading,
+      entry.motion, clankerPeerEmptyStone, clankerPeerPoseTransition, entry, entry.speed);
+  };
   const clankerWalkCoreClear = (entry, x, y, z, toX, toY, toZ, fromHeading, toHeading) => {
     // Protect the trunk near the middle of the support rectangle, not just
     // the pelvis point behind it. This extra core applies to island stone;
@@ -8316,6 +8357,7 @@
     }
     const labSiteIndex = shared.workSites.findIndex(site => site.mouth === entropyLab.mouth);
     clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, loungeAreas, climbRoofs, chillZones, descentWalls,
+      walkingPeersClear: clankerWalkingPeersClear,
       debugMovement: DEBUG_GORILLA_MOVE, debugMinY: ABYSS_RESPAWN_Y,
       labSite: labSiteIndex,
       labInside: entropyLab.phase.inside, labStations: entropyLab.stations,

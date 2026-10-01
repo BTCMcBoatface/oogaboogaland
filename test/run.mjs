@@ -3377,7 +3377,7 @@ const hubWalking = { name: "hub walking", why: "regression: steering keys came o
     const key = (type, key, code, location = 0, shiftKey = false) => window.dispatchEvent(new KeyboardEvent(type, { key, code, location, shiftKey }));
     const move = (combat, direction, sprint) => {
       P.controls.reset(); if (P.aiming !== combat) P.modeAction("mode-toggle");
-      P.navigate({ position: { x: -8, y: B.island.surfaceAt(-8, 8), z: 8 }, yaw: 0, pitch: 0.4, dist: 10 }); B.advance(0.4, 1 / 60);
+      P.navigate({ position: { x: -5, y: B.island.surfaceAt(-5, 5), z: 5 }, yaw: 0, pitch: 0.4, dist: 10 }); B.advance(0.4, 1 / 60);
       const p = a.root.position, x = p.x, z = p.z;
       if (sprint) key("keydown", "Shift", "ShiftLeft", 1, true);
       key("keydown", direction, "Key" + direction.toUpperCase(), 0, sprint);
@@ -4979,11 +4979,16 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
       pointAtLower(); B.advance(0.4, 1 / 60);
       const target = P.assistedTarget, reticle = document.getElementById("weapon-reticle"), dot = getComputedStyle(reticle.querySelector("span"));
       return { target: target?.owner === lower ? "lower" : target?.owner === upper ? "upper" : "other", feedback: reticle.dataset.target,
-        dot: dot.backgroundColor, visibility: dot.visibility, x: target?.x, y: target?.y, z: target?.z, ceiling: P.birdsEyeCeiling };
+        dot: dot.backgroundColor, visibility: dot.visibility, x: target?.x, y: target?.y, z: target?.z, ceiling: P.birdsEyeCeiling,
+        distance: P.assistedTargetDistance, reach: B.crew.meleeReach(a) };
     };
+    // This fixture exercises both owned weapons, with rounds for both firing checks.
+    B.crew.configureWeapon(a, 2, 12);
+    if (!P.birdsEye) { P.hooks.onZoom(100); B.advance(1, 1 / 60); }
     try {
-      P.navigate({ position: { x: 6, y: H.basement.floor, z: -3 }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
-      P.weaponAction("weapon-primary"); B.advance(0.5, 1 / 60); const far = aim();
+      P.navigate({ position: { x: 6, y: H.basement.floor, z: -Math.max(6, B.crew.meleeReach(a) + 2) }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
+      P.weaponAction("weapon-primary"); B.advance(0.5, 1 / 60); const far = aim(), farBefore = lower.breakable.health;
+      P.weaponAction("weapon-fire"); B.advance(0.65, 1 / 60); const farAfter = lower.breakable.health;
       P.navigate({ position: { x: 6, y: H.basement.floor, z: -0.95 }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
       const near = aim(), beforeMelee = lower.breakable.health;
       P.weaponAction("weapon-fire"); B.advance(0.65, 1 / 60); const afterMelee = lower.breakable.health;
@@ -5041,7 +5046,7 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
         closeAim.push({ fresh, found, mode, error, exitFound, exitMode: P.mode, exitError });
       }
       P.hooks.onZoom(1.2); B.advance(1, 1 / 60);
-      return { far, near, firearm, jump, handoff, closeAim, floor: H.basement.floor, beforeMelee, afterMelee, afterShot,
+      return { far, farBefore, farAfter, near, firearm, jump, handoff, closeAim, floor: H.basement.floor, beforeMelee, afterMelee, afterShot,
         upperHealth: upper.breakable.health, shots, mode };
     } finally {
       B.crew.stopBurst(a); B.crew.selectWeapon(1, a);
@@ -5049,7 +5054,7 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
       B.advance(0.2, 1 / 60);
     }
   })()`);
-  record("birds-eye combat: basement aim ignores upstairs geometry, hides the distant melee dot and shows orange in range, then melee and secondary fire damage that same target", result.mode === "birds-eye" && result.far.target === "lower" && result.far.feedback === "out-of-range" && result.far.visibility === "hidden" && result.near.target === "lower" && result.near.feedback === "object" && result.near.dot === "rgb(255, 157, 66)" && result.near.visibility === "visible" && Math.abs(result.near.y - result.floor - 0.5) < 1e-5 && result.afterMelee < result.beforeMelee && result.firearm.target === "lower" && result.shots > 0 && result.afterShot < result.afterMelee && result.upperHealth === 100, JSON.stringify(result));
+  record("birds-eye combat: basement aim ignores upstairs geometry, identifies distant and reachable objects, then melee and secondary fire damage that same target", result.mode === "birds-eye" && result.far.target === "lower" && result.far.feedback === "object" && result.far.visibility === "visible" && result.far.distance > result.far.reach && result.farAfter === result.farBefore && result.near.target === "lower" && result.near.feedback === "object" && result.near.dot === "rgb(255, 157, 66)" && result.near.visibility === "visible" && Math.abs(result.near.y - result.floor - 0.5) < 1e-5 && result.afterMelee < result.beforeMelee && result.firearm.target === "lower" && result.shots > 0 && result.afterShot < result.afterMelee && result.upperHealth === 100, JSON.stringify(result));
   record("birds-eye combat: a jump retains same-floor targeting through its apex and orange feedback while melee remains within reach", result.jump.peak > 0.9 && result.jump.peakTarget && result.jump.orangeFrames > 2, JSON.stringify(result.jump));
   record("birds-eye combat: a full-height zoom reaches shoulder promptly, retains the exact elevated world anchor through the swoop, and fires into the same target", result.handoff.mode === "shoulder" && result.handoff.mix > 0 && result.handoff.mix < 1 && result.handoff.offset > 20
     && result.handoff.fromHeight > 60 && result.handoff.frames > 0 && result.handoff.frames < 45 && result.handoff.anchor && result.handoff.anchor.y > result.floor + 0.05
@@ -5836,6 +5841,7 @@ scene("hub", { label: "chilling", query: "status=chillin&pos=0", steps: [{ name:
       e.owner.override = e.owner.state = group.includes(e) ? "chilling" : "away";
       e.active = e.root.visible = group.includes(e);
     }
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
     const setup = spacing => group.forEach((e, i) => {
       const x = 7 + i * spacing, z = 0, y = B.island.surfaceAt(x, z);
       Object.assign(e.root.position, { x, y, z });
@@ -6994,7 +7000,8 @@ scene("poker", { opts: PHONE_SIZE, steps: [phone("poker", { card: '[data-intro="
   if (process.env.POKER_SHOTS) await b.screenshot(join(process.env.POKER_SHOTS, "poker-phone.png"));
 } }] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
-scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
+scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
+scene("hub", { label: "birds-eye lower floors", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEyeFloors] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
 scene("hub", { label: "side panel", query: "pos=0", steps: [hubSheetPersistence] });
 scene("hub", { label: "clock and block height", query: "pos=0&time=0900", steps: [hubBlockHeight] });
@@ -7821,7 +7828,7 @@ const dsbSoak = async (b) => {
     }
   };
   // A go() during a running transition is ignored: wait for swap, frames, animations and the fade first.
-  const travel = (id) => b.evaluate(`new Promise((resolve) => { const B = window.__ooga; const T = window.BL.scene.tweenCount; const t0 = performance.now(); let last = t0, swap = 0, swapFrame = 0, swapGap = 0; B.go(${JSON.stringify(id)}); const tick = () => { const now = performance.now(); if (!swap && B.scene === ${JSON.stringify(id)}) { swap = now - t0; swapGap = now - last; swapFrame = B.renderedFrames; } last = now; if (swap && B.renderedFrames >= swapFrame + 3 && T() === 0 && !B.transitioning) resolve({ swap, swapGap, settled: now - t0 }); else if (now - t0 > 8000) resolve({ stuck: { scene: B.scene, tweens: T(), framesSinceSwap: swap ? B.renderedFrames - swapFrame : -1, swap: Math.round(swap) } }); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`);
+  const travel = (id) => b.evaluate(`new Promise((resolve, reject) => { const B = window.__ooga; const T = window.BL.scene.tweenCount; const t0 = performance.now(); let last = t0, requested = false, swap = 0, swapFrame = 0, swapGap = 0; const tick = () => { const now = performance.now(); if (!requested && !B.transitioning && T() === 0) { B.go(${JSON.stringify(id)}); requested = true; } if (requested && !swap && B.scene === ${JSON.stringify(id)}) { swap = now - t0; swapGap = now - last; swapFrame = B.renderedFrames; } last = now; if (swap && B.renderedFrames >= swapFrame + 3 && T() === 0 && !B.transitioning) resolve({ swap, swapGap, settled: now - t0 }); else if (now - t0 > 8000) reject(new Error("Scene travel did not settle: " + JSON.stringify({ wanted: ${JSON.stringify(id)}, scene: B.scene, requested, tweens: T(), framesSinceSwap: swap ? B.renderedFrames - swapFrame : -1, swap: Math.round(swap) }))); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`);
   const heapDetail = (a, z) => `objects ${mb(a.objects)} -> ${mb(z.objects)} MB (used ${mb(a.used)} -> ${mb(z.used)} MB, code ${mb(a.code)} -> ${mb(z.code)} MB)`;
   const within = (a, z, share) => Math.abs(z.objects - a.objects) <= a.objects * share;
   return { until, rendered, settled, snapshot, travel, heapDetail, within };
@@ -7829,6 +7836,9 @@ const dsbSoak = async (b) => {
 
 scene("dsb", { label: "lifecycle", url: hubPage(src), steps: [{ name: "dsb lifecycle", why: "contract: repeated DSB visits release nodes, listeners and GPU resources", run: async (b) => {
   const { rendered, settled, snapshot, travel, heapDetail, within } = await dsbSoak(b);
+  // The weather deck is sized by tier on each visit. Compare the same tier;
+  // low is terminal, so the governor cannot change capacity during the soak.
+  await b.evaluate('window.__ooga.renderer.setQuality("low")');
   // Warm the new cached model builders before comparing retained memory.
   await travel("dsb"); await travel("hub"); await settled(); await rendered(2);
   const before = await snapshot();

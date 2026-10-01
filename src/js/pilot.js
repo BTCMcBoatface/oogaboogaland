@@ -1574,6 +1574,8 @@
       rightDownAt = rightTapAt = -Infinity;
       if (active) rightReturnFirstPerson = false;
       if (active && birdsEye() && !closeWanted) {
+        // The pointer can move while the zoom spring approaches this handoff.
+        anchorOverheadPointer(cave);
         // The assisted hit may be centred on an object and refreshed on a
         // throttle. The cursor anchor is the exact rendered ray hit, including
         // its elevation, and is the only point that can cross modes unchanged.

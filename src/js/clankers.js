@@ -5397,6 +5397,12 @@
         e.heading = e.climb.heading = e.climb.panel.heading;
         wallPanels.coordinates(e.climb.panel, p.x, p.y, p.z);
       }
+      // Certify the final animated trunk too, after support and speed settle.
+      if (ctx.walkingPeersClear && !e.motion.lab && !e.climb.active && !e.jump.active
+        && !e.drive.airborne && !e.lounge && !ctx.walkingPeersClear(e, dt, beforeX, beforeY, beforeZ)) {
+        p.x = beforeX; p.y = beforeY; p.z = beforeZ;
+        e.heading = e.root.rotation.y; e.speed = 0; return;
+      }
       e.gorilla.poseManaged(dt, p.x, p.y, p.z, e.heading, e.speed,
         e.jump.active || e.drive.airborne && !e.drive.passiveFall, e.biped, e.lounge, e.motion);
       if (e.climb.active && !e.climb.mountPending && !e.climb.handoffDirection
