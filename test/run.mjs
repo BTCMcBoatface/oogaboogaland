@@ -3050,10 +3050,11 @@ const wallPerformance = async (b) => {
       B.renderer.setQuality("high");
       if (B.crew.player !== actor) B.pilot.possess(actor);
       B.pilot.navigate({ position: { x: 10, y: B.island.surfaceAt(10, 0), z: 0 }, yaw: 0, pitch: 0.4, dist: ${covered ? 55 : 10} });
-      const start = performance.now(), first = B.renderedFrames, p = actor.root.position, originX = p.x, originZ = p.z, frames = [];
-      let previous = start, held = "", outlined = 0, travel = 0, donated = false, particles = 0;
+      let start = null, first = 0;
+      const p = actor.root.position, originX = p.x, originZ = p.z, frames = [];
+      let previous = 0, held = "", outlined = 0, travel = 0, donated = false, particles = 0;
       const scene = window.BL.scenes.hub, update = scene.update, overlay = scene.overlay, render = B.renderer.render;
-      let updateMs = 0, overlayMs = 0, renderMs = 0, wall = start, worst = null;
+      let updateMs = 0, overlayMs = 0, renderMs = 0, wall = 0, worst = null;
       scene.update = function(...args) {
         const t = performance.now();
         try {
@@ -3072,8 +3073,23 @@ const wallPerformance = async (b) => {
       B.renderer.render = function(...args) { const t = performance.now(); try { return render.apply(this, args); } finally { renderMs = performance.now() - t; } };
       const key = (name, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name }));
       try {
+        // Finish resize and view setup before holding movement. Every frame
+        // after the first key press belongs to the five-second measurement.
+        await new Promise((resolve, reject) => {
+          const first = B.renderedFrames, began = performance.now();
+          const warm = now => {
+            if (B.renderedFrames >= first + 2) resolve();
+            else if (now - began > 4000) reject(new Error("Performance setup did not draw"));
+            else requestAnimationFrame(warm);
+          };
+          requestAnimationFrame(warm);
+        });
         await new Promise(resolve => {
           const tick = now => {
+            if (start === null) {
+              start = previous = now; first = B.renderedFrames; wall = performance.now();
+              held = "d"; key(held, true); requestAnimationFrame(tick); return;
+            }
             frames.push(now - previous); previous = now;
             const completed = performance.now(), gap = completed - wall; wall = completed;
             if (!worst || gap > worst.gap) worst = { gap, at: now - start, updateMs, renderMs, overlayMs, donated };
