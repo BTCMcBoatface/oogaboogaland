@@ -6124,7 +6124,10 @@ scene("hub", { label: "lab work rotation", query: "status=clankin", steps: [{ na
     lab.updateScreens(0.25, 1 << middle, 1 << middle);
     const scroll = display.work.strips[0].position.y !== before;
     const seventh = workers.find(e => e.lab.station === middle);
-    if (seventh) seventh.owner.override = seventh.owner.state = "sleeping";
+    // Let the crew perform the sleep transition and claim its bed; assigning
+    // the settled state directly leaves a sleeping Ooga with no bedroll.
+    if (seventh) seventh.owner.override = "sleeping";
+    B.crew.refreshStates();
     C.update(1 / 30); B.advance(1 / 60, 1 / 60);
     const restored = display.node.visible && !display.work.node.visible;
     const next = C.sites.findIndex((value, i) => i !== site && value.mirrorRoom);
@@ -6159,12 +6162,13 @@ scene("hub", { label: "lab work rotation", query: "status=clankin", steps: [{ na
         turnedAt = (frame + 1) / 60;
       if ((solo.root.position.x - m.x) * sx + (solo.root.position.z - m.z) * sz > 2.4) { soloLeft = true; break; }
     }
-    // Three touching trunks reproduce the doorway pose expansion. Retained
-    // fixed-facing routes must be retired when each claims the final crossing.
+    // Three touching trunks within the final doorway crossing reproduce its
+    // pose expansion. Retained fixed-facing routes must retire on portal claim;
+    // a worker behind -0.6 still has an interior route to finish first.
     const bunch = workers.slice(0, 3); prepare(bunch);
     const recoveries = bunch.reduce((sum, e) => sum + e.stuck.recoveries, 0), cleared = new Set();
     for (let i = 0; i < bunch.length; i++) {
-      const e = bunch[i], along = -0.1 - i * 0.3;
+      const e = bunch[i], along = -0.05 - i * 0.25;
       Object.assign(e.root.position, { x: m.x + sx * along, y: m.floorY, z: m.z + sz * along });
       e.heading = m.ry; e.mode = "working";
       e.gorilla.poseManaged(2, e.root.position.x, e.root.position.y, e.root.position.z, e.heading, 0, false, true, "", e.motion);

@@ -1936,5 +1936,27 @@
     },
     "visualChange": "Only race scenery selects coarse meshes; full detail default meshes are unchanged.",
     "particleFix": "Track replacement clears live dust and sparks from the removed world and trims the existing idle pool; the original node budget passes after real driving."
+  },
+  "labRepairs": {
+    "validation": {
+      "passed": 133,
+      "total": 133,
+      "console": "clean",
+      "scope": "Existing hub lab regression group, including global checks",
+      "log": "untracked/issue-93/failure-fix-lab-6.log"
+    },
+    "posePreview": "Use the reserved vessel geometry and its grip height, restoring the shared placeholder after collision proof.",
+    "placement": "Left beaker remains inside the wide chamber; right die inspection clears the touchscreen.",
+    "fixtureCorrections": [
+      "Apply the actual crew sleep transition so the overflow worker owns a bedroll.",
+      "Place all three touching workers within the final doorway crossing before injecting stale fixed-facing waits."
+    ],
+    "requirementsRetained": [
+      "All six regular jobs and overflow computer work exclusively.",
+      "Held beaker inspection and die rolling occur.",
+      "All six routed departures leave.",
+      "All three touching doorway workers leave without recovery."
+    ],
+    "fullSuiteStatus": "Not yet rerun; earlier full run remains 666/703."
   }
 }

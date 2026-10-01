@@ -394,6 +394,7 @@
       e.lab.pathCount = e.lab.pathIndex = 0; e.motion.labWork = ""; e.motion.labReach = 0; e.motion.labSqueeze = false;
       e.motion.labDie = false; e.motion.labRoll = 0;
       e.motion.labBench = null;
+      e.motion.labGeometry = null;
     };
     const syncLab = (e) => {
       const p = e.root.position, inside = insideLab(p.x, p.y, p.z), wasInside = e.motion.lab;
@@ -986,12 +987,13 @@
       e.motion.labGripY = equipment.node.geometry.labGripY || BL.scene.boundsOf(equipment.node.geometry).max[1] * 0.85;
       e.motion.labDie = equipment.kind === "die";
       e.motion.labBench = equipment.bench || null;
+      e.motion.labGeometry = equipment.node.geometry;
     };
     const reserveLab = (e, moving) => {
       if (!labStations.length) return false;
       const p = e.root.position, previous = e.lab.station;
       const radius = e.radius, height = e.height, compact = e.compact, mode = e.footprintMode;
-      const reach = e.motion.labReach, grip = e.motion.labGripY, die = e.motion.labDie, bench = e.motion.labBench;
+      const reach = e.motion.labReach, grip = e.motion.labGripY, die = e.motion.labDie, bench = e.motion.labBench, geometry = e.motion.labGeometry;
       e.radius = BL.agent.LAB_RADIUS || 1.1; e.height = BL.agent.LAB_HEIGHT || 2.8;
       e.compact = e.planningLab = true; e.footprintMode = "lab";
       // Shuffle the available jobs with this actor's seeded random stream.
@@ -1044,6 +1046,7 @@
       }
       e.radius = radius; e.height = height; e.compact = compact; e.footprintMode = mode; e.planningLab = false; e.planningLabWork = ""; e.planningLabStation = -1;
       e.motion.labReach = reach; e.motion.labGripY = grip; e.motion.labDie = die; e.motion.labBench = bench;
+      e.motion.labGeometry = geometry;
       if (chosen < 0) {
         if (moving) e.lab.pathPending = false;
         return false;
@@ -1828,7 +1831,7 @@
           climb: 0, climbBlend: NaN, openingSettle: 0, climbStride: 0, climbDirection: 0, climbSide: 0, verifyGrip: false, mantle: 0, groom: 0, groomSide: 1, groomPhase: 0,
           sitWait: 3, sitTime: 0, sitLook: 0, sitShift: 0, sitLookTarget: 0, sitShiftTarget: 0,
           lab: false, labRunIn: false, workExit: false, labWork: "", labPhase: i * 0.71, labSide: 1, labDt: 1 / 30, labReach: 0, labGripY: 0.53105, labSqueeze: false,
-          labDie: false, labRoll: 0, labBench: null },
+          labDie: false, labRoll: 0, labBench: null, labGeometry: null },
         climb: { active: false,
           panel: { x: 0, y: 0, z: 0, heading: 0, nx: 0, nz: 1, u: 0, v: 0, depth: 0 },
           autoDirection: -1, descending: false, progress: 0, length: 0, lowerY: 0, upperY: 0, climbs: 0,

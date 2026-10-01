@@ -1711,12 +1711,22 @@
       const pound = state.pound, beat = state.beat;
       if (staticPose) state.pound = state.beat = 0;
       const itemPreview = managed && staticPose && laboratory && work === "carry" && labFlask === labPlaceholder;
+      const geometry = labPlaceholder && labPlaceholder.geometry, gripY = labGripY;
       if (itemPreview) {
+        // Admit the vessel actually being fetched, with its own grip height.
+        // A flask placeholder below a beaker's grip falsely intersects the bench.
+        labPlaceholder.geometry = entry && entry.motion.labGeometry || geometry;
+        labGripY = labPreviewMotion.labGripY;
+        refreshGeometry();
         state.labPreviewItem = true; labPlaceholder.visible = true; labPlaceholder.quaternion = labItemRotation;
         labPlaceholder.scale.x = labPlaceholder.scale.y = labPlaceholder.scale.z = 1 / scale;
       }
       const clear = climbPoseClear(dt, x, y, z, heading, labPreviewMotion, solidAt, clearAt, entry, speed, staticPose);
-      if (itemPreview) { state.labPreviewItem = false; labPlaceholder.visible = false; measureBody(); }
+      if (itemPreview) {
+        state.labPreviewItem = false; labPlaceholder.visible = false;
+        labPlaceholder.geometry = geometry; labGripY = gripY;
+        refreshGeometry(); measureBody();
+      }
       state.pound = pound; state.beat = beat;
       return clear;
     };

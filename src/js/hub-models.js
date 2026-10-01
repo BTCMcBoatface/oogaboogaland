@@ -609,6 +609,10 @@
       stations.push({ x, y: 0, z: rearWork, heading: Math.PI, kind: "type", overflow: x === 0 });
     }
     const sideZ = -Math.max(room.from + 1.4, 2.17);
+    // Leave the reaching arm inside the wide chamber, beyond its front wall.
+    const frontWork = sideZ + 0.5;
+    // The right-hand die shake needs space in front of the touchscreen.
+    const dieWork = sideZ + 1;
     for (const side of [-1, 1]) {
       const facing = -side * Math.PI / 2;
       const bench = place(labBench(), side * (half - 0.47), sideZ, facing);
@@ -617,7 +621,7 @@
       for (let i = 0; i < 3; i++) {
         const offset = (i - 1) * 0.9, front = -0.03;
         const home = { x: bench.position.x + Math.cos(facing) * offset + Math.sin(facing) * front,
-          y: 1.14, z: i === 2 ? -1.08 : side < 0 ? -2.3 - i * 0.8 : -2.5 - i * 0.68 };
+          y: 1.14, z: i === 2 ? side > 0 ? dieWork : frontWork : sideZ - i * 0.8 };
         const kind = i === 2 ? side > 0 ? "die" : "beaker" : i === 1 ? "beaker" : "flask";
         const geometry = kind === "die" ? labDie() : kind === "beaker" ? labBeaker(side > 0 ? 1 : 0) : BL.agent.labFlaskGeometry(side > 0 ? 1 : 0);
         if (kind === "beaker") geometry.labGripY = 0.3;
@@ -631,12 +635,12 @@
           // Keep every roll in the front play area, away from the glassware
           // and the touchscreen worker farther along this same bench.
           table: { minX: bench.position.x - 0.4, maxX: bench.position.x + 0.4,
-            minZ: kind === "die" ? -1.5 : sideZ - 1.3, maxZ: sideZ + 1.3, y: 1.13 },
+            minZ: kind === "die" ? dieWork - 0.42 : sideZ - 1.3, maxZ: sideZ + 1.3, y: 1.13 },
           pickup: { x: home.x, y: home.y + geometry.labGripY, z: home.z } });
       }
       stations.push({ x: side * (half - 1.78), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side, contact: screen });
     }
-    for (const side of [-1, 1]) stations.push({ x: side * (half - 0.44 - 1.213094), y: 0, z: -1.08 + side * 0.272893, heading: side * Math.PI / 2, kind: "carry", side });
+    for (const side of [-1, 1]) stations.push({ x: side * (half - 0.44 - 1.213094), y: 0, z: (side > 0 ? dieWork : frontWork) + side * 0.272893, heading: side * Math.PI / 2, kind: "carry", side });
     const updateScreens = (dt, activeMask, claimedMask = activeMask) => {
       let changed = false;
       for (let i = 0; i < displays.length; i++) {

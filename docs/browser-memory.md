@@ -54,6 +54,8 @@ Correcting the lower-floor fixture to read rendered headquarters nodes instead o
 
 The gorilla resting check passes 125/125 after matching the authored allowance for HQ roofs; it still rejects active cave roofs and unrelated frontage. The fresh full run at `b3dec02` completes at **666/703** in 17.6 minutes. Its 37 failures include the unchanged performance floor, hub/gorilla movement, camera cutaways, DSB fixtures and lifecycle sessions. DSB lifecycle times out; factory lifecycle retries, then fails while reading a missing shared node. Earlier focused lifecycle passes do not establish a clean full run. The raw evidence lists every remaining failure.
 
+The lab regression group now passes 133/133 checks with a clean console. Beaker pickup uses the pending vessel's actual geometry and grip height when proving a pose; the placeholder flask previously intersected the bench even when the real beaker fit. Bench glassware and approach positions leave reaching arms inside the wide chamber, and the right-hand die has clearance in front of its touchscreen. All six regular stations, the seventh overflow computer, screen restoration, held-beaker inspection, die rolling and routed departures pass. The fixture lets the crew perform its real sleep transition rather than inventing a sleeper without a bedroll. Its three touching doorway workers are all placed inside the final crossing; a rear worker outside that crossing previously received an endless interior-route wait. All three must still leave without recovery. Fresh full validation remains outstanding.
+
 This change remains a draft pending clean full-suite/performance validation. It must not close #93 or be represented as a complete solution to its full checklist.
 
 ## Checks for a maintainer
