@@ -270,7 +270,7 @@
   const BOOT_MEDIUM = 3600, BOOT_LOW = 5400;
   const tierFromBoot = (ms) => {
     if (renderer.kind !== "webgl2") return;
-    const wanted = ms > BOOT_LOW ? "low" : ms > BOOT_MEDIUM ? "medium" : null;
+    const wanted = ms > BOOT_LOW ? "low" : ms > BOOT_MEDIUM || MEMORY_LIMITED ? "medium" : null;
     if (!wanted || QUALITY_ORDER.indexOf(wanted) <= QUALITY_ORDER.indexOf(renderer.quality)) return;
     renderer.setQuality(wanted);
     showQuality();

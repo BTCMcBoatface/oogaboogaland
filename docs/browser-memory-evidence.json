@@ -526,6 +526,305 @@
         "backingStorageSize": 153870353
       },
       "logs": []
+    },
+    "integrated-memory-8": {
+      "startup": {
+        "quality": "medium",
+        "memory": 8,
+        "renderbuffers": [
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 768,
+            "h": 768,
+            "requested": 0,
+            "actual": 0
+          }
+        ],
+        "allocations": [
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          },
+          {
+            "w": 1800,
+            "h": 1125,
+            "requested": 2,
+            "actual": 2
+          }
+        ],
+        "bytes": 50959296
+      },
+      "result": [
+        {
+          "quality": "high",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 8,
+          "renderbuffers": [
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1024,
+              "h": 1024,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "allocations": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            }
+          ],
+          "bytes": 66538768
+        },
+        {
+          "quality": "medium",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 8,
+          "renderbuffers": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 768,
+              "h": 768,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "allocations": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            }
+          ],
+          "bytes": 50959296
+        },
+        {
+          "quality": "low",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "memory": 8,
+          "renderbuffers": [
+            {
+              "w": 512,
+              "h": 512,
+              "requested": 0,
+              "actual": 0
+            }
+          ],
+          "allocations": [
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 2039,
+              "h": 1274,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            },
+            {
+              "w": 1800,
+              "h": 1125,
+              "requested": 2,
+              "actual": 2
+            }
+          ],
+          "bytes": 1048576
+        }
+      ],
+      "heap": {
+        "usedSize": 186099160,
+        "totalSize": 194183168,
+        "embedderHeapUsedSize": 6267816,
+        "backingStorageSize": 158090920
+      },
+      "logs": []
     }
   },
   "terrain": {
@@ -985,6 +1284,7 @@
     }
   ],
   "quality": {
+    "memoryBoot": true,
     "healthy": true,
     "gpuBound": true,
     "reactsIn": 2125,
