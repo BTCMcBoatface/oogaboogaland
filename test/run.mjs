@@ -192,7 +192,9 @@ const { npcPathWalkingProbe, npcCenterlineProbe, npcLowerTurnsProbe, npcStairPas
     const B = window.__ooga, scene = window.BL.scenes.hub, S = window.BL.scene;
     const nav = B.headquarters.npcPaths, path = B.island.path, actors = [...B.cavemen.values()], cave = actors.find((c) => c.state === "working") || actors[0], rows = [];
     B.pilot.release(true); B.setPileLevel(100000);
-    const update = scene.update; scene.update = () => {};
+    const update = scene.update, clankerStates = B.clankers.list.map(entry => ({ entry, active: entry.active, visible: entry.root.visible }));
+    scene.update = () => {};
+    for (const state of clankerStates) state.entry.active = state.entry.root.visible = false;
     for (const prop of B.props) prop.node.visible = false;
     for (const c of actors) { c.root.visible = false; c.override = c.state = "away"; c.work.phase = ""; B.crew.stopBurst(c); B.crew.stopReload(c, true); c.bedTravel.mode = ""; c.walk = null; c.act.kind = "idle"; c.act.until = c.nextBuildAt = 1e12; }
     cave.override = cave.state = "working";
@@ -244,7 +246,10 @@ const { npcPathWalkingProbe, npcCenterlineProbe, npcLowerTurnsProbe, npcStairPas
         }
       }
       return { rows, lines: path.centerlines.length, nodes: nav.nodes, capacity: nav.capacity };
-    } finally { scene.update = update; }
+    } finally {
+      for (const state of clankerStates) { state.entry.active = state.active; state.entry.root.visible = state.visible; }
+      scene.update = update;
+    }
   };
 
   const npcLowerTurnsProbe = () => {
@@ -6547,7 +6552,7 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
     escapeRock.visible = false; S.updateWorld(root); solids.sync();
     advance(null, 3.5);
     const raisedProp = { rockY, assignedExit, x: e.root.position.x, y: e.root.position.y, z: e.root.position.z,
-      airborne: e.drive.airborne, stuck: e.stuck.time, reason: e.stuck.reason };
+      airborne: e.drive.airborne, groundError: Math.abs(e.root.position.y - C.supportAt(e, e.root.position.x, e.root.position.z, e.root.position.y, BL.clankers.PROP_STEP, e.heading)), stuck: e.stuck.time, reason: e.stuck.reason };
     solids.remove(escapeRock); S.removeChild(root, escapeRock); solids.sync();
     const jumps = [];
     for (const run of [false, true]) {
@@ -6594,48 +6599,50 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
     }
     const tree = B.props.find(prop => prop.prop === "tree"); tree.node.visible = true; S.updateWorld(root); solids.sync();
     const q = tree.node.position; setup(q.x - 2.8, q.z, Math.PI / 2);
+    e.drive.motionEnvelope = true; e.drive.motionRecover = 0.6;
     let lowFrames = 0, bipedFrames = 0, movingFrames = 0, previous = e.root.position.x;
     advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.5, () => {
-      if (e.lowCover) lowFrames++; if (e.biped) bipedFrames++;
+      if (e.gorilla.debug.gait === "knuckle" && !e.drive.airborne) lowFrames++; if (e.biped) bipedFrames++;
       if (Math.abs(e.root.position.x - previous) > 1e-5) movingFrames++;
       previous = e.root.position.x;
     });
-    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames };
+    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames, envelopeCleared: !e.drive.motionEnvelope && !e.drive.motionRecover };
     tree.node.visible = false;
+    // Keep the identical obstacle outside the arcade's reserved entrance apron.
     const screen = S.createNode({ geometry: BL.models.box({ w: 0.5, h: 4, d: 4, color: BL.math.hexToRgb("#454545") }),
-      position: { x: 12, y: B.island.surfaceAt(12, 0) + 2, z: 0 } });
-    S.addChild(root, screen); solids.add(screen); S.updateWorld(root); solids.sync(); setup(7, 0);
+      position: { x: 12, y: B.island.surfaceAt(12, 10) + 2, z: 10 } });
+    S.addChild(root, screen); solids.add(screen); S.updateWorld(root); solids.sync(); setup(7, 10);
     C.release();
     e.owner.override = e.owner.state = "chilling";
     Object.assign(e, { controlled: false, mode: "chilling", phase: "chill", route: "", lounge: "", loungeDepart: false,
-      loungeRoof: false, loungeHeading: NaN, rest: 120, goalX: 17, goalY: B.island.surfaceAt(17, 0), goalZ: 0 });
+      loungeRoof: false, loungeHeading: NaN, rest: 120, goalX: 17, goalY: B.island.surfaceAt(17, 10), goalZ: 10 });
     Object.assign(e.roam, { count: 0, index: 0, wall: false, detour: false, pose: "", departPending: false,
-      targetX: 17, targetY: e.goalY, targetZ: 0, progressTime: 0.9, progressDistance: 0, planAt: 0, nextChoice: Infinity });
+      targetX: 17, targetY: e.goalY, targetZ: 10, progressTime: 0.9, progressDistance: 0, planAt: 0, nextChoice: Infinity });
     const recoveries = e.stuck.recoveries;
     let detoured = false, crossed = false;
     for (let frame = 0; frame < 24 * 60; frame++) {
       C.update(1 / 60);
       detoured ||= e.roam.detour && e.roam.count > 1;
-      crossed ||= Math.abs(e.root.position.x - 12) < 0.25 && Math.abs(e.root.position.z) < 2;
-      if (Math.hypot(e.root.position.x - 17, e.root.position.z) < 0.18) break;
+      crossed ||= Math.abs(e.root.position.x - 12) < 0.25 && Math.abs(e.root.position.z - 10) < 2;
+      if (Math.hypot(e.root.position.x - 17, e.root.position.z - 10) < 0.18) break;
     }
-    const detour = { detoured, crossed, arrived: Math.hypot(e.root.position.x - 17, e.root.position.z) < 0.18,
+    const detour = { detoured, crossed, arrived: Math.hypot(e.root.position.x - 17, e.root.position.z - 10) < 0.18,
       recoveries: e.stuck.recoveries - recoveries, grounded: !e.climb.active && !e.jump.active && !e.drive.airborne };
     solids.remove(screen); S.removeChild(root, screen); solids.sync();
     return { traversals, raisedProp, jumps, canopy, detour };
   })()`);
   const props = state.traversals.every(row => row.x > 16 && row.maxY >= 0.75 && row.maxY <= 1.05 && !row.airborne && !row.stopped && row.maxVisibleStep < 0.25);
-  const raisedProp = state.raisedProp.rockY > 0.8 && state.raisedProp.assignedExit && state.raisedProp.y < 0.05
-    && Math.abs(state.raisedProp.x - 12) > 1.5 && !state.raisedProp.airborne && state.raisedProp.stuck < 0.65;
+  const raisedProp = state.raisedProp.rockY > 0.8 && state.raisedProp.assignedExit && state.raisedProp.groundError < 0.05
+    && Math.hypot(state.raisedProp.x - 12, state.raisedProp.z) > 1.5 && !state.raisedProp.airborne && state.raisedProp.stuck < 0.65;
   const jump = state.jumps.every(row => {
-    const speed = row.run ? 2.7 : 0.9, travel = speed * 39 / 60;
+    const speed = row.run ? 5.4 : 1.8, travel = speed * 39 / 60;
     return row.gait === (row.run ? "gallop" : "knuckle") && row.firstAir && !row.stopped
-      && Math.abs(row.startSpeed - speed) < 1e-5 && Math.abs(row.switchSpeed - (row.run ? 0.9 : 2.7)) < 1e-5
+      && Math.abs(row.startSpeed - speed) < 1e-5 && Math.abs(row.switchSpeed - (row.run ? 1.8 : 5.4)) < 1e-5
       && Math.abs(row.heldTravel - travel) < travel * 0.01 && Math.abs(row.vx - speed) < speed * 0.01
       && row.heldJumps === 1 && row.heldLanded && row.releaseJumps === 1 && row.secondCount === 2 && row.thirdCount === 2
       && row.thirdVelocity < row.secondVelocity && row.secondLift > row.peak * 0.98 && row.secondLift < row.peak * 1.02 && row.landed && row.nextJump;
   });
-  const canopy = state.canopy.lowFrames > 0 && !state.canopy.bipedFrames && state.canopy.movingFrames > 10 && state.canopy.endX < state.canopy.startX - 1;
+  const canopy = state.canopy.lowFrames > 0 && state.canopy.envelopeCleared && !state.canopy.bipedFrames && state.canopy.movingFrames > 10 && state.canopy.endX < state.canopy.startX - 1;
   const detour = state.detour.detoured && state.detour.arrived && !state.detour.crossed && !state.detour.recoveries && state.detour.grounded;
   record("gorilla traversal: crates, barrels and rocks keep a continuous grounded gallop, an autonomous gorilla leaves a destroyed raised prop, fresh presses jump immediately and once more in air without held repeats or cancellation exploits, low cover permits an all-fours retreat, and a stalled stroller walks around tall scenery", props && raisedProp && jump && canopy && detour, JSON.stringify(state));
 } }, { name: "gorilla camera modes", why: "regression: controlled gorillas lacked first-person and birds-eye cameras, carry/combat camera controls, and a combat crosshair", run: async (b) => {

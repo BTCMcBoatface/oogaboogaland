@@ -5135,7 +5135,9 @@
       const p = e.root.position, d = e.drive;
       const ramp = walkingRampAt(x, p.y, z, heading);
       if (ramp) drop = Math.max(drop, BL.wallPanels.RAMP_STEP);
-      if (allowFall && e.controlled && !ramp
+      // A short-prop step has its own supported drop allowance. A point
+      // leaving its edge must not replace the walking pads with a fall.
+      if (allowFall && e.controlled && !ramp && drop <= STEP
         && pointSupportAt(p.x, p.z, p.y + 0.1) >= p.y - STEP
         && pointSupportAt(x, z, p.y + 0.1) < p.y - STEP)
         return beginSupportFall(e, x, z, heading, d.vx, d.vz);

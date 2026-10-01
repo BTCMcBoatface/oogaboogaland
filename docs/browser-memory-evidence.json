@@ -2070,5 +2070,31 @@
       "hiddenPropsReproduceFullFailure": "untracked/issue-93/bridge-visibility-diagnosis.log"
     },
     "fullSuiteStatus": "Fresh full validation required; latest completed full remains 685/702."
+  },
+  "surfaceAndTraversalFollowup": {
+    "surface": {
+      "passed": 127,
+      "total": 127,
+      "console": "clean",
+      "log": "untracked/issue-93/failure-fix-surface-trips-1.log",
+      "sequenceProof": "untracked/issue-93/centerline-isolated-clankers-proof.log"
+    },
+    "traversal": {
+      "passed": 125,
+      "total": 125,
+      "console": "clean",
+      "log": "untracked/issue-93/failure-fix-traversal-1.log",
+      "sceneSeconds": 28.0,
+      "sceneBudgetSeconds": 25,
+      "maxVisibleStepMeters": {
+        "crate": 0.17017823746432093,
+        "barrel": 0.13380821899428696,
+        "rock": 0.11363298278167377
+      },
+      "originalMaxVisibleStepMeters": 0.25,
+      "diagnostic": "untracked/issue-93/traversal-meadow-diagnosis.log",
+      "reservedApproachLayout": "untracked/issue-93/traversal-reserved-corridor.log"
+    },
+    "fullSuiteStatus": "Fresh full validation required; latest completed full remains 685/702."
   }
 }
