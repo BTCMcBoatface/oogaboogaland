@@ -3,10 +3,18 @@
   "use strict";
   const BL = window.BL = window.BL || {}, { mat4 } = BL.math, { boundsOf } = BL.scene;
   const UP = { x: 0, y: 1, z: 0 }, VERTICES = 64, FRAGMENTS = 1024, EPS = 1e-10;
-  const meshes = new WeakMap();
+  const meshes = new WeakMap(), bakes = new WeakMap();
   const meshOf = (geometry) => {
     let mesh = meshes.get(geometry);
     if (mesh) return mesh;
+    // Scene visits wrap the same immutable vertices and face indices in fresh
+    // geometry objects. Reuse their BVH instead of retaining duplicate builds.
+    const baked = bakes.get(geometry.verts);
+    if (baked) for (const bake of baked) {
+      let same = bake.faces.length === geometry.faces.length;
+      for (let i = 0; same && i < bake.faces.length; i++) same = bake.faces[i] === geometry.faces[i].i;
+      if (same) { meshes.set(geometry, bake.mesh); return bake.mesh; }
+    }
     const vertices = geometry.verts, nodes = [];
     let count = 0;
     for (const face of geometry.faces) if (face.i.length > 2) count += face.i.length - 2;
@@ -45,6 +53,8 @@
     };
     if (count) build(0, count, -1);
     mesh = { vertices, indices, order, nodes };
+    const bake = { faces: geometry.faces.map(face => face.i), mesh };
+    if (baked) { if (baked.length === 16) baked.shift(); baked.push(bake); } else bakes.set(geometry.verts, [bake]);
     meshes.set(geometry, mesh); return mesh;
   };
   const create = ({ root, renderer, camera, occluded = null, renderOpts = null }) => {
@@ -432,10 +442,10 @@
       result.x = Math.max(0, Math.min(width, result.x)); result.y = Math.max(0, Math.min(height, result.y));
       return result;
     };
-    // Builds every blocker's mesh ahead in idle slices, so a view that brings many into play at once never builds them
-    // all in one frame: the same meshes `meshOf` would build then, shared across visits. A slice builds only what the
-    // idle time left can hold at the rate measured so far on this device.
-    let warming = 0, msPerTriangle = 0;
+    // Warm small meshes within the idle budget. A large synchronous BVH build
+    // cannot be interrupted, so leave it to the exact on-demand path rather than
+    // starting seconds of work in an idle callback between scene frames.
+    let warming = 0, msPerTriangle = 0.01;
     const warm = () => {
       if (warming || typeof requestIdleCallback === "undefined") return;
       const pending = [];
@@ -452,7 +462,9 @@
           if (meshes.has(geometry)) { pending.pop(); continue; }
           let triangles = 0;
           for (const face of geometry.faces) if (face.i.length > 2) triangles += face.i.length - 2;
-          if (triangles * msPerTriangle + 1 > deadline.timeRemaining()) break;
+          const estimated = triangles * msPerTriangle + 1;
+          if (estimated > 8) { pending.pop(); continue; }
+          if (estimated > deadline.timeRemaining()) break;
           const start = performance.now();
           meshOf(geometry);
           pending.pop();

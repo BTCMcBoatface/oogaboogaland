@@ -237,6 +237,7 @@ export const launch = async ({ w = 1440, h = 900, mobile = false, perf = false, 
   };
   const open = async (url) => {
     await send("Page.navigate", { url });
+    await send("Page.bringToFront");
   };
   const destroy = (now = false) => {
     state.alive = false;

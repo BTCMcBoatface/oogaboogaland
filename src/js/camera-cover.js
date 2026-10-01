@@ -111,6 +111,8 @@
     textureTransform.fill(NaN);
     stone.width = stone.height = TEXTURE_SIZE;
     const stoneImage = stoneCtx.createImageData(TEXTURE_SIZE, TEXTURE_SIZE), stonePixels = stoneImage.data;
+    const grainSamples = interiorTextureAt ? null : new Float64Array(TEXTURE_SIZE * TEXTURE_SIZE * 6);
+    const grainMaterials = interiorTextureAt ? null : new Array(TEXTURE_SIZE * TEXTURE_SIZE);
     let width = 0, height = 0, scale = 1, focal = 1, near = 0.2, cueContrast = 0, glyphTime = 0, textureGlyph = false, textureTick = -1;
     let glyphMaterial = null, textureMaterial = null, textureRevision = -1, textureInteriorRevision = -1, textureUniformGlyph = false;
     const state = { insideRock: false, partialRock: false, rockCoverage: 0, glyphInterior: false, glyphBlendMin: 0, glyphBlendMax: 0, glyphTextureUpdates: 0, outlined: false, faces: 0, opacity: 0.22, contrast: 0, textureSize: TEXTURE_SIZE, textureUpdates: 0, guideLines: 0, structureFaces: 0, structureFilled: false, structureUpdates: 0, structureCacheHits: 0, guideKind: null, guideIndex: -1, guideBasement: false };
@@ -174,12 +176,29 @@
             interiorTextureAt(wx, wy, wz, stonePixels, i);
             red = stonePixels[i]; green = stonePixels[i + 1]; blue = stonePixels[i + 2];
           } else {
-            const material = materialAt(wx, wy, wz) || BL.terrain.PALETTE[5];
-            const light = 0.2 + grain(wx * 15, wy * 18, wz * 13, 0) * 0.12 + grain(wx * 73, wy * 67, wz * 79, 1) * 0.04;
-            red = material[0] * light; green = material[1] * light; blue = material[2] * light;
+            const material = materialAt(wx, wy, wz) || BL.terrain.PALETTE[5], sample = i / 4, at = sample * 6;
+            const dx = Math.abs(wx - grainSamples[at]), dy = Math.abs(wy - grainSamples[at + 1]), dz = Math.abs(wz - grainSamples[at + 2]);
+            // Smoothstep's slope is at most 1.5 and every hashed corner lies
+            // in [0,1]. This bound proves all three rounded bytes unchanged;
+            // retain the last computed coordinates so reuse never accumulates error.
+            const error = 1.5 * (0.12 * (15 * dx + 18 * dy + 13 * dz) + 0.04 * (73 * dx + 67 * dy + 79 * dz)) + 1e-7;
+            const r = grainSamples[at + 3], g = grainSamples[at + 4], b = grainSamples[at + 5];
+            if (!amount && grainMaterials[sample] === material
+              && Math.abs(r - stonePixels[i]) + material[0] * error < 0.5
+              && Math.abs(g - stonePixels[i + 1]) + material[1] * error < 0.5
+              && Math.abs(b - stonePixels[i + 2]) + material[2] * error < 0.5) {
+              red = stonePixels[i]; green = stonePixels[i + 1]; blue = stonePixels[i + 2];
+            } else {
+              const light = 0.2 + grain(wx * 15, wy * 18, wz * 13, 0) * 0.12 + grain(wx * 73, wy * 67, wz * 79, 1) * 0.04;
+              red = material[0] * light; green = material[1] * light; blue = material[2] * light;
+              grainSamples[at] = wx; grainSamples[at + 1] = wy; grainSamples[at + 2] = wz;
+              grainSamples[at + 3] = red; grainSamples[at + 4] = green; grainSamples[at + 5] = blue;
+              grainMaterials[sample] = amount ? null : material;
+            }
           }
         }
         if (amount > 0) {
+          if (grainMaterials) grainMaterials[i / 4] = null;
           prepareGlyphAtlas();
           // Two fixed world-space directions keep the blurred code anchored as the camera turns or crosses a floor.
           // Only world Y drifts, slowly downward at a bounded cadence.

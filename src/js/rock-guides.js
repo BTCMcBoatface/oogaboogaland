@@ -654,7 +654,7 @@
       }
       // Per-visit fields keep their places here; arm() fills them for each visit.
       context.surfacePhases = null; context.surfaceWholePhases = null; context.surfacePerceived = null; context.surfaceSections = null; context.surfaceTerrainSeen = null; context.surfaceTargets = null;
-      context.surfaceEye = null; context.surfacePosition = null; context.surfaceActor = null; context.surfaceOcclusion = -1; context.surfaceCamera = null; context.surfaceView = null; context.surfaceHidden = null; context.surfaceAperture = null;
+      context.surfaceEye = null; context.surfacePosition = null; context.surfaceActor = null; context.surfaceOcclusion = -1; context.surfaceCamera = null; context.surfaceView = null; context.surfaceRayHidden = context.surfaceRayValid = context.surfaceRayStart = null; context.surfaceHidden = null; context.surfaceAperture = null;
       context.surfaceGroupBounds = new Float32Array(context.surfaceGroupCount * 6);
       for (let group = 0; group < context.surfaceGroupCount; group++) context.surfaceGroupBounds.set([Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity], group * 6);
       for (let at = 0; at < context.surface.length; at += 9) {
@@ -732,6 +732,9 @@
     context.surfaceCamera = new Float64Array([NaN, NaN, NaN]);
     context.surfaceView = new Float64Array([NaN, NaN, NaN, NaN]);
     context.surfaceHidden = new Uint8Array(count);
+    context.surfaceRayHidden = new Uint8Array(count);
+    context.surfaceRayValid = new Uint8Array(count);
+    context.surfaceRayStart = new Float64Array(count);
     context.surfaceAperture = new Uint8Array(count);
     context.apertures = context.windows.length ? BL.wallApertures.create({ windows: context.windows, island }) : null;
     return context;
@@ -760,7 +763,11 @@
       total += finish(context);
       arm(context, island);
     }
-    contexts.push(BL.holeGuides.create({ island }));
+    const hole = BL.holeGuides.create({ island });
+    hole.surfaceRayHidden = new Uint8Array(hole.surfaceGroupCount);
+    hole.surfaceRayValid = new Uint8Array(hole.surfaceGroupCount);
+    hole.surfaceRayStart = new Float64Array(hole.surfaceGroupCount);
+    contexts.push(hole);
     for (const context of contexts) {
       context.surfacePerception = -1;
       for (const wall of context.walls) wall.cameraReady = false;
@@ -791,7 +798,13 @@
       }
       const order = wall.surfaceOrder;
       if (hidden) {
-        for (let n = node.start; n < node.end; n++) context.surfaceHidden[order[n]] = 1;
+        for (let n = node.start; n < node.end; n++) {
+          const group = order[n], at = group * 3, samples = context.surfaceSamples;
+          const depth = (samples[at] - p.x) * fx + (samples[at + 1] - p.y) * fy + (samples[at + 2] - p.z) * fz;
+          context.surfaceHidden[group] = context.surfaceRayHidden[group] = 1;
+          context.surfaceRayStart[group] = depth > near ? near / depth : NaN;
+          context.surfaceRayValid[group] = depth > near ? 1 : 0;
+        }
       } else if (node.left) {
         updateSurfaceBranch(context, wall, node.left, p, fx, fy, fz, near, objectClear, actor);
         updateSurfaceBranch(context, wall, node.right, p, fx, fy, fz, near, objectClear, actor);
@@ -800,9 +813,21 @@
         for (let n = node.start; n < node.end; n++) {
           const group = order[n], at = group * 3, x = samples[at], y = samples[at + 1], z = samples[at + 2], dx = x - p.x, dy = y - p.y, dz = z - p.z;
           const depth = dx * fx + dy * fy + dz * fz, start = near / depth;
-          context.surfaceHidden[group] = depth <= near ? 1 : !island.sightClearAt(p.x + dx * start, p.y + dy * start, p.z + dz * start, x, y, z);
-          if (!context.surfaceHidden[group] && objectClear && (context.kind === "cave" || context.kind === "sealed")) context.surfaceHidden[group] = !objectClear(p.x + dx * start, p.y + dy * start, p.z + dz * start, x, y, z, actor, null, true);
-          stats.surfaceRays += depth > near ? 1 : 0;
+          const previous = context.surfaceRayStart[group], props = objectClear && (context.kind === "cave" || context.kind === "sealed");
+          // With a fixed eye the sample ray itself does not turn. A changed
+          // view only trims its near-plane prefix; an empty difference keeps
+          // the exact previous result, including a previously blocked ray.
+          const reuse = depth > near && context.surfaceRayValid[group]
+            && island.sightClearAt(p.x + dx * previous, p.y + dy * previous, p.z + dz * previous,
+              p.x + dx * start, p.y + dy * start, p.z + dz * start)
+            && (!props || objectClear(p.x + dx * previous, p.y + dy * previous, p.z + dz * previous,
+              p.x + dx * start, p.y + dy * start, p.z + dz * start, actor, null, true));
+          context.surfaceHidden[group] = reuse ? context.surfaceRayHidden[group]
+            : depth <= near ? 1 : !island.sightClearAt(p.x + dx * start, p.y + dy * start, p.z + dz * start, x, y, z);
+          if (!reuse && !context.surfaceHidden[group] && props) context.surfaceHidden[group] = !objectClear(p.x + dx * start, p.y + dy * start, p.z + dz * start, x, y, z, actor, null, true);
+          context.surfaceRayHidden[group] = context.surfaceHidden[group]; context.surfaceRayStart[group] = start;
+          context.surfaceRayValid[group] = depth > near ? 1 : 0;
+          stats.surfaceRays += !reuse && depth > near ? 1 : 0;
         }
       }
     };
@@ -931,6 +956,8 @@
         || context.windows?.length && (p.x !== cameraEye[0] || p.y !== cameraEye[1] || p.z !== cameraEye[2])
         || Math.abs(fx - view[0]) + Math.abs(fy - view[1]) + Math.abs(fz - view[2]) > 0.001 || view[3] !== camera.near;
       if (cameraMoved) {
+        if (p.x !== cameraEye[0] || p.y !== cameraEye[1] || p.z !== cameraEye[2]
+          || (context.kind === "cave" || context.kind === "sealed") && (eyeMoved || occlusionChanged)) context.surfaceRayValid.fill(0);
         cameraEye[0] = p.x; cameraEye[1] = p.y; cameraEye[2] = p.z;
         view[0] = fx; view[1] = fy; view[2] = fz; view[3] = camera.near;
         context.surfaceHidden.fill(0);
@@ -1032,7 +1059,7 @@
         if (context.surfaceWholeActive || context.surfaceActive) context.surfaceVersion++;
         context.surfacePhases.fill(0); context.surfaceWholePhases.fill(0); context.surfaceTargets.fill(0); context.surfacePerceived.fill(0);
         context.surfaceActive = context.surfaceWholeActive = 0;
-        context.surfaceEye.fill(NaN); context.surfaceCamera.fill(NaN);
+        context.surfaceEye.fill(NaN); context.surfaceCamera.fill(NaN); context.surfaceRayValid.fill(0);
         context.surfaceOcclusion = context.surfacePerception = -1;
         for (const wall of context.walls) wall.phase = wall.target = 0;
       }

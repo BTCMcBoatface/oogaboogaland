@@ -2349,7 +2349,8 @@ const SCENES = ["hub", "lab", "race", "drop", "orbit", "mine", "pool", "dsb", "f
 const LANES = Number(process.env.LANES) || 8;
 const ARGS = process.argv.slice(2);
 for (const a of ARGS) if (!SCENES.includes(a) && !["unit", "perf", "full", "poker-protocol"].includes(a)) throw new Error(`Unknown argument "${a}" (unit | perf | full | poker-protocol | ${SCENES.join(" | ")})`);
-const ONLY = process.env.ONLY || ""; // Optional substring within the requested scenes; defaults are unchanged.
+const ONLY = process.env.ONLY || ""; // Optional comma-separated substrings within the requested scenes.
+const onlyMatches = value => ONLY.split(",").some(part => value.includes(part));
 const FULL = ARGS.includes("full");
 const PICKED = FULL ? SCENES : SCENES.filter((s) => ARGS.includes(s));
 const PERF = FULL || ARGS.includes("perf");
@@ -2361,7 +2362,7 @@ const SCENE_BUDGET_S = 25;
 const tasks = [];
 const scene = (id, { query = "", steps, perf = false, opts = {}, label = "", url = null }) => {
   for (const s of steps) if (!WHY.test(s.why || "")) throw new Error(`${id}: step "${s.name}" must say why it exists: "regression: …", "playthrough: …", "rule: …" or "contract: …"`);
-  const chosen = !ONLY || (label && label.includes(ONLY)) ? steps : steps.filter(s => s.name.includes(ONLY));
+  const chosen = !ONLY || (label && onlyMatches(label)) ? steps : steps.filter(s => onlyMatches(s.name));
   if (!chosen.length) return;
   tasks.push({ name: perf ? `${id} perf` : opts.mobile ? `${id} phone` : label ? `${id} ${label}` : id, scene: id, perf, run: async () => {
     const t0 = Date.now();
@@ -3958,6 +3959,8 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
   const aim = await b.evaluate(`__birdsSnapshot()`);
   const turn = Math.abs(Math.atan2(Math.sin(aim.yaw - entry.after.yaw), Math.cos(aim.yaw - entry.after.yaw)));
   record("birds-eye combat: real mouse movement changes character facing without orbiting the overhead camera", turn > 0.15 && aim.horizontal < 1e-6 && aim.down > 0.999999 && aim.up.every((n, i) => Math.abs(n - entry.after.up[i]) < 1e-6), JSON.stringify({ before: entry.after, aim, turn }));
+  await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`);
+  if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the unlocked gesture probe");
   const centered = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, R = B.renderer, a = P.player, reticle = document.getElementById("weapon-reticle"), canvas = document.getElementById("scene"), rect = canvas.getBoundingClientRect(), ray = {};
     P.hooks.onZoom(60 / P.birdsEyeHeight); B.advance(1.5, 1 / 60); const before = __birdsSnapshot();
@@ -6427,7 +6430,7 @@ scene("hub", { label: "gorilla edge first descent", query: "status=chillin", ste
     B.pilot.release(true); C.release(); C.cancelDebugMove(e);
     for (const other of C.list) if (other !== e) { other.owner.override = other.owner.state = "away"; other.active = other.root.visible = false; }
     for (const cave of B.cavemen.values()) cave.root.visible = false;
-    for (const id of ["c1", "c9"]) {
+    for (const id of ["c1", "c11"]) {
       const along = id === "c1" ? 2.4 : 0.15;
       const m = B.mouths.find(m => m.id === id), sx = Math.sin(m.ry), sz = Math.cos(m.ry);
       const x = m.x - sx * along, z = m.z - sz * along, roof = B.island.surfaceAt(x, z);
@@ -7016,7 +7019,8 @@ scene("poker", { opts: PHONE_SIZE, steps: [phone("poker", { card: '[data-intro="
   if (process.env.POKER_SHOTS) await b.screenshot(join(process.env.POKER_SHOTS, "poker-phone.png"));
 } }] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
-scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
+scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye] });
+scene("hub", { label: "birds-eye combat projection and targets", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
 scene("hub", { label: "birds-eye lower floors", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEyeFloors] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
 scene("hub", { label: "side panel", query: "pos=0", steps: [hubSheetPersistence] });
@@ -7063,11 +7067,8 @@ const dsbExit = async (b, home = "bifrost") => {
 for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (mobile ? "&canvas2d=1" : "")), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), why: "regression: moved Shop and TV keep collision, interactions, radio and cat navigation attached to their fronts", run: async b => {
   const check = (name, ok, detail = "") => record("DSB plaza " + (mobile ? "canvas2d: " : "webgl2: ") + name, ok, detail);
   const press = async selector => {
-    await b.evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: ${JSON.stringify(mobile ? "nearest" : "center")} })`);
-    // Native touch hit testing uses the painted scrolling layer.
-    if (!await untilPage(b, 'B.dsb.phase === "land"')) throw Error("DSB control did not draw");
-    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; return { x, y, hits: e.contains(document.elementFromPoint(x, y)) }; })()`);
-    if (!p.hits) throw Error("Blocked pointer: " + selector);
+    await b.focus(true); await b.send("Page.bringToFront");
+    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center", behavior: "instant" }); const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; if (!e.contains(document.elementFromPoint(x, y))) throw Error("Blocked pointer: " + ${JSON.stringify(selector)} + JSON.stringify({ rect: r.toJSON(), hit: document.elementFromPoint(x, y)?.outerHTML.slice(0, 400), panel: document.getElementById("dsb-panel").getBoundingClientRect().toJSON(), viewport: [innerWidth, innerHeight] })); return { x, y }; })()`);
     if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
     else await b.click(p.x, p.y);
   };
@@ -7088,7 +7089,7 @@ for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza
     await dsbApproach(b, name);
     check(name + " prompt follows transformed front", await b.evaluate(`document.getElementById("dsb-context").textContent === ${JSON.stringify(name === "shop" ? "Visit meme shop" : "Use TV")}`));
     await press("#dsb-context");
-    if (name === "shop") { await press('[data-action="dsb-bread"]'); const purchase = await b.evaluate(`({ open: !document.getElementById("dsb-shop").hidden, ...__ooga.dsb.inventory, phase: __ooga.dsb.phase, player: {...__ooga.dsb.avatar.root.position} })`); check("Shop purchases still work", purchase.open && purchase.bread === 1 && purchase.tokens === 17, JSON.stringify(purchase)); await press('[data-action="dsb-close-shop"]'); }
+    if (name === "shop") { await press('[data-action="dsb-bread"]'); check("Shop purchases still work", await b.evaluate(`!document.getElementById("dsb-shop").hidden && __ooga.dsb.inventory.bread === 1 && __ooga.dsb.inventory.tokens === 17`), JSON.stringify(await b.evaluate(`({ inventory:__ooga.dsb.inventory, phase:__ooga.dsb.phase, hidden:document.getElementById("dsb-shop").hidden })`))); await press('[data-action="dsb-close-shop"]'); }
     else { check("TV opens through native interaction", await b.evaluate(`__ooga.dsb.tv.isOpen`)); await press("#dsb-tv-close"); }
   }
   const audio = await b.evaluate(`(() => { const B=__ooga, d=B.dsb, source=d.land.landmarks.tv.point(-0.55,3.3,1.63), boat=d.land.boats[0].position; B.audio.environment({...B.camera,position:source},boat,5,source); const near=B.audio.radioVolume; B.audio.environment({...B.camera,position:{x:-10,y:3.3,z:14.6}},boat,5,source); const old=B.audio.radioVolume; BL.scene.updateWorld(d.land.root); const w=d.land.tvScreen.world; return { near,old,source,matches:Math.hypot(source.x-w[12],source.y-w[13],source.z-w[14])<1e-5 }; })()`);
@@ -7164,10 +7165,14 @@ scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ nam
     } finally { window.fetch = saved; }
   })()`);
   record("dsb chat: fixed HTTP transport rejects unsafe responses and defaults to mock", transport);
+  const approachTalk = async () => { await b.evaluate(`      (() => { const B = __ooga, z = B.dsb.zuzu.root.position;
+      for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8, x = z.x + Math.cos(a) * 2, q = z.z + Math.sin(a) * 2; if (!B.dsb.clearAt(x, q, B.dsb.avatar.bodyRadius)) continue; B.pilot.navigate({ yaw: 0, pitch: 0.2, dist: 7, target: { x, y: 1.7, z: q }, position: { x, y: 0, z: q } }); B.advance(1 / 60, 1 / 60); const e = document.getElementById("dsb-context"); if (!e.hidden && e.textContent === "Talk to Zuzu") break; }
+      if (document.getElementById("dsb-context").textContent !== "Talk to Zuzu") throw Error("No eligible Talk position near Zuzu"); })();`); };
   const settle = async () => {
-    await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); __ooga.advance(__ooga.audio.duration + 1, 0.1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); __ooga.pilot.navigate({ yaw: 0, pitch: 0.2, dist: 7, target: { x: -4, y: 1.7, z: 26 }, position: { x: -4, y: 0, z: 26 } }); __ooga.advance(0.2);`);
+    await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); __ooga.advance(__ooga.audio.duration + 1, 0.1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));`);
+    await approachTalk();
   };
-  const click = async selector => { const p = await b.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`); await b.click(p.x, p.y); };
+  const click = async selector => { await b.focus(true); await b.send("Page.bringToFront"); await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`); await untilPage(b, "!document.pointerLockElement", 3000); const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; if (!e.contains(document.elementFromPoint(x, y))) throw Error("Blocked pointer: " + ${JSON.stringify(selector)}); return { x, y }; })()`); await b.click(p.x, p.y); };
   const send = async message => { await b.evaluate(`document.getElementById("zuzu-message").value = ${JSON.stringify(message)}; document.getElementById("zuzu-form").requestSubmit();`); if (!await untilPage(b, "!B.dsb.conversation.busy", 3000)) throw Error("Conversation did not settle"); };
   await settle(); await b.key("2");
   await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
@@ -7196,8 +7201,11 @@ scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ nam
   record("dsb chat: closing restores movement", move > 0.1, String(move));
   await b.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 740, deviceScaleFactor: 1, mobile: true });
   await b.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-  await b.evaluate(`document.getElementById("zuzu-message").value = ""; document.getElementById("dsb-context").click();`);
+  await approachTalk();
+  await b.evaluate(`document.getElementById("zuzu-message").value = "";`);
   const tap = async selector => { const p = await b.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`); await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); };
+  await tap("#dsb-context");
+  if (!await untilPage(b, "B.dsb.conversation.isOpen", 3000)) throw Error("Touch Talk did not open the conversation");
   await tap("#zuzu-message");
   await b.send("Input.insertText", { text: "こんにちは 🐈" });
   await b.evaluate(`document.getElementById("zuzu-message").dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));`);
@@ -7285,8 +7293,7 @@ scene("dsb", { label: "dsb zuzu agent", url: hubPage(dist, "scene=dsb"), steps: 
   await b.evaluate(`__ooga.go("dsb");`);
   if (!await untilPage(b, 'B.scene === "dsb" && !B.transitioning', 10000)) throw Error("DSB reentry failed");
   record("dsb zuzu: transit reentry has no agent", await b.evaluate("!__ooga.dsb.zuzu"));
-  await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 0); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));`);
-  const reset = await b.evaluate(`(() => { const s = __ooga.dsb.zuzu.snapshot(); return { events: s.events.length, hits: s.self.tomatoHits }; })()`);
+  const reset = await b.evaluate(`(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 0); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); const s = __ooga.dsb.zuzu.snapshot(); return { events: s.events.length, hits: s.self.tomatoHits }; })()`);
   record("dsb zuzu: new visit resets session memory", reset.events === 0 && reset.hits === 0, JSON.stringify(reset));
 } }] });
 for (const ready of [false, true]) scene("dsb", { label: "entrance audio " + ready, url: hubPage(dist, "scene=dsb"), steps: [{ name: "dsb entrance " + (ready ? "audio enabled" : "audio blocked"), why: "regression: blocked audio must not block entrance movement", run: async (b) => {
@@ -7335,7 +7342,20 @@ for (const ready of [false, true]) scene("dsb", { label: "entrance audio " + rea
 
   } }] });
 for (const fallback of [false, true]) scene("dsb", { label: "dsb gameplay " + (fallback ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (fallback ? "&canvas2d=1" : "")), steps: [{ name: "dsb gameplay " + (fallback ? "canvas2d" : "webgl2"), why: "contract: preserve DSB scene behavior independently of the hub entrance", run: async (b) => {
-  const click = async (selector) => { const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center" }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`); if (!p.hits) throw Error("Blocked pointer: " + selector); await b.click(p.x, p.y); };
+  const click = async (selector) => {
+    await b.focus(true); await b.send("Page.bringToFront");
+    await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`);
+    if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the native HUD click");
+    await b.evaluate(`(async () => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center", behavior: "instant" }); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); })()`);
+    // Animation callbacks precede compositor paint. Wait for the scrolled
+    // surface to commit before sending physical coordinates into that surface.
+    await b.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false, clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 } });
+    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(); window.__hudPointer = []; for (const type of ["pointerdown", "click"]) document.addEventListener(type, event => { window.__hudPointer.push({ type, hits: e.contains(event.target), target: event.target.id || event.target.dataset.action || event.target.tagName }); }, { once: true, capture: true }); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
+    if (!p.hits) throw Error("Blocked pointer: " + selector);
+    await b.click(p.x, p.y);
+    const delivered = await b.evaluate(`window.__hudPointer`);
+    if (delivered?.length !== 2 || !delivered.every(event => event.hits)) throw Error("Native pointer missed " + selector + ": " + JSON.stringify(delivered));
+  };
   const walkTo = async (x, z) => b.evaluate(`__ooga.pilot.navigate({ yaw: 0, pitch: 0.2, dist: 7, target: { x: ${x}, y: 1.7, z: ${z} }, position: { x: ${x}, y: 0, z: ${z} } }); __ooga.advance(0.15);`);
   await b.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await b.key("m"); await untilPage(b, "B.audio.ready", 10000);
@@ -7562,16 +7582,11 @@ scene("dsb", { label: "dsb feeds and audio", url: hubPage(src, "scene=dsb"), ste
 scene("dsb", { label: "dsb arrival camera", url: hubPage(src, "scene=dsb"), steps: [{ name: "dsb arrival camera", why: "contract: preserve DSB scene behavior independently of the hub entrance", run: async (b) => {
   await b.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   await b.key("w"); await untilPage(b, "B.audio.ready", 10000);
-  await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
-  await b.evaluate(`__ooga.advance(2.6, 1 / 60)`);
-  await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "w" });
-  const left = await b.evaluate(`({ cue: __ooga.audio.cue, glance: __ooga.dsb.glance, behind: __ooga.camera.position.z - __ooga.dsb.avatar.root.position.z })`);
+  const glanceAtCue = async cue => b.evaluate(`(() => { const B = __ooga; window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); try { for (let i = 0; i < 1200 && B.audio.cue < ${cue}; i++) B.advance(1 / 60, 1 / 60); B.advance(0.5, 1 / 60); return { cue: B.audio.cue, glance: B.dsb.glance, behind: B.camera.position.z - B.dsb.avatar.root.position.z }; } finally { window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); } })()`);
+  const left = await glanceAtCue(0);
   if (process.env.DSB_CAPTURE) await b.screenshot(join(root, "untracked", "dsb-passage.png"));
   await untilPage(b, "!B.audio.pending", 12000);
-  await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
-  await b.evaluate(`__ooga.advance(8.7, 1 / 60)`);
-  await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "w" });
-  const right = await b.evaluate(`({ cue: __ooga.audio.cue, glance: __ooga.dsb.glance })`);
+  const right = await glanceAtCue(1);
   record("dsb passage camera: real voice starts alternate gentle glances while staying behind the Ooga", left.cue === 0 && left.glance < -0.03 && left.behind > 3.9 && right.cue === 1 && right.glance > 0.03 && Math.abs(left.glance) <= 0.16 && Math.abs(right.glance) <= 0.16, JSON.stringify({ left, right }));
   await b.key("m");
   await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
@@ -7844,7 +7859,7 @@ const dsbSoak = async (b) => {
     }
   };
   // A go() during a running transition is ignored: wait for swap, frames, animations and the fade first.
-  const travel = (id) => b.evaluate(`new Promise((resolve, reject) => { const B = window.__ooga; const T = window.BL.scene.tweenCount; const t0 = performance.now(); let last = t0, requested = false, swap = 0, swapFrame = 0, swapGap = 0; const tick = () => { const now = performance.now(); if (!requested && !B.transitioning && T() === 0) { B.go(${JSON.stringify(id)}); requested = true; } if (requested && !swap && B.scene === ${JSON.stringify(id)}) { swap = now - t0; swapGap = now - last; swapFrame = B.renderedFrames; } last = now; if (swap && B.renderedFrames >= swapFrame + 3 && T() === 0 && !B.transitioning) resolve({ swap, swapGap, settled: now - t0 }); else if (now - t0 > 8000) reject(new Error("Scene travel did not settle: " + JSON.stringify({ wanted: ${JSON.stringify(id)}, scene: B.scene, requested, tweens: T(), framesSinceSwap: swap ? B.renderedFrames - swapFrame : -1, swap: Math.round(swap) }))); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`);
+  const travel = (id) => b.evaluate(`new Promise((resolve, reject) => { const B = window.__ooga; const T = window.BL.scene.tweenCount; const t0 = performance.now(); let last = t0, requested = false, swap = 0, swapFrame = 0, swapGap = 0, accepted = false; const startFrames = B.renderedFrames, trail = []; const tick = () => { const now = performance.now(); const state=B.scene+":"+B.transitioning; if (!trail.length || trail[trail.length-1].state!==state) { if(trail.length<20)trail.push({state,at:now-t0,frames:B.renderedFrames}); } if (!requested && !B.transitioning && T() === 0) { accepted = B.go(${JSON.stringify(id)}); requested = true; } if (requested && !swap && B.scene === ${JSON.stringify(id)}) { swap = now - t0; swapGap = now - last; swapFrame = B.renderedFrames; } last = now; if (swap && B.renderedFrames >= swapFrame + 3 && T() === 0 && !B.transitioning) resolve({ swap, swapGap, settled: now - t0 }); else if (now - t0 > 8000) reject(new Error("Scene travel did not settle: " + JSON.stringify({ wanted: ${JSON.stringify(id)}, scene: B.scene, accepted, trail, framesTotal: B.renderedFrames-startFrames, hidden: document.hidden, focus: document.hasFocus(), requested, tweens: T(), framesSinceSwap: swap ? B.renderedFrames - swapFrame : -1, swap: Math.round(swap) }))); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`);
   const heapDetail = (a, z) => `objects ${mb(a.objects)} -> ${mb(z.objects)} MB (used ${mb(a.used)} -> ${mb(z.used)} MB, code ${mb(a.code)} -> ${mb(z.code)} MB)`;
   const within = (a, z, share) => Math.abs(z.objects - a.objects) <= a.objects * share;
   return { until, rendered, settled, snapshot, travel, heapDetail, within };
@@ -7867,6 +7882,8 @@ scene("dsb", { label: "lifecycle", url: hubPage(src), steps: [{ name: "dsb lifec
 
 scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "factory lifecycle", why: "contract: repeated factory visits release the hall's listeners, nodes and GPU resources while retaining one bounded shared node", run: async (b) => {
   const { rendered, settled, snapshot, travel, heapDetail, within } = await dsbSoak(b);
+  // Keep resource comparisons at one tier, as in the other lifecycle soaks.
+  await b.evaluate('__ooga.renderer.setQuality("low")');
   await b.evaluate(`(() => {
     const node = __ooga.factory.node, feed = node.feed, subscribe = feed.subscribe;
     window.__factoryLife = { node, subscriptions: 0 };
@@ -8730,7 +8747,7 @@ const unitChecks = async () => {
     record("mirror damage: subsequent impacts choose nearby panes and interrupted repair spends proportional health while dropping only present glass", locality[0].mean < -0.8 && locality[1].mean > 0.8 && locality.every(row => row.count === 4) && wasMissing && regrownCenter && Math.abs(spent - 8) < 1e-9 && shards.length > 0 && shards.length <= maxFragments && samples > 0 && removed > 0 && !overHole && !remoteRemoved && !holeFilled, JSON.stringify({ locality, wasMissing, regrownCenter, spent, maxFragments, shards: shards.length, samples, removed, overHole, remoteRemoved, holeFilled }));
   }
   {
-    const S = BL.scene, root = S.createNode(), owners = [], damage = [], player = { root: S.createNode(), baseY: 0, bodyRadius: 0.3, bodyHeight: 1.7 }, system = BL.breakables.create({ root, renderer: {}, fx: { burst() {}, damageNumber(x, y, z, amount) { damage.push({ x, y, z, amount }); } }, crew: { player },
+    const S = BL.scene, root = S.createNode(), owners = [], damage = [], player = { root: S.createNode(), baseY: 0, bodyRadius: 0.3, bodyHeight: 1.7 }, system = BL.breakables.create({ root, renderer: {}, fx: { burst() {}, damageNumber(x, y, z, amount) { damage.push({ x, y, z, amount }); } }, crew: { player, collectGroundMagazine: amount => amount },
       deactivate(owner) { owner.active = owner.node.visible = false; }, relocate: () => false, collectReward: () => false });
     for (let i = 0; i < 26; i++) {
       const owner = { kind: "prop", prop: "crate", node: S.createNode({ geometry: BL.models.box({ w: 1, h: 1, d: 1, color: "#888888" }) }), active: true };
@@ -8963,7 +8980,13 @@ try {
   // No ledger yet.
 }
 const now = new Date().toISOString();
+// A check can run in both renderers. Any failure wins over another instance's pass.
+const ledgerResults = new Map();
 for (const r of results) {
+  const prior = ledgerResults.get(r.name);
+  if (!prior || !r.ok && !r.open) ledgerResults.set(r.name, r);
+}
+for (const r of ledgerResults.values()) {
   if (r.ok || r.open) delete ledger[r.name];
   else ledger[r.name] = { streak: (ledger[r.name]?.streak || 0) + 1, first: ledger[r.name]?.first || now, last: now, detail: r.detail.slice(0, 600) };
 }

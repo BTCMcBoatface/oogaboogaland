@@ -5965,7 +5965,7 @@ body.orbit-dragging #tooltip {
 .race:has(> [data-intro]:not([hidden])) .garage,
 .race:has(> [data-intro]:not([hidden])) .panel-edge,
 #poker:has(> [data-intro]:not([hidden])) .poker-panel,
-#poker:has(> [data-intro]:not([hidden])) .panel-edge {
+#poker:has(> [data-intro]:not([hidden])) .poker-focus {
   visibility: hidden;
 }
 

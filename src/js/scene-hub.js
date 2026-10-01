@@ -2727,9 +2727,12 @@
     const inner = Math.max(MEADOW_INNER, island.path.debug.ringOuterRadius + radius);
     if (inner >= MEADOW_OUTER) return false;
     const bounds = BL.scene.boundsOf(owner.node.geometry), height = bounds.max[1] - bounds.min[1];
-    for (let attempt = 0; attempt < 80; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.sqrt(lerp(inner * inner, MEADOW_OUTER * MEADOW_OUTER, Math.random()));
+    // Random probes keep ordinary respawns varied. If they miss every safe
+    // spot, a bounded spiral covers the meadow rather than retrying clusters.
+    for (let attempt = 0; attempt < 336; attempt++) {
+      const fallback = attempt - 80;
+      const angle = fallback < 0 ? Math.random() * Math.PI * 2 : fallback * 2.399963229728653;
+      const distance = Math.sqrt(lerp(inner * inner, MEADOW_OUTER * MEADOW_OUTER, fallback < 0 ? Math.random() : (fallback + 0.5) / 256));
       const x = Math.sin(angle) * distance, z = Math.cos(angle) * distance;
       if (island.surfaceAt(x, z) !== 0 || island.path.overlaps(x, z, radius) || nearMouth(x, z, radius + 3.5) || !workSceneryClear(x, z, radius)) continue;
       let clear = true;
@@ -6385,8 +6388,21 @@
       && bananaCover.segmentClear(x, y, z, toX, toY, toZ);
   };
   const cameraGlyphCoverage = (x, y, z) => {
+    // An inactive wave only paints the permanent chamber. Reject points
+    // outside its exact volume before looking up terrain cave ownership.
+    const permanent = MATRIX_WORLD.permanentCave;
+    if (!MATRIX_WORLD.active) {
+      if (!permanent) return 0;
+      const plane = MATRIX_WORLD.permanentPlane, aperture = MATRIX_WORLD.permanentAperture, at = (permanent - 1) * 4;
+      const depth = -(plane[0] * x + plane[1] * y + plane[2] * z + plane[3]), bounds = MATRIX_WORLD.caveBounds, caves = MATRIX_WORLD.caves;
+      const across = caves[at + 1] * (x - bounds[at]) - caves[at] * (z - bounds[at + 2]), height = y - bounds[at + 1];
+      const room = depth > aperture[2] + 2.5 - aperture[3], throat = depth <= aperture[2];
+      const half = throat ? aperture[0] : aperture[0] + (room ? 0.5 : 0) + aperture[3], ceiling = aperture[1] + (room && !throat ? 1 : 0);
+      if (depth < -1e-6 || depth > bounds[at + 3] + aperture[3] || Math.abs(across) > half + 1e-6
+        || height < -1e-6 || height > ceiling + 1e-6) return 0;
+    }
     const caveIndex = island.rockCaveAt(x, y, z);
-    if (caveIndex && caveIndex === MATRIX_WORLD.permanentCave) {
+    if (caveIndex && caveIndex === permanent) {
       const plane = MATRIX_WORLD.permanentPlane, aperture = MATRIX_WORLD.permanentAperture, at = (caveIndex - 1) * 4;
       const depth = -(plane[0] * x + plane[1] * y + plane[2] * z + plane[3]), bounds = MATRIX_WORLD.caveBounds, caves = MATRIX_WORLD.caves;
       const across = caves[at + 1] * (x - bounds[at]) - caves[at] * (z - bounds[at + 2]), height = y - bounds[at + 1];
@@ -7711,8 +7727,6 @@
     }
     context.restore();
   };
-  // Where the overlay's frame goes, a section at a time, for the profiler under ?debug=1 (`debug.overlayProfile`).
-  const OVERLAY_PROFILE = { prepare: 0, fx: 0, collect: 0, sight: 0, rock: 0, cover: 0, banana: 0 };
   // Walking recomputes the sight guides at most this often in game time; the lines are world-anchored, so a
   // frame of lag never shows, and it is the difference between 42 and 59 fps behind cave rock at 4K.
   const SIGHT_RECOMPUTE_HZ = 30;
@@ -7742,13 +7756,9 @@
     }
     const insideMirror = !!player && playerCaveIndex === matrixCave.caveIndex;
     mirrorGuides.update(insideMirror, MATRIX_WORLD.time, MATRIX_WORLD.density);
-    let tick = performance.now();
-    const lap = (key) => { const now = performance.now(); OVERLAY_PROFILE[key] = now - tick; tick = now; };
     const bananaActor = bananaCover.prepare(camera, player);
-    lap("prepare");
     uiGuideObjects = null; uiGuidesReady = true;
     try { fx.drawOverlay(dt, drawExtra); } finally { uiGuidesReady = false; }
-    lap("fx");
     let touchesRock = false, occluded = false, guides = null, exteriorRamp = false;
     if (pilot.closeMix < 1) {
       const eye = camera.position, tangent = Math.tan(camera.fov / 2), aspect = renderer.size.width / Math.max(1, renderer.size.height);
@@ -7770,16 +7780,13 @@
       const objectsEnabled = viewEligible && (exteriorRamp || rockSection || !actorVisible);
       const bananaEnabled = bananaCover.state.cameraInPile;
       occluded = objectsEnabled;
-      lap("collect");
       guides = sightGuides.update(player, null, objects, camera, aspect, dt, objectsEnabled, rockSection, SIGHT_RECOMPUTE_HZ);
-      lap("sight");
       // Keep a separate cap pass so split objects stay legible in fruit.
       // It must not change the visibility rules in the clear part of the view.
       const fruitGuides = bananaGuides.update(bananaEnabled ? player : null, null, objects, camera, aspect, dt, bananaEnabled, true);
       if (objectsEnabled || bananaEnabled) {
         const structure = ensureRockGuides().select(p.x, p.y - player.baseY, p.z, camera.position.x, camera.position.y, camera.position.z), observer = guides.observer;
         const surfaces = rockGuides.updateSurfaces(observer[19], observer[20], observer[21], camera, dt, player, objectGuides.perceptionClear, objects.occlusionVersion, objects.perceptionVersion);
-        lap("rock");
         guides.structures = objectsEnabled ? surfaces : null; guides.structure = objectsEnabled ? structure : null;
         fruitGuides.structures = bananaEnabled ? surfaces : null; fruitGuides.structure = bananaEnabled ? structure : null;
       } else { guides.structure = fruitGuides.structure = null; guides.structures = fruitGuides.structures = null; if (rockGuides) rockGuides.resetSurface(); }
@@ -7797,10 +7804,8 @@
     }
     cameraCover.state.opacity = 0.22 * (1 - pilot.closeMix);
     cameraCover.draw(camera, bananaActor ? null : player?.root, touchesRock, occluded, cameraRockAt, cameraRockMaterialAt, guides, dt, MATRIX_WORLD.active ? 1 : 0, CAMERA_GLYPHS, exteriorRamp ? guideActorVisibleAt : null);
-    lap("cover");
     bananaCover.draw(camera, player, dt, guideActorVisibleAt, bananaGuides.state, CAMERA_GLYPHS);
     drawFirstPersonFire(player);
-    lap("banana");
   };
 
   const onLootCleared = () => {
@@ -8753,7 +8758,6 @@
       }
     });
     Object.defineProperty(hubScene.debug.matrixCave, "caves", { value: matrixInteriors });
-    hubScene.debug.overlayProfile = OVERLAY_PROFILE;
     if (world.mirrorBroken) {
       mirrorCave.damage.restore();
       syncMirrorDamage(true);

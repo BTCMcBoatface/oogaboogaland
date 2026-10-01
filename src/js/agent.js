@@ -396,17 +396,18 @@
   };
   const PART_NAMES = ["legL", "legR", "torso", "armL", "armR", "head"];
   const CLIMB_VERTICES = new WeakMap(), CLIMB_CONTACT_VERTICES = new WeakMap();
-  const climbVertices = (geometry, inset = true) => {
-    const cache = inset ? CLIMB_VERTICES : CLIMB_CONTACT_VERTICES;
+  const climbVertices = (geometry, contact = false) => {
+    const cache = contact ? CLIMB_CONTACT_VERTICES : CLIMB_VERTICES;
     let samples = cache.get(geometry);
     if (samples) return samples;
     const seen = new Set(), values = [], v = geometry.verts, b = boundsOf(geometry);
-    const center = inset ? 0.0025 : 0, shrink = inset ? 0.995 : 1;
-    const cx = (b.min[0] + b.max[0]) * center, cy = (b.min[1] + b.max[1]) * center, cz = (b.min[2] + b.max[2]) * center;
+    const cx = (b.min[0] + b.max[0]) * 0.0025, cy = (b.min[1] + b.max[1]) * 0.0025, cz = (b.min[2] + b.max[2]) * 0.0025;
     for (let i = 0; i < v.length; i += 3) {
       const key = `${v[i]},${v[i + 1]},${v[i + 2]}`;
       if (seen.has(key)) continue;
-      seen.add(key); values.push(v[i] * shrink + cx, v[i + 1] * shrink + cy, v[i + 2] * shrink + cz);
+      seen.add(key);
+      if (contact) values.push(v[i], v[i + 1], v[i + 2]);
+      else values.push(v[i] * 0.995 + cx, v[i + 1] * 0.995 + cy, v[i + 2] * 0.995 + cz);
     }
     samples = new Float32Array(values); cache.set(geometry, samples);
     return samples;
@@ -759,7 +760,7 @@
           arm.position.y = damp(arm.position.y, SHOULDER_Y + climbStroke * 0.115 * climbing + (labWork === "type" ? 0.06 : 0)
             - (leaning && (!leanSide || l.side === leanSide) ? 0.077 : 0), 20, dt);
           leg.position.y = damp(leg.position.y, Math.max(0, -climbStroke) * 0.09 * climbing, 18, dt);
-          leg.position.z = damp(leg.position.z, (0.424 + climbStroke * 0.034) * climbing, 20, dt);
+          leg.position.z = damp(leg.position.z, (0.36 + climbStroke * 0.034) * climbing, 20, dt);
           leg.rotation.z = damp(leg.rotation.z, -state.climbSide * climbStroke * 0.07 * climbing, 18, dt);
         }
         let legAngle = lounge ? onSide ? -0.42 : reclining ? 0.1 : leaning ? leanSide ? -1.1 : -1.14 : -1.28 + l.side * sitShift * 0.1 : jumping ? 0.7 - takeoff * 0.85 : o ? -(squeeze ? 0.1 : labSqueeze ? 0.16 : g.legs) * moving * wave(state.phase, o[l.leg]) : 0;
@@ -789,7 +790,7 @@
           // The free hand rests near the bent knee. Matching its old angle to
           // the reclined chest left it pointing almost horizontally in midair.
           const rest = (leaning ? supporting ? -state.pitch + 1 : -0.55 : onSide ? lower ? -2.3 : -1.08 : reclining ? -0.08 : -state.pitch - 0.801 + l.side * sitShift * 0.1)
-            + (lounge === "sit" ? -0.14 * Math.max(0, Math.sin(restTime * 0.9 + i * Math.PI)) * restMotion
+            + (lounge === "sit" ? -0.15 * Math.max(0, Math.sin(restTime * 0.9 + i * Math.PI)) * restMotion
               : supporting ? 0 : Math.sin(restTime * 0.8 + i) * 0.08 * restMotion);
           limb(arm, rest + (reach - rest) * groomArm, dt);
           const restSide = leaning ? supporting ? l.side * 0.18 : -l.side * 0.12 : onSide ? lower ? -l.side * 0.2 : -l.side * 0.55 : reclining ? l.side * 0.18 : -l.side * 0.12;
@@ -870,6 +871,7 @@
       // The head keeps the face forward, looking up when it rears
       parts.head.rotation.x = -state.pitch * (state.gait === "beat" ? 1.15 : 0.85);
       if (managed) {
+        parts.head.position.z = 1.5 * U - 0.12 * climbing;
         parts.head.rotation.x += (-0.04 - state.climbDirection * 0.16 - parts.head.rotation.x) * climbing;
         parts.head.rotation.x += Math.sin(restTime * 0.65) * 0.055 * restMotion - Math.abs(sitLook) * 0.065;
         parts.head.rotation.y = damp(parts.head.rotation.y, state.groomSide * 0.36 * grooming + Math.sin(restTime * 0.5) * 0.16 * restMotion + sitLook * 0.3 + sitShift * 0.12 + state.climbSide * 0.16 * climbing, 8, dt);
@@ -978,7 +980,7 @@
       return envelopePart;
     };
     const body = { minX: 0, maxX: 0, minY: 0, maxY: BODY * scale, minZ: 0, maxZ: 0, radius: 0.75 * scale, height: BODY * scale };
-    const measureBody = () => {
+    const measureBody = (fitSupport = true) => {
       updateLocal(hips);
       updateLocal(chest);
       updateLocal(parts.head);
@@ -1043,7 +1045,7 @@
       // Stop animated knuckles dipping below the supporting floor without moving
       // the controller's root or interfering with its airborne height.
       const floor = state.groundPlane || exactRest ? supportY : Math.min(0, body.minY);
-      if (floor) {
+      if (fitSupport && floor) {
         const lift = -floor / scale;
         hips.position.y += lift;
         updateLocal(hips);
@@ -1051,7 +1053,7 @@
         body.maxY -= floor;
         body.minY = state.groundPlane ? body.minY - floor : 0;
       }
-      if (state.groundPlane && groundHullAt) {
+      if (fitSupport && state.groundPlane && groundHullAt) {
         const sine = Math.sin(state.heading), cosine = Math.cos(state.heading), p = root.position;
         let lift = 0;
         // At a landing seam the ground may touch an edge between sampled
@@ -1236,17 +1238,16 @@
       state.gait = state.beat > 0 ? "beat" : state.biped ? "upright" : state.speed <= 0.01 ? "idle"
         : motion && motion.walkGait ? motion.walkGait : state.speed > 1.7 ? "gallop" : "knuckle";
       pose(Math.max(0, dt));
-      if (state.climbFitArms) {
-        // Bent feet can lift the rig above its nominal pelvis height. Fit the
-        // grip after that support adjustment; lifting an already fitted hand
-        // can otherwise move it inside the next step of an uneven rim.
-        measureBody();
-        fitClimbHands(Math.max(0, dt));
-      }
       measureBody();
-      // Support changes immediately for collision, while the visible rig
-      // eases onto and off low props without changing its running pose.
+      // Fit contacts after the visible support offset too: applying that
+      // offset afterward can lower a previously clear foot into a tread.
       if (motion && Number.isFinite(motion.supportOffset)) hips.position.y += motion.supportOffset / scale;
+      const fitWalking = climbSolidAt && !state.climb && !state.lab && !airborne && !state.lounge
+        && !state.roll && !state.beat && !state.pound;
+      if (state.climbFitArms) {
+        fitClimbHands(Math.max(0, dt)); fitClimbBody();
+      } else if (fitWalking) fitWalkHands();
+      if (state.climbFitArms || fitWalking) measureBody(false);
     };
     const pointToWorld = (matrix, x, y, z, out) => {
       const px = (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) * scale;
@@ -1262,7 +1263,7 @@
     // mesh and a short surface witness beside its pad, without moving the
     // shoulder or treating a point inside the stone as valid contact.
     const climbArmContact = (arm, side, preparing, dx, dy, dz, reach = 0.16) => {
-      const vertices = climbVertices(arm.geometry, false), b = envelopeBounds[side + 3];
+      const vertices = climbVertices(arm.geometry, true), b = envelopeBounds[side + 3];
       const palmY = b.min[1] + (b.max[1] - b.min[1]) * (2 / 14);
       const m = partMatrix(arm), sine = Math.sin(root.rotation.y), cosine = Math.cos(root.rotation.y);
       let contact = false;
@@ -1281,6 +1282,50 @@
       }
       return contact ? 1 : 0;
     };
+    const climbPartClear = (part) => {
+      const vertices = climbVertices(part.geometry, true), m = partMatrix(part);
+      const sine = Math.sin(root.rotation.y), cosine = Math.cos(root.rotation.y);
+      for (let v = 0; v < vertices.length; v += 3) {
+        const x = vertices[v], y = vertices[v + 1], z = vertices[v + 2];
+        const px = (m[0] * x + m[4] * y + m[8] * z + m[12]) * scale;
+        const py = (m[1] * x + m[5] * y + m[9] * z + m[13]) * scale;
+        const pz = (m[2] * x + m[6] * y + m[10] * z + m[14]) * scale;
+        if (climbSolidAt(root.position.x + cosine * px + sine * pz,
+          root.position.y + py, root.position.z - sine * px + cosine * pz)) return false;
+      }
+      return true;
+    };
+    const fitClimbBody = () => {
+      for (let side = 0; side < 2; side++) {
+        const leg = side ? parts.legR : parts.legL;
+        for (let step = 0; step < 15 && !climbPartClear(leg); step++) {
+          leg.position.z -= 0.02; leg.position.y += 0.02;
+        }
+      }
+      for (let step = 0; step < 15; step++) {
+        updateLocal(parts.head); mat4.multiply(envelopeHead, envelopeChest, parts.head.local);
+        if (climbPartClear(parts.head) && climbPartClear(parts.jaw)) break;
+        parts.head.position.z -= 0.02;
+      }
+    };
+    const fitWalkHands = () => {
+      updateLocal(hips); updateLocal(chest);
+      mat4.multiply(envelopeChest, hips.local, chest.local);
+      for (let side = 0; side < 2; side++) {
+        const leg = side ? parts.legR : parts.legL;
+        for (let step = 0; step < 15 && !climbPartClear(leg); step++) leg.position.y += 0.02;
+      }
+      for (let side = 0; side < 2; side++) {
+        const arm = side ? parts.armR : parts.armL, angle = arm.rotation.x;
+        if (climbArmContact(arm, side, false, 0, 0, 0) >= 0) continue;
+        let clear = false;
+        for (let step = 1; step <= 20; step++) {
+          arm.rotation.x = angle - step * 0.05;
+          if (climbArmContact(arm, side, false, 0, 0, 0) >= 0) { clear = true; break; }
+        }
+        if (!clear) arm.rotation.x = angle;
+      }
+    };
     // A high grip can reach over a stepped rim into empty air. Lower each arm
     // towards the stone independently, stopping before any of its mesh enters
     // rock. Live poses and route previews share this bounded search and easing.
@@ -1294,12 +1339,11 @@
         if (!(state.climbFitArms & 1 << side)) continue;
         const arm = side ? parts.armR : parts.armL, previous = arm.rotation.x, previousYaw = arm.rotation.y;
         const base = side ? state.climbArmBaseR : state.climbArmBaseL;
-        const raised = -2.8 + 0.035 * wave(state.climbStride / 1.2, side ? 0.5 : 0);
-        const vertices = climbVertices(arm.geometry, false);
+        const raised = -3.2;
+        const vertices = climbVertices(arm.geometry, true);
         let safe = raised, unsafe = raised, found = false;
         for (let attempt = 0; attempt < 14; attempt++) {
-          const refining = unsafe > safe, angle = refining ? (safe + unsafe) * 0.5
-            : !found && attempt ? Math.max(-Math.PI - state.pitch, raised - attempt * 0.1) : Math.min(-1.9, raised + attempt * 0.1);
+          const refining = unsafe > safe, angle = refining ? (safe + unsafe) * 0.5 : Math.min(-1.9, raised + attempt * 0.1);
           arm.rotation.x = base + (angle - base) * blend;
           const m = partMatrix(arm);
           let clear = true;
@@ -1314,13 +1358,8 @@
             if (climbSolidAt(wx, wy, wz) || preparing && climbSolidAt(wx + dx, wy + dy, wz + dz)) { clear = false; break; }
           }
           if (clear) { safe = angle; found = true; }
-          else if (!found) {
-            // A raised palm can start inside the rim. Lift it clear before
-            // refining downwards; the initial pose is not a safe fallback.
-            unsafe = angle;
-            if (angle <= -Math.PI - state.pitch) break;
-            continue;
-          } else unsafe = angle;
+          else if (!found) break;
+          else unsafe = angle;
           // Keep the first higher palm grip instead of lowering both arms to
           // the last clear angle. The ordinary search remains the fallback.
           if (clear && blend > 0.9 && !(state.climbGripRelease & 1 << side)
@@ -1360,6 +1399,26 @@
                 }
               }
             }
+          }
+        }
+        // A stepped face can put the hold below the first clear pitch.
+        // Search pitch and shoulder turn together before declaring grip loss;
+        // every candidate still checks the complete arm against the stone.
+        if (blend > 0.98 && !(state.climbGripRelease & 1 << side)) {
+          arm.rotation.x = pitch; arm.rotation.y = yaw;
+          if (climbArmContact(arm, side, preparing, dx, dy, dz, 0.4) !== 1) {
+            let held = false;
+            for (let turn = 0; turn < 7 && !held; turn++) {
+              const candidateYaw = turn === 0 ? 0 : (side ? -1 : 1) * (turn & 1 ? 1 : -1) * Math.ceil(turn / 2) * 0.25;
+              arm.rotation.y = candidateYaw;
+              for (let step = 0; step <= 64; step++) {
+                arm.rotation.x = -3.2 + step * 0.05;
+                if (climbArmContact(arm, side, preparing, dx, dy, dz, 0.4) === 1) {
+                  yaw = candidateYaw; held = true; break;
+                }
+              }
+            }
+            if (held) { arm.rotation.y = yaw; continue; }
           }
         }
         // Once the torso is hanging from the wall, the palm must reach its
@@ -1719,12 +1778,12 @@
       const pound = state.pound, beat = state.beat;
       if (staticPose) state.pound = state.beat = 0;
       const itemPreview = managed && staticPose && laboratory && work === "carry" && labFlask === labPlaceholder;
-      const geometry = labPlaceholder && labPlaceholder.geometry, gripY = labGripY;
+      const itemGeometry = itemPreview ? labPlaceholder.geometry : null, itemGrip = labGripY;
       if (itemPreview) {
-        // Admit the vessel actually being fetched, with its own grip height.
-        // A flask placeholder below a beaker's grip falsely intersects the bench.
-        labPlaceholder.geometry = entry && entry.motion.labGeometry || geometry;
-        labGripY = labPreviewMotion.labGripY;
+        // Prove the vessel being fetched, rather than a tall default flask
+        // around a shorter beaker or die's grip.
+        if (entry?.motion.labItemGeometry) labPlaceholder.geometry = entry.motion.labItemGeometry;
+        if (Number.isFinite(entry?.motion.labGripY)) labGripY = entry.motion.labGripY;
         refreshGeometry();
         state.labPreviewItem = true; labPlaceholder.visible = true; labPlaceholder.quaternion = labItemRotation;
         labPlaceholder.scale.x = labPlaceholder.scale.y = labPlaceholder.scale.z = 1 / scale;
@@ -1732,7 +1791,7 @@
       const clear = climbPoseClear(dt, x, y, z, heading, labPreviewMotion, solidAt, clearAt, entry, speed, staticPose);
       if (itemPreview) {
         state.labPreviewItem = false; labPlaceholder.visible = false;
-        labPlaceholder.geometry = geometry; labGripY = gripY;
+        labPlaceholder.geometry = itemGeometry; labGripY = itemGrip;
         refreshGeometry(); measureBody();
       }
       state.pound = pound; state.beat = beat;
