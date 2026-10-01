@@ -208,7 +208,7 @@
       zoomTilt = false;
       zoomPitchVelocity = 0;
     };
-    let lockPending = false, aimLocked = false, softAimFocused = false, externalControl = false, externalCombat = null, unlockedAt = -Infinity, cursorUnlockedAt = -Infinity;
+    let lockPending = false, aimLocked = false, softAimFocused = false, externalControl = false, externalCombat = null, unlockedAt = -Infinity;
     let savedPitch = 0, savedDist = 0, savedNear = camera.near, sightClear = null, cursorClear = null, aimSurface = null;
     const weaponViewReady = (cave) => active && !!cave && !cave.health.stunned && !crew.sleeping && (closeWanted || !cave.camp.seat && !cave.bedTravel.mode);
     const shoulderBoomPitch = (pitch) => Math.max(pitch, Math.min(0, pitch + 0.22));
@@ -307,7 +307,6 @@
         crew.releaseSwing(cave, true);
       }
       if (carryCursor.active) {
-        cursorUnlockedAt = performance.now();
         carryCursor.stop();
       }
       resetPointer();
@@ -319,7 +318,7 @@
       externalControl = !!active;
       externalCombat = active ? combat : null;
       aimLocked = false;
-      unlockedAt = cursorUnlockedAt = -Infinity;
+      unlockedAt = -Infinity;
       if (!externalControl) return;
       camera.orthoMix = 0;
       setSoftAimFocus(false);
@@ -342,13 +341,13 @@
       if (!disposed && armed()) hud.hint("Click the island to hide the cursor and aim · 1 melee · 2 AK · scroll to change view");
     };
     const lockAim = () => {
-      if (externalControl || coarse || disposed || !(armed() || carryCursor.active) || lockPending || document.pointerLockElement === canvas || !canvas.requestPointerLock) return;
+      if (externalControl || coarse || disposed || !armed() || lockPending || document.pointerLockElement === canvas || !canvas.requestPointerLock) return;
       lockPending = true;
       const request = canvas.requestPointerLock();
       if (request && request.then) request.then(() => {
         lockPending = false;
         if (externalControl && !disposed) return;
-        if (disposed || !(armed() || carryCursor.active)) unlockAim();
+        if (disposed || !armed()) unlockAim();
         if (disposed) retireAimLock();
       }, aimLockFailed);
     };
@@ -406,7 +405,7 @@
         carryCursor.start(rect.left + overheadX * rect.width / renderer.size.width,
           rect.top + overheadY * rect.height / renderer.size.height, false);
       } else if (combat && !overhead && carryCursor.active) { carryCursor.stop(); resetPointer(); }
-      if (!combat && !carryCursor.active && (softAimFocused || document.pointerLockElement === canvas)) unlockAim();
+      if (!combat && (carryCursor.active || softAimFocused || document.pointerLockElement === canvas)) unlockAim();
       const cave = aimView() ? controlled : null;
       if (cave === aimCave) return;
       if (carryCursor.active) {
@@ -1172,12 +1171,7 @@
         if (!e.repeat) weaponAction(ctx.reloadAnywhere ? "weapon-reload" : "magazine-swap");
         return;
       }
-      if (!armed()) {
-        if (carryCursor.active && (e.key === "Escape" || e.key === "Tab") || e.key === "Escape" && performance.now() - cursorUnlockedAt < 100) {
-          e.preventDefault(); e.stopImmediatePropagation(); unlockAim();
-        }
-        return;
-      }
+      if (!armed()) return;
       if (e.key === "Escape" && (document.pointerLockElement === canvas || performance.now() - unlockedAt < 100) || e.key === "Tab") {
         e.preventDefault(); e.stopImmediatePropagation(); unlockAim();
       }
@@ -1218,11 +1212,10 @@
           crew.releaseSwing(cave, true);
         }
         if (carryCursor.active) {
-          cursorUnlockedAt = performance.now();
           carryCursor.stop();
           resetPointer();
         }
-      } else if (disposed || !(armed() || carryCursor.active)) document.exitPointerLock();
+      } else if (disposed || !armed()) document.exitPointerLock();
       if (disposed) retireAimLock();
     };
     window.addEventListener("mousemove", aimMouseMove);
@@ -1631,7 +1624,7 @@
         if (!coarse) {
           resetPointer();
           if (armed()) carryCursor.stop();
-          else carryCursor.start();
+          else unlockAim();
         }
       }
       syncAim();
@@ -1680,19 +1673,7 @@
       if (!cave.weapon.aiming) {
         crew.stopBurst(cave);
         crew.releaseSwing(cave, true);
-        if (coarse) unlockAim();
-        else {
-          setSoftAimFocus(false);
-          ads = false;
-          primaryButtonCave = null;
-          aimLeftAccepted = aimLeftFocused = false;
-          resetPointer();
-          const rect = canvas.getBoundingClientRect();
-          const x = Number.isFinite(assistedReticleX) ? assistedReticleX : overheadX;
-          const y = Number.isFinite(assistedReticleY) ? assistedReticleY : overheadY;
-          carryCursor.start(leavingOverhead ? rect.left + x * rect.width / renderer.size.width : null,
-            leavingOverhead ? rect.top + y * rect.height / renderer.size.height : null);
-        }
+        unlockAim();
       } else {
         // A freshly possessed character can carry its primary without an
         // equipped slot yet. Match scroll/right-click entry before posing it.

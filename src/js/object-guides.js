@@ -50,12 +50,6 @@
     const cameraBoxIncludes = (e) => cameraBoundsIncludes(e.x, e.y, e.z, e.hx, e.hy, e.hz);
     const geometryOf = (geometry) => {
       if (!geometry || excluded.has(geometry) || geometry.matrixGlyph || !geometry.faces || !geometry.faces.length) return null;
-      // A cartoon character part is outlined by its blocky voxel shell (`models.toonLoft`, the cartoon heads), as it was.
-      if (geometry.toonShell) {
-        const shell = geometryOf(geometry.toonShell);
-        if (shell) geometries.set(geometry, shell);
-        return shell;
-      }
       let cached = geometries.get(geometry);
       if (cached) return cached;
       const baked = bakes.get(geometry.verts);
@@ -1154,7 +1148,7 @@
     let cameraPropEntry = null, cameraPropSource = null, cameraPropFace = -1, cameraPropStamp = -1, cameraPropAll = false, cameraPropCount = 0;
     let cameraPropClip = -Infinity, cameraPropMin = -Infinity, cameraPropMax = Infinity;
     const cameraPropFaceBlocked = (e, faceIndex, dx, dy, dz, hx, hy, hz, ex, ey, ez, allProps) => {
-      const g = e.node.geometry.toonShell || e.node.geometry;
+      const g = e.node.geometry;
       const cached = cameraPropEntry === e && cameraPropSource === g && cameraPropFace === faceIndex && cameraPropStamp === collectStamp && cameraPropAll === allProps
         && cameraPropClip === e.clipMinY && cameraPropMin === e.worldMinY && cameraPropMax === e.worldMaxY;
       let nx = 0, ny = 0, nz = 0, front, wx, wy, wz, retreat, v, m, face;
@@ -1297,7 +1291,7 @@
         const entry = group[n];
         if (!entry.shown) continue;
         present = true;
-        const vertices = (entry.node.geometry.toonShell || entry.node.geometry).verts, samples = entry.geometry.samples, w = entry.node.world, m = cameraView;
+        const vertices = entry.node.geometry.verts, samples = entry.geometry.samples, w = entry.node.world, m = cameraView;
         // The frustum is convex, so its six planes need only the actual mesh vertices; a clipped part means the whole
         // character is not visible.
         for (let i = 0; i < vertices.length; i += 3) {

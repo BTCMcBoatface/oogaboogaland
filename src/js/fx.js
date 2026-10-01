@@ -143,8 +143,11 @@
       const number = damageNumbers[damageCursor];
       damageCursor = (damageCursor + 1) % damageNumbers.length;
       if (!number.life) damageCount++;
-      number.x = x; number.y = y; number.z = z; number.life = DAMAGE_LIFE;
-      number.text = String(Math.round(amount * 1000) / 1000);
+      number.x = x + (Math.random() - 0.5) * 0.2;
+      number.y = y + (Math.random() - 0.5) * 0.08;
+      number.z = z + (Math.random() - 0.5) * 0.2;
+      number.life = DAMAGE_LIFE;
+      number.text = String(Math.round(amount * 2) / 2);
     };
     let ticker = null;
     const MAX_BUBBLES = 10;

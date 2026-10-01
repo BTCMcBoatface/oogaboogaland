@@ -211,7 +211,7 @@
     look: {
       nunchaku: true, recipe: true, footRockets: true,
       bald: true, hairless: true, cleanShaven: true, noBrow: true, noPupils: true,
-      face: "none", hatY: 12, height: 1.12, headStretch: 1.12, headWiden: 1.08,
+      face: "none", hatY: 12, height: 1.12,
       skin: "#c03429", hair: "#191b1e", fur: "#6e1811"
     },
     voice: {
@@ -229,7 +229,7 @@
         k.loin = [C.loin, C.loinSpot];
         k.loinFlaps(torso);
         k.parts.torso.geometry = k.vg(torso, { x: -4.5 * u, y: 0, z: -3 * u }, glow);
-        const arm = k.vg(armVox(C), { x: -1.5 * u, y: -11 * u, z: -1.5 * u }, glow, k.armFit, k.armReach);
+        const arm = k.vg(armVox(C), { x: -1.5 * u, y: -11 * u, z: -1.5 * u }, glow);
         k.parts.armL.geometry = k.parts.armR.geometry = arm;
         const fingers = k.vg(fingerVox(C), { x: -1.5 * u, y: -u, z: -1.5 * u });
         k.parts.fingersL.geometry = k.parts.fingersR.geometry = fingers;

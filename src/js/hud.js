@@ -44,7 +44,7 @@
             .filter((value) => typeof value === "string" && value.length <= 256
               && (kind !== "types" || ["commit", "pr", "review", "merge", "issue", "comment"].includes(value))))] : null;
         }
-        windows.push({ x: entry.x, y: entry.y, width: entry.width, paused: entry.paused, screen: { name: screen.name, params }, filters });
+        windows.push({ x: entry.x, y: entry.y, width: entry.width, paused: entry.paused, screen: { name: screen.name, params }, filters, rollup: entry.rollup === true });
       }
       return { windows, lastUsed: Number.isInteger(state.lastUsed) ? state.lastUsed : -1,
         lastWidth: Number.isFinite(state.lastWidth) && state.lastWidth > 0 ? state.lastWidth : 440 };
@@ -441,7 +441,7 @@
       const showHealth = selected;
       if (el.modeHealth.hidden === showHealth) el.modeHealth.hidden = !showHealth;
       const sourceHealth = gorilla ? gorillaEntry.health : cave && cave.health;
-      const healthMax = gorilla ? gorillaEntry.health.max : 25;
+      const healthMax = sourceHealth ? sourceHealth.max : BL.crew.HEALTH_MAX;
       const health = sourceHealth ? Math.max(0, Math.min(healthMax, sourceHealth.value)) : healthMax;
       if (health !== modeHealth || healthMax !== modeHealthMax) {
         modeHealth = health;
@@ -714,7 +714,7 @@
       for (let i = 0; i < floatingBoards.length; i++) floatingBoards[i].setLayer(20 + i);
     };
     let boardWindowId = 0;
-    let lastBoard = null, lastBoardWidth = 440, boardSaveTimer = 0, boardSavingEnabled = false, boardSavingSuspended = false;
+    let lastBoard = null, lastBoardWidth = 550, boardSaveTimer = 0, boardSavingEnabled = false, boardSavingSuspended = false;
     const saveBoardState = () => {
       window.clearTimeout(boardSaveTimer);
       boardSaveTimer = 0;
@@ -735,10 +735,11 @@
         boardTitle: "board-title", boardScreen: "board-screen", boardCaption: "board-caption", boardNote: "board-note",
         boardDots: "board-dots", boardPrev: "board-prev", boardNext: "board-next", boardHelp: "board-help",
         boardHead: "board-head", boardPause: "board-pause", boardResize: "board-resize",
-        boardFilter: "board-filter", boardFilterMenu: "board-filter-menu", boardFilterList: "board-filter-list",
+        boardFilter: "board-filter", boardFilterMenu: "board-filter-menu", boardFilterList: "board-filter-list", boardRollup: "board-rollup",
         boardFilterRepos: "board-filter-repos", boardFilterUsers: "board-filter-users", boardFilterTypes: "board-filter-types"
       };
       for (const key in ids) el[key] = node.querySelector(`[id="${ids[key]}"]`);
+      const boardNav = node.querySelector(".board-nav");
       if (floatingId) {
         node.id += `-${floatingId}`;
         for (const child of node.querySelectorAll("[id]")) child.id += `-${floatingId}`;
@@ -798,13 +799,21 @@
           tab.setAttribute("aria-selected", String(active)); tab.tabIndex = active ? 0 : -1;
         }
       };
+      const positionFilters = () => {
+        const screen = el.boardScreen, play = el.boardPause, menu = el.boardFilterMenu;
+        // Match the screen's edges and stop at the play button's bottom.
+        menu.style.left = `${screen.offsetLeft}px`;
+        menu.style.top = `${screen.offsetTop}px`;
+        menu.style.width = `${screen.offsetWidth}px`;
+        menu.style.height = `${play.offsetTop + play.offsetHeight - screen.offsetTop}px`;
+      };
       const showFilters = (open) => {
         el.boardFilterMenu.hidden = !open;
         el.boardFilter.setAttribute("aria-expanded", String(open));
-        if (open) paintFilters();
+        if (open) { paintFilters(); positionFilters(); }
       };
       // Geometry and pointer state belong to this window for this visit.
-      const boardRatio = 440 / 360;
+      const boardRatio = 550 / 368;
       const width = saved?.width ?? lastBoard?.width ?? lastBoardWidth;
       const boardWindow = { x: saved?.x ?? 0, y: saved?.y ?? 0, width, height: width / boardRatio, placed: !!saved };
       const interactBoard = () => {
@@ -833,7 +842,8 @@
         el.board.style.height = `${b.height}px`;
         el.board.style.left = `${b.x}px`;
         el.board.style.top = `${b.y}px`;
-        el.board.style.setProperty("--board-scale", String(b.width / 440));
+        el.board.style.setProperty("--board-scale", String(Math.min(b.width, 550) / 440));
+        if (!el.boardFilterMenu.hidden) positionFilters();
       };
       const resizeBoard = (width) => {
         const maxWidth = Math.min(window.innerWidth - boardWindow.x, (window.innerHeight - boardWindow.y) * boardRatio);
@@ -924,7 +934,8 @@
         el.boardNote.hidden = !!board.floating || !board.note;
         if (board.floating) {
           paintBoardPause();
-          el.boardFilter.dataset.active = String(board.filters.repos !== null || board.filters.users !== null || board.filters.types !== null);
+          el.boardRollup.checked = board.rollup;
+          el.boardFilter.dataset.active = String(board.rollup || board.filters.repos !== null || board.filters.users !== null || board.filters.types !== null);
           if (!el.boardFilterMenu.hidden && filterShown !== board.filterVersion) paintFilters();
         }
         if (boardDots !== board.count) {
@@ -943,6 +954,7 @@
           el.boardPrev.disabled = el.boardNext.disabled = board.count < 2;
         }
         for (const dot of el.boardDots.children) dot.setAttribute("aria-current", String(+dot.dataset.page === board.index));
+        if (!el.boardFilterMenu.hidden) positionFilters();
         if (floatingId) scheduleBoardSave();
       };
       const openBoard = (next) => {
@@ -953,6 +965,8 @@
         letterSign(el.boardTitle, board.title);
         el.board.classList.toggle("board-wide", !!board.wide);
         el.board.classList.toggle("board-floating", !!board.floating);
+        if (board.floating) el.boardHead.insertBefore(el.boardDots, el.boardHead.lastElementChild);
+        else boardNav.after(el.boardDots);
         el.boardCaption.hidden = !!board.floating;
         el.boardPause.hidden = el.boardResize.hidden = !board.floating;
         el.boardFilter.hidden = !board.floating;
@@ -1055,6 +1069,13 @@
         updateBoard();
         scheduleBoardSave();
       });
+      on(el.boardRollup, "change", () => {
+        if (!board?.floating) return;
+        interactBoard();
+        board.setRollup(el.boardRollup.checked);
+        updateBoard();
+        scheduleBoardSave();
+      });
       on(el.boardDots, "click", (e) => {
         const dot = e.target.closest(".board-dot");
         if (!dot || !board) return;
@@ -1083,7 +1104,7 @@
         open: openBoard, close: closeBoard, update: updateBoard,
         setLayer(layer) { el.board.style.zIndex = String(layer); },
         get width() { return boardWindow.width; },
-        snapshot() { return { x: boardWindow.x, y: boardWindow.y, width: boardWindow.width, screen: board.view, paused: board.paused, filters: board.filters }; },
+        snapshot() { return { x: boardWindow.x, y: boardWindow.y, width: boardWindow.width, screen: board.view, paused: board.paused, filters: board.filters, rollup: board.rollup }; },
         dispose() {
           closeBoard();
           for (const off of boardListeners) off();
@@ -1354,7 +1375,7 @@
       update: (place = true) => {
         if (!tipCave) return;
         const state = statusFor(tipCave);
-        const healthMax = tipCave.health && tipCave.health.max || 25;
+        const healthMax = tipCave.health && tipCave.health.max || BL.crew.HEALTH_MAX;
         const health = tipCave.health ? Math.max(0, Math.min(healthMax, tipCave.health.value)) : healthMax;
         const shownHealth = Math.ceil(health);
         const healthChanged = health !== tipHealth || healthMax !== tipHealthMax;

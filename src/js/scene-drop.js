@@ -876,7 +876,7 @@
       [[25, 260], [95, 330], [160, 240], [215, 300], [290, 280], [340, 360]].forEach(([deg, r], i) => {
         place(createNode({ geometry: BL.dressing.islet(i % 3), position: { x: Math.sin(deg * Math.PI / 180) * r, y: RENDER_OPTS.sea - 2, z: -Math.cos(deg * Math.PI / 180) * r }, rotation: { x: 0, y: deg * 0.7, z: 0 } }));
       });
-      life = { gulls: BL.dressing.flock({ count: 26, radius: [40, 160], height: [20, 200], seed: 11, scale: 2.4 }), boats: BL.dressing.fleet({ sea: RENDER_OPTS.sea, spots: [[140, 0.4, 9], [190, 2.2, 11], [230, 3.9, 10], [170, 5.1, 8], [260, 1.3, 12]] }) };
+      life = { gulls: BL.dressing.flock({ count: 26, radius: [40, 160], height: [20, 200], seed: 11, scale: 2.4 }), boats: BL.dressing.fleet({ sea: RENDER_OPTS.sea, spots: [[140, 0.4, 9], [160, 2.2, 11], [125, 3.9, 10], [150, 5.1, 8], [170, 1.3, 12]] }) };
       place(life.gulls.node);
       for (const node of life.boats.nodes) place(node);
       // Palms on the island below, on level ground clear of the paths, the same three swaying shapes as the hub.

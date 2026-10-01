@@ -1,12 +1,12 @@
 // The one set-dressing kit every scene draws from. `KIT` pieces are voxel functions on a 1/16 grid, each
-// writing through `box` and `put` into the three layers: general (`lanternPost`, `crate`, `coalCrate`,
+// writing through `box` and `put` into separate solid, hanging, decorative glow and lantern glow layers: general (`lanternPost`, `crate`, `coalCrate`,
 // `barrel`, `cart`, `banner`, `gauge`, `rubble`, `bracket`, `hanging`, `bulb`), lab (`die`,
 // `flaskBench`, `terminal`, `chalkboard`), the mirror (`monolith`, `runeStone`), lightning (`coil`,
 // `boards`), plus `bench`, `vine` and `banner(v)` carrying each cave's emblem from `hubModels.SIGN_ICONS`.
 //
 // `set()` places pieces by quarter turns (`put`), strings sagging cables with lamps (`cable`) and `build`s
-// everything placed into one `solid`, one `hang` and one emissive `glow` mesh plus the `lights` its lanterns
-// cast; lamps hung by `cable` bake into `swing` and `swingGlow`, which the wind rocks. Lantern glass (amber,
+// everything placed into one `solid`, one `hang`, decorative `glow` and lantern `lampGlow` mesh plus the `lights` its lanterns
+// cast; lamps hung by `cable` bake into swinging body and glow meshes. Lantern glass (amber,
 // teal, green, red) is the variant and sets the light's colour in `LIGHT_RGB`. `nodes(baked, opts)` makes a
 // baked set's nodes. A theme's `inside` list and `ceiling` lamp runs in scene-hub.js furnish the room behind
 // a mouth from the kit's pieces.
@@ -15,7 +15,7 @@
 // fixed field of glowing dust that wraps round the view (`update(elapsed, x, z)`), `flock(opts)` one
 // instanced batch of wheeling gulls and `fleet(opts)` log rafts on the sea, each with `update(elapsed)`.
 //
-// A dressed area costs three draws: bake it once and memoise it (the hub per island, the caves per page).
+// Bake each dressed area once and memoise it (the hub per island, the caves per page).
 // Only `solid` collides.
 (() => {
   "use strict";
@@ -24,12 +24,11 @@
   const { mulberry32, hexToRgb } = BL.math;
   const BANANA_ART = BL.hubModels.AMMO_BANANA;
   // Set dressing for every scene from one voxel kit. Pieces are authored once as integer voxel lists; a set places
-  // them by quarter turns on the kit's grid and bakes every placed voxel into one mesh per layer, so a dressed
-  // area of posts, crates, carts, cables and lanterns costs three draws however much stands in it, and faces
+  // them by quarter turns on the kit's grid and bakes every placed voxel into one mesh per layer, so faces
   // where two pieces touch are never emitted. Layers: `solid` (stands on the ground, collides), `hang` (cables,
-  // arms, cloth, frames: no collision) and `glow` (lantern glass, bolts, ore glints: emissive, no shadow).
+  // arms, cloth, frames: no collision), `glow` (bolts and ore glints) and `lampGlow` (lantern glass).
   const U = 1 / 16;
-  const SOLID = 0, HANG = 1, GLOW = 2;
+  const SOLID = 0, HANG = 1, GLOW = 2, LAMP_GLOW = 3;
   const PALETTE = [
     "#8a5a32", "#a8703e", "#5c3a1e", "#43291a", // 0 wood, 1 wood light, 2 wood dark, 3 plank gap
     "#4a4d52", "#2c2e33", "#6f737a", // 4 iron, 5 iron dark, 6 iron light
@@ -63,7 +62,7 @@
   const BOLT = ["...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..."];
   // A piece is three flat lists of x, y, z, colour per layer, built by its author through `put`.
   const author = (build) => {
-    const layers = [[], [], []];
+    const layers = [[], [], [], []];
     const put = (layer, x, y, z, c) => layers[layer].push(x, y, z, c);
     const box = (layer, x0, x1, y0, y1, z0, z1, color) => {
       for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) {
@@ -79,7 +78,7 @@
     box(HANG, cx - 1, cx, top + 1, top + 2, cz - 1, cz, 5);
     box(HANG, cx - 3, cx + 2, top, top, cz - 3, cz + 2, 5);
     for (const [x, z] of [[cx - 3, cz - 3], [cx + 2, cz - 3], [cx - 3, cz + 2], [cx + 2, cz + 2]]) box(HANG, x, x, top - 7, top - 1, z, z, 5);
-    box(GLOW, cx - 2, cx + 1, top - 7, top - 1, cz - 2, cz + 1, (x, y) => y === top - 4 && glass === 9 ? 10 : glass);
+    box(LAMP_GLOW, cx - 2, cx + 1, top - 7, top - 1, cz - 2, cz + 1, (x, y) => y === top - 4 && glass === 9 ? 10 : glass);
     box(HANG, cx - 3, cx + 2, top - 8, top - 8, cz - 3, cz + 2, 5);
     box(HANG, cx - 1, cx, top - 9, top - 9, cz - 1, cz, 4);
   };
@@ -318,7 +317,7 @@
   const pickOf = (piece) => {
     if (piece.pick) return piece.pick;
     let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
-    for (let layer = 0; layer < 3; layer++) {
+    for (let layer = 0; layer < 4; layer++) {
       const list = piece[layer];
       for (let i = 0; i < list.length; i += 4) {
         x0 = Math.min(x0, list[i]); x1 = Math.max(x1, list[i] + 1);
@@ -397,9 +396,9 @@
   const set = () => {
     // Mesh pieces placed so far: kind, then the cell origin and quarter turns.
     const meshes = [];
-    // Layers 3 and 4 hold what hangs from a cable (lantern bodies and their glass), baked apart so the wind
-    // can swing them without swinging the cable or the posts.
-    const layers = [new Map(), new Map(), new Map(), new Map(), new Map()], lights = [];
+    // Layers 3 and 4 hold what hangs from a cable (lantern bodies and other glow); 5 and 6 hold lantern glass.
+    // The hanging layers swing without moving the cable or the posts.
+    const layers = [new Map(), new Map(), new Map(), new Map(), new Map(), new Map(), new Map()], lights = [];
     // What was placed, for poking: kind, variant, then the pick sphere's centre x, y, z and radius in metres.
     const picks = [];
     const steps = [];
@@ -430,14 +429,14 @@
           (oz * U) + (q === 1 || q === 2 ? -z0 : z1)]);
       }
       if (mesh) meshes.push(kind, ox, oy, oz, q, variant);
-      for (let layer = 0; layer < 3; layer++) {
+      for (let layer = 0; layer < 4; layer++) {
         const list = piece[layer];
         for (let i = 0; i < list.length; i += 4) {
           const lx = list[i], lz = list[i + 2];
           if (mesh && (!mesh.keep || !mesh.keep(layer, lx, list[i + 1], lz))) continue;
           const rx = q === 0 ? lx : q === 1 ? lz : q === 2 ? -lx - 1 : -lz - 1;
           const rz = q === 0 ? lz : q === 1 ? -lx - 1 : q === 2 ? -lz - 1 : lx;
-          write(layer, ox + rx, oy + list[i + 1], oz + rz, list[i + 3]);
+          write(layer === LAMP_GLOW ? 5 : layer, ox + rx, oy + list[i + 1], oz + rz, list[i + 3]);
         }
       }
       light(kind, ox, oy, oz, q, variant);
@@ -468,8 +467,8 @@
         const x = ax + (bx - ax) * t, y = ay + (by - ay) * t - sag * 4 * t * (1 - t), z = az + (bz - az) * t;
         const piece = pieceOf(lamp, variant);
         const ox = Math.round(x / U), oy = Math.round(y / U), oz = Math.round(z / U);
-        for (let layer = 0; layer < 3; layer++) {
-          const list = piece[layer], into = layer === GLOW ? 4 : 3;
+        for (let layer = 0; layer < 4; layer++) {
+          const list = piece[layer], into = layer === LAMP_GLOW ? 6 : layer === GLOW ? 4 : 3;
           for (let i = 0; i < list.length; i += 4) write(into, ox + list[i], oy + list[i + 1], oz + list[i + 2], list[i + 3]);
         }
         light(lamp, ox, oy, oz, 0, variant);
@@ -484,13 +483,13 @@
       const emit = (pts, c) => {
         const b = geo.verts.length / 3;
         for (const [x, y, z] of pts) geo.verts.push(x * U, y * U, z * U);
-        geo.faces.push({ i: [b, b + 1, b + 2, b + 3], color: RGB[c], emissive: layer === GLOW || layer === 4 ? EMISSIVE[c] || 0 : 0 });
+        geo.faces.push({ i: [b, b + 1, b + 2, b + 3], color: RGB[c], emissive: layer === GLOW || layer === 4 || layer >= 5 ? EMISSIVE[c] || 0 : 0 });
       };
       voxelFaces((fn) => {
         for (const [k, c] of map) fn(Math.floor(k / 16777216) - 2048, Math.floor(k / 4096) % 4096 - 2048, k % 4096 - 2048, c);
       }, has, emit);
-      if (layer >= 3) geo.swing = 1;
-      return layer === GLOW || layer === 4 ? noShadow(geo) : geo;
+      if (layer === 3 || layer === 4 || layer === 6) geo.swing = 1;
+      return layer === GLOW || layer === 4 || layer >= 5 ? noShadow(geo) : geo;
     };
     const build = () => {
       let solid = bake(SOLID);
@@ -516,7 +515,7 @@
           }
         }
       }
-      const out = { solid, hang: bake(HANG), glow: bake(GLOW), swing: bake(3), swingGlow: bake(4), lights: Float32Array.from(lights), picks: picks.splice(0) };
+      const out = { solid, hang: bake(HANG), glow: bake(GLOW), swing: bake(3), swingGlow: bake(4), lampGlow: bake(5), swingLampGlow: bake(6), lights: Float32Array.from(lights), picks: picks.splice(0) };
       for (const layer of layers) layer.clear();
       lights.length = steps.length = 0;
       return out;
@@ -532,7 +531,7 @@
   KIT.bulb = (v) => author((put, box) => {
     box(HANG, 0, 0, -1, -1, 0, 0, 5);
     box(HANG, -1, 1, -2, -2, -1, 1, 4);
-    box(GLOW, -1, 1, -5, -3, -1, 1, GLASS[v]);
+    box(LAMP_GLOW, -1, 1, -5, -3, -1, 1, GLASS[v]);
   });
   // Dust in lamplight: a fixed field of glowing motes that drifts and wraps round a moving centre (the view's
   // target), so there is always air to see near the camera and no mote is ever created or dropped. One draw.
@@ -659,13 +658,14 @@
     islets[v] = geo;
     return geo;
   };
-  // The nodes for a baked set: solid (for the caller's collision), hang, glow and the two swinging layers. All
+  // The nodes for a baked set: solid (for the caller's collision), hang, decorative glow, lantern glow and swinging layers. All
   // stay out of the sight systems: registering the facades' solids alone cost the hub 140 ms of boot, and dressing
   // needs no outline cue. `glow` sets the lit layers' glow.
   const nodes = (baked, { glow = 0, living = false } = {}) => {
     const out = [];
     const node = (geometry, lit) => geometry && out.push(BL.scene.createNode({ geometry, sightHidden: true, glow: lit ? glow : 0, matrixEmissiveLiving: lit && living }));
     node(baked.solid, false); node(baked.hang, false); node(baked.glow, true); node(baked.swing, false); node(baked.swingGlow, true);
+    node(baked.lampGlow, true); node(baked.swingLampGlow, true);
     return out;
   };
   // A gull: a wide shallow V of wings over a white body; flapping is the instance's own vertical scale.

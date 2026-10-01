@@ -1606,7 +1606,7 @@ const { contributorActivityProbe } = (() => {
     const HOUR = 3600000, { roster, stateFor, ageLabel, applyActivity, applySnapshot, hasRecentActivity, subscribe } = contributors;
     const saved = roster.map((entry) => ({ at: entry.lastCommitAt, activity: [...entry.activity] }));
     const state = (age) => stateFor({ lastCommitAt: at - age }, at);
-    const boundaries = state(0) === "working" && state(HOUR) === "working" && state(2 * HOUR - 1) === "working" && state(2 * HOUR) === "chilling" &&
+    const boundaries = state(0) === "working" && state(HOUR - 1) === "working" && state(HOUR) === "chilling" &&
       state(24 * HOUR - 1) === "chilling" && state(24 * HOUR) === "sleeping" && state(8 * 24 * HOUR) === "sleeping";
     const invalidStates = [NaN, Infinity, 0, -1, at + 1].every((lastCommitAt) => stateFor({ lastCommitAt }, at) === "sleeping");
     const labels = ageLabel({ lastCommitAt: at }, at) === "0m ago" &&
@@ -1630,9 +1630,9 @@ const { contributorActivityProbe } = (() => {
         { name: "unknown-contributor", lastCommitAt: at }, { lastCommitAt: at }
       ], at) === 0 && applyActivity(null, at) === 0 && applyActivity([], NaN) === 0 &&
         first.lastCommitAt === firstAt && notifications === 1;
-      const expires = stateFor(first, firstAt + 2 * HOUR) === "chilling" && stateFor(first, firstAt + 24 * HOUR) === "sleeping"
-        && hasRecentActivity(first, "oogaboogax/entropylab", firstAt + 2 * HOUR - 1)
-        && !hasRecentActivity(first, "oogaboogax/entropylab", firstAt + 2 * HOUR);
+      const expires = stateFor(first, firstAt + HOUR) === "chilling" && stateFor(first, firstAt + 24 * HOUR) === "sleeping"
+        && hasRecentActivity(first, "oogaboogax/entropylab", firstAt + HOUR - 1)
+        && !hasRecentActivity(first, "oogaboogax/entropylab", firstAt + HOUR);
       const snapshot = (repo, login, age) => ({ meta: { repo, schema_version: 1, generated_at: new Date(at).toISOString() },
         contributors: [{ login, last_seen_at: new Date(at - age).toISOString() }] });
       const alias = roster.find((entry) => entry.name === "bc1gui");
@@ -3595,9 +3595,9 @@ const hubMatrix = { name: "hub matrix", why: "rule: the room lever raises the mi
     && carved.regions.every(region => Math.abs(region.width - region.expectedWidth) < 1e-7 && Math.abs(region.depth - region.expectedDepth) < 1e-7)
     && carved.sealed.length === 2 && carved.sealed.map(entry => entry.id).sort().join() === "c10,c9" && carved.sealed.every(entry => entry.visible && Number.isFinite(entry.stop)), JSON.stringify(carved));
 } };
-const hubMirror = { name: "hub mirror", why: "rule: 116 damage shatters the mirror, unlocks its gate and ends the glyph hint; a short scene trip preserves the broken mirror before its repair delay", run: async (b) => {
-  const r = await b.evaluate(`(() => { const B = window.__ooga, M = B.mirrorCave, g = M.gate, w = M.node.world, G = B.matrixGate, m = M.mouth; B.pilot.navigate({ position: { x: G.x + Math.sin(m.ry) * 0.8, y: m.floorY, z: G.z + Math.cos(m.ry) * 0.8 }, yaw: m.ry, pitch: 0.3, dist: 3 }); B.advance(0.5, 1 / 60); const before = { broken: M.damage.broken, locked: g.locked, hint: M.guides.state.doorway }; M.damage.hit(115.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const whole = { broken: M.damage.broken, locked: g.locked }; M.damage.hit(0.5, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const u0 = M.guides.state.doorwayUpdates; B.advance(1, 1 / 60); const after = { broken: M.damage.broken, shattered: M.shattered, locked: g.locked, reveal: M.node.mirrorReveal, hint: M.guides.state.doorway, frozen: M.guides.state.doorwayUpdates === u0 }; B.go("pool"); let n = 0; while ((B.transitioning || B.scene !== "pool") && n++ < 600) B.advance(1 / 30, 1 / 30); B.go("hub"); n = 0; while ((B.transitioning || B.scene !== "hub") && n++ < 600) B.advance(1 / 30, 1 / 30); B.advance(0.5, 1 / 60); const N = B.mirrorCave; return { before, whole, after, back: { broken: N.damage.broken, shattered: N.shattered, locked: N.gate.locked, reveal: N.node.mirrorReveal, hint: N.guides.state.doorway } }; })()`);
-  record("hub mirror: 115.5 damage leaves it whole and locked, 116 shatters it open with its gate unlocked and the glyph hint stopped, and it is still broken after a trip away", !r.before.broken && r.before.locked && r.before.hint && !r.whole.broken && r.whole.locked && r.after.broken && r.after.shattered && !r.after.locked && r.after.reveal === 1 && !r.after.hint && r.after.frozen && r.back.broken && r.back.shattered && !r.back.locked && r.back.reveal === 1 && !r.back.hint, JSON.stringify(r));
+const hubMirror = { name: "hub mirror", why: "rule: 500 damage shatters the mirror, unlocks its gate and ends the glyph hint; a short scene trip preserves the broken mirror before its repair delay", run: async (b) => {
+  const r = await b.evaluate(`(() => { const B = window.__ooga, M = B.mirrorCave, g = M.gate, w = M.node.world, G = B.matrixGate, m = M.mouth; B.pilot.navigate({ position: { x: G.x + Math.sin(m.ry) * 0.8, y: m.floorY, z: G.z + Math.cos(m.ry) * 0.8 }, yaw: m.ry, pitch: 0.3, dist: 3 }); B.advance(0.5, 1 / 60); const before = { broken: M.damage.broken, locked: g.locked, hint: M.guides.state.doorway }; M.damage.hit(499, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const whole = { broken: M.damage.broken, locked: g.locked }; M.damage.hit(1, w[12], w[13], w[14]); B.advance(1 / 60, 1 / 60); const u0 = M.guides.state.doorwayUpdates; B.advance(1, 1 / 60); const after = { broken: M.damage.broken, shattered: M.shattered, locked: g.locked, reveal: M.node.mirrorReveal, hint: M.guides.state.doorway, frozen: M.guides.state.doorwayUpdates === u0 }; B.go("pool"); let n = 0; while ((B.transitioning || B.scene !== "pool") && n++ < 600) B.advance(1 / 30, 1 / 30); B.go("hub"); n = 0; while ((B.transitioning || B.scene !== "hub") && n++ < 600) B.advance(1 / 30, 1 / 30); B.advance(0.5, 1 / 60); const N = B.mirrorCave; return { before, whole, after, back: { broken: N.damage.broken, shattered: N.shattered, locked: N.gate.locked, reveal: N.node.mirrorReveal, hint: N.guides.state.doorway } }; })()`);
+  record("hub mirror: 499 damage leaves it whole and locked, 500 shatters it open with its gate unlocked and the glyph hint stopped, and it is still broken after a trip away", !r.before.broken && r.before.locked && r.before.hint && !r.whole.broken && r.whole.locked && r.after.broken && r.after.shattered && !r.after.locked && r.after.reveal === 1 && !r.after.hint && r.after.frozen && r.back.broken && r.back.shattered && !r.back.locked && r.back.reveal === 1 && !r.back.hint, JSON.stringify(r));
 } };
 // The Canvas 2D fallback, for a device without WebGL2: every scene, entered in one page, paints real
 // colour (sampled small, after the arrival fade) and keeps the leave contract; the console stays clean.
@@ -3642,7 +3642,7 @@ const hubJumbotron = { name: "hub jumbotron", why: "rule: the rotation runs rece
 } };
 // The healthiest of its kind, so a prop an earlier step shot at is never the one measured.
 const nextTo = (prop, gap, yaw = "-Math.PI / 2", pitch = 0.3) => `(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const r = B.headquarters.breakables.list.filter((r) => r.owner.prop === "${prop}" && r.owner.active && !r.broken).sort((a, b) => b.health - a.health)[0]; window.__target = r; const t = r.owner.node.position; B.pilot.navigate({ position: { x: t.x - ${gap}, y: a.root.position.y, z: t.z }, yaw: ${yaw}, pitch: ${pitch}, dist: 4 }); B.advance(0.3, 1 / 60); return r.health; })()`;
-const hubMelee = { name: "hub melee", why: "rule: a swing does one damage, so a box breaks in one, a barrel in three and a rock in five, and the prop comes back", run: async (b) => {
+const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage, so a box breaks in one, a barrel in two and a rock in four, and the prop comes back", run: async (b) => {
   const swings = {};
   await tapKey(b, "1");
   for (const [prop, gap] of [["crate", 0.9], ["barrel", 0.9], ["rock", 1.175]]) {
@@ -3656,7 +3656,7 @@ const hubMelee = { name: "hub melee", why: "rule: a swing does one damage, so a 
     swings[prop] = { health, n };
   }
   const back = await b.evaluate(`(() => { const r = window.__target, B = window.__ooga; for (let t = 0; t < 65; t++) { B.advance(1, 1 / 30); if (!r.broken) return { t: t + 1, health: r.health, active: r.owner.active }; } return null; })()`);
-  record("hub melee: one swing breaks a box, three a barrel and five a rock, and a broken rock is back whole within a minute", swings.crate.n === 1 && swings.barrel.n === 3 && swings.rock.n === 5 && !!back && back.t >= 30 && back.t <= 61 && back.health === swings.rock.health && back.active, JSON.stringify({ swings, back }));
+  record("hub melee: one swing breaks a box, two a barrel and four a rock, and a broken rock is back whole within a minute", swings.crate.n === 1 && swings.barrel.n === 2 && swings.rock.n === 4 && !!back && back.t >= 30 && back.t <= 61 && back.health === swings.rock.health && back.active, JSON.stringify({ swings, back }));
   await b.evaluate(nextTo("rock", 1.175));
   const recharge = await b.evaluate(`(() => {
     const B = window.__ooga, crew = B.crew, a = crew.player, r = window.__target;
@@ -3667,6 +3667,7 @@ const hubMelee = { name: "hub melee", why: "rule: a swing does one damage, so a 
       const ready = crew.meleePower(a);
       for (const wait of [0, 0.05, 0.1, 0.15, 0.2]) {
         if (wait) B.advance(wait, 0.01);
+        r.health = r.maxHealth;
         const before = r.health;
         crew.swingWeapon(a, true, true);
         crew.releaseSwing(a, false, true, true);
@@ -3675,22 +3676,32 @@ const hubMelee = { name: "hub melee", why: "rule: a swing does one damage, so a 
       B.advance(0.2, 0.01);
       const recovered = crew.meleePower(a);
       crew.selectWeapon(a, 2); crew.selectWeapon(a, 1);
+      r.health = r.maxHealth;
       const before = r.health;
       crew.swingWeapon(a);
       const last = before - r.health;
       crew.selectWeapon(a, 2); crew.selectWeapon(a, 1);
       const switched = crew.meleePower(a);
+      r.health = r.maxHealth;
       const health = r.health;
       crew.swingWeapon(a);
       B.advance(0.01, 0.01);
-      return { ready, recovered, rows, last, switched, finalDamage: health - r.health, labels };
+      const finalDamage = health - r.health;
+      B.advance(0.2, 0.01);
+      r.health = r.maxHealth;
+      crew.swingWeapon(a, true, true);
+      a.weapon.meleeCharge = 1;
+      const chargedBefore = r.health;
+      crew.releaseSwing(a, false, true);
+      return { ready, recovered, rows, last, switched, finalDamage, chargedDamage: chargedBefore - r.health, labels };
     } finally { overlay.fillText = fillText; }
   })()`);
-  const powers = [1, 0.25, 0.25, 0.625, 1];
+  const powers = [5, 1.25, 1.25, 3.125, 5];
   record("hub melee: focused quick taps start at normal power, rapid contacts recover linearly after 0.1s and every hit restarts recovery", recharge.ready === 1 && Math.abs(recharge.recovered - 1) < 1e-8
     && recharge.rows.every((row, i) => Math.abs(row.damage - powers[i]) < 1e-8 && row.after === 0.25)
-    && Math.abs(recharge.last - 1) < 1e-8 && recharge.switched === 0.25 && Math.abs(recharge.finalDamage - 0.125) < 1e-8, JSON.stringify(recharge));
-  record("hub melee: red damage numbers report fractional HP removed, including the final hit capped by remaining health", ["1", "0.25", "0.625", "0.125"].every(text => recharge.labels.includes(text)), JSON.stringify(recharge.labels));
+    && Math.abs(recharge.last - 5) < 1e-8 && recharge.switched === 0.25 && Math.abs(recharge.finalDamage - 1.25) < 1e-8
+    && Math.abs(recharge.chargedDamage - 10) < 1e-8, JSON.stringify(recharge));
+  record("hub melee: red damage numbers round full hit power to half points", ["5", "1.5", "3", "10"].every(text => recharge.labels.includes(text)), JSON.stringify(recharge.labels));
 } };
 const AK_STATE = `(() => { const w = window.__ooga.crew.player.weapon; return { ammo: w.ammo, spares: w.spareAmmo.slice(), shots: w.shotsFired }; })()`;
 const hubAk = { name: "hub ak", why: "regression: R did nothing unless the player was aiming, so an AK emptied with V could not swap in its spare", run: async (b) => {
@@ -7978,7 +7989,7 @@ const unitChecks = async () => {
     S.addChild(root, panel); const original = panel.geometry, damage = BL.mirrorDamage.create(panel), nodes = [...root.children];
     const limit = BL.mirrorDamage.DEBRIS_LIMIT;
     const ignored = !damage.hit(0, 0, 0, 0) && !damage.hit(-1, 0, 0, 0) && damage.damage === 0 && panel.geometry === original;
-    damage.hit(0.5, 0.2, 0.1, 0); const firstSeams = damage.seams, firstHoles = damage.holes;
+    damage.hit(2, 0.2, 0.1, 0); const firstSeams = damage.seams, firstHoles = damage.holes;
     const edges = nodes[1].geometry;
     let firstCrackArea = 0;
     for (const face of edges.faces) {
@@ -7990,7 +8001,7 @@ const unitChecks = async () => {
       firstCrackArea += Math.abs(area) * 0.5;
     }
     const rows = [];
-    for (const power of [BL.mirrorDamage.PANEL_DAMAGE - 0.5, 0.5, 1.5, (BL.mirrorDamage.PANEL_LIMIT - 1) * BL.mirrorDamage.PANEL_HEALTH, BL.mirrorDamage.MAX_DAMAGE]) {
+    for (const power of [BL.mirrorDamage.PANEL_DAMAGE - 2, 2, 6, (BL.mirrorDamage.PANEL_LIMIT - 1) * BL.mirrorDamage.PANEL_HEALTH, BL.mirrorDamage.MAX_DAMAGE]) {
       damage.hit(power, 0.2, 0.1, 0);
       const live = new Set(); damage.liveGeometry(live);
       rows.push({ stage: damage.stage, seams: damage.seams, active: damage.active, holes: damage.holes, minimumHealth: Math.min(...damage.panelHealth), live: live.size, nodes: root.children.length });
@@ -8016,7 +8027,7 @@ const unitChecks = async () => {
     }
     const settled = damage.active === 0 && shards.every(node => !node.visible);
     damage.dispose();
-    record("mirror damage: twenty crack damage precedes two-health panels, with bounded reflective debris, flat landings above support, fade and complete disposal", ignored && firstSeams >= 40 && firstHoles === 0 && firstCrackArea > 0.03 && rows[0].active === 0 && rows[0].live === 3 && rows[0].seams > firstSeams && rows[1].active === 0 && rows[1].minimumHealth === 1.5 && rows[2].holes === 1 && rows[2].active === 1 && rows.every(row => row.active <= limit && row.live <= limit + 3 && row.nodes === limit + 2) && shards.length === limit && rows[3].active === limit && reflective && falling && landed && faded && !belowGround && settled && damage.damage === BL.mirrorDamage.MAX_DAMAGE && root.children.length === 1 && root.children[0] === panel && panel.geometry === original && panel.mirrorDamage === null && panel.mirrorCaptureGeometry === null && nodes.slice(1).every(node => node.parent === null), JSON.stringify({ ignored, limit, firstSeams, firstHoles, firstCrackArea, rows, reflective, falling, landed, faded, belowGround, settled, children: root.children.length }));
+    record("mirror damage: one hundred crack damage precedes eight-health panels, with bounded reflective debris, flat landings above support, fade and complete disposal", ignored && firstSeams >= 40 && firstHoles === 0 && firstCrackArea > 0.03 && rows[0].active === 0 && rows[0].live === 3 && rows[0].seams > firstSeams && rows[1].active === 0 && rows[1].minimumHealth === 6 && rows[2].holes === 1 && rows[2].active === 1 && rows.every(row => row.active <= limit && row.live <= limit + 3 && row.nodes === limit + 2) && shards.length === limit && rows[3].active === limit && reflective && falling && landed && faded && !belowGround && settled && damage.damage === BL.mirrorDamage.MAX_DAMAGE && root.children.length === 1 && root.children[0] === panel && panel.geometry === original && panel.mirrorDamage === null && panel.mirrorCaptureGeometry === null && nodes.slice(1).every(node => node.parent === null), JSON.stringify({ ignored, limit, firstSeams, firstHoles, firstCrackArea, rows, reflective, falling, landed, faded, belowGround, settled, children: root.children.length }));
   }
   {
     const S = BL.scene, make = () => {
@@ -8042,14 +8053,14 @@ const unitChecks = async () => {
       scattered.push({ x: aim.x, y: aim.y, present: health.damage.contains(aim.x, aim.y), stable: aim.x === repeated.x && aim.y === repeated.y && aim.z === repeated.z });
     }
     health.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0);
-    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === 20 && !health.damage.holes && healthArray.every(value => value === 2);
-    health.damage.hit(0.5, 0.2, 0.1, 0);
+    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === 80 && !health.damage.holes && healthArray.every(value => value === 8);
+    health.damage.hit(2, 0.2, 0.1, 0);
     const halfHealth = Array.from(healthArray), halfIntact = !health.damage.holes && !health.damage.active && crackedVertices.every((value, i) => value === health.panel.geometry.verts[i]);
-    health.damage.hit(1.5, 0.2, 0.1, 0);
+    health.damage.hit(6, 0.2, 0.1, 0);
     const roundBreak = health.damage.holes === 1 && health.damage.active === 1 && healthArray.filter(value => value === 0).length === 1;
     health.damage.dispose();
-    const charged = make(); charged.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0); charged.damage.hit(2.5, 0.2, 0.1, 0);
-    const chargedHealth = Array.from(charged.damage.panelHealth), brokenIndex = chargedHealth.indexOf(0), woundedIndex = chargedHealth.indexOf(1.5);
+    const charged = make(); charged.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0); charged.damage.hit(10, 0.2, 0.1, 0);
+    const chargedHealth = Array.from(charged.damage.panelHealth), brokenIndex = chargedHealth.indexOf(0), woundedIndex = chargedHealth.indexOf(6);
     const chip = charged.root.children.find(node => node.visible && node.mirrorShard === charged.panel), chipGeometry = chip.geometry, cx = chip.position.x, cy = chip.position.y;
     const panelAim = {}, aimedAtSurvivor = charged.damage.aimCenter(panelAim, cx, cy, 0, 7)
       && charged.damage.contains(panelAim.x, panelAim.y) && Math.hypot(panelAim.x - cx, panelAim.y - cy) > 1e-5;
@@ -8067,24 +8078,24 @@ const unitChecks = async () => {
       return total;
     };
     const fullArea = paneArea(chipGeometry, true);
-    charged.damage.update(BL.mirrorDamage.HEAL_DELAY + 0.25 / BL.mirrorDamage.PANEL_HEAL_RATE);
+    charged.damage.update(BL.mirrorDamage.HEAL_DELAY + 1 / BL.mirrorDamage.PANEL_HEAL_RATE);
     const recovered = charged.damage.panelHealth[brokenIndex], woundedRecovered = charged.damage.panelHealth[woundedIndex], areaFraction = paneArea(charged.panel.geometry) / fullArea;
     const regrownVertices = Array.from(charged.panel.geometry.verts);
-    charged.damage.hit(0.1, cx, cy, 0);
+    charged.damage.hit(0.4, cx, cy, 0);
     const partialHealth = charged.damage.panelHealth[brokenIndex], extentRetained = regrownVertices.length === charged.panel.geometry.verts.length && regrownVertices.every((value, i) => value === charged.panel.geometry.verts[i]);
     charged.damage.hit(partialHealth, cx, cy, 0);
     const fallen = charged.root.children.filter(node => node.visible && node.mirrorShard === charged.panel), fallenArea = fallen.reduce((sum, node) => sum + paneArea(node.geometry, true), 0) / fullArea;
     const proportionalBreak = charged.damage.panelHealth[brokenIndex] === 0 && charged.damage.panelHealth[woundedIndex] === woundedRecovered && !charged.damage.contains(cx, cy);
     charged.damage.dispose();
     record("mirror damage: intact glass gets varied stable shot targets and auto aim through a hole resolves to surviving glass", scattered.every(hit => hit.present && hit.stable) && new Set(scattered.map(hit => `${hit.x},${hit.y}`)).size === scattered.length && Math.max(...scattered.map(hit => hit.x)) - Math.min(...scattered.map(hit => hit.x)) > 1 && Math.max(...scattered.map(hit => hit.y)) - Math.min(...scattered.map(hit => hit.y)) > 1 && aimedAtSurvivor, JSON.stringify({ scattered, aimedAtSurvivor, panelAim, hole: [cx, cy] }));
-    record("mirror damage: each panel has two health, charged overflow reaches the next panel, and regrown area restores matching fractional health", BL.mirrorDamage.PANEL_DAMAGE === 20 && BL.mirrorDamage.PANEL_HEALTH === 2 && BL.mirrorDamage.PANEL_LIMIT === 48 && BL.mirrorDamage.MAX_DAMAGE === 116 && healthArray === health.damage.panelHealth && allCracked && halfIntact && halfHealth.filter(value => value === 1.5).length === 1 && halfHealth.every(value => value === 2 || value === 1.5) && roundBreak && chargedHealth.filter(value => value === 0).length === 1 && chargedHealth.filter(value => value === 1.5).length === 1 && Math.abs(recovered - 0.25) < 1e-9 && Math.abs(woundedRecovered - 1.75) < 1e-9 && Math.abs(areaFraction - recovered / BL.mirrorDamage.PANEL_HEALTH) < 1e-6 && Math.abs(partialHealth - 0.15) < 1e-9 && extentRetained && proportionalBreak && fallen.length === 1 && Math.abs(fallenArea - areaFraction) < 1e-6, JSON.stringify({ allCracked, halfHealth, halfIntact, roundBreak, chargedHealth, recovered, woundedRecovered, areaFraction, partialHealth, extentRetained, proportionalBreak, fallen: fallen.length, fallenArea }));
+    record("mirror damage: each panel has eight health, charged overflow reaches the next panel, and regrown area restores matching fractional health", BL.mirrorDamage.PANEL_DAMAGE === 100 && BL.mirrorDamage.PANEL_HEALTH === 8 && BL.mirrorDamage.PANEL_LIMIT === 50 && BL.mirrorDamage.MAX_DAMAGE === 500 && healthArray === health.damage.panelHealth && allCracked && halfIntact && halfHealth.filter(value => value === 6).length === 1 && halfHealth.every(value => value === 8 || value === 6) && roundBreak && chargedHealth.filter(value => value === 0).length === 1 && chargedHealth.filter(value => value === 6).length === 1 && Math.abs(recovered - 1) < 1e-9 && Math.abs(woundedRecovered - 7) < 1e-9 && Math.abs(areaFraction - recovered / BL.mirrorDamage.PANEL_HEALTH) < 1e-6 && Math.abs(partialHealth - 0.6) < 1e-9 && extentRetained && proportionalBreak && fallen.length === 1 && Math.abs(fallenArea - areaFraction) < 1e-6, JSON.stringify({ allCracked, halfHealth, halfIntact, roundBreak, chargedHealth, recovered, woundedRecovered, areaFraction, partialHealth, extentRetained, proportionalBreak, fallen: fallen.length, fallenArea }));
     const crackedReference = make(); crackedReference.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0);
     const crackedTemplate = crackedReference.panel.geometry; crackedReference.damage.dispose();
     const otherImpact = make(); otherImpact.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, -1.4, 0.8, 0);
     const fixedLayout = JSON.stringify(otherImpact.panel.geometry.verts) === JSON.stringify(crackedTemplate.verts)
       && JSON.stringify(otherImpact.panel.geometry.faces) === JSON.stringify(crackedTemplate.faces);
     otherImpact.damage.dispose();
-    const repaired = make(), repairDamage = BL.mirrorDamage.PANEL_DAMAGE + 16, panelTime = BL.mirrorDamage.PANEL_HEALTH / BL.mirrorDamage.PANEL_HEAL_RATE;
+    const repaired = make(), repairDamage = BL.mirrorDamage.PANEL_DAMAGE + 64, panelTime = BL.mirrorDamage.PANEL_HEALTH / BL.mirrorDamage.PANEL_HEAL_RATE;
     repaired.damage.hit(repairDamage, 0.2, 0.1, 0);
     const centers = repaired.root.children.filter(node => node.visible && node.mirrorShard === repaired.panel).map(node => {
       const x = node.position.x, y = node.position.y, v = crackedTemplate.verts;
@@ -8123,11 +8134,11 @@ const unitChecks = async () => {
       else m.damage.hit(BL.mirrorDamage.MAX_DAMAGE, -1.4, 0.8, 0);
       const version = m.damage.version;
       m.damage.update(119, mode !== "open");
-      const waiting = m.damage.broken && m.damage.damage === 116 && m.damage.version === version && !m.panel.geometry.faces.length;
+      const waiting = m.damage.broken && m.damage.damage === BL.mirrorDamage.MAX_DAMAGE && m.damage.version === version && !m.panel.geometry.faces.length;
       m.damage.update(mode === "open" ? 240 : 1, mode !== "open");
       const delay = m.damage.broken && m.damage.version === version;
       m.damage.update(panelTime * 0.25, true);
-      const growing = !m.damage.broken && m.damage.panelHealth.every(hp => hp === 0.5) && m.panel.geometry.faces.length > 0;
+      const growing = !m.damage.broken && m.damage.panelHealth.every(hp => hp === 2) && m.panel.geometry.faces.length > 0;
       const growthVersion = m.damage.version, growthDamage = m.damage.damage;
       m.damage.update(240, false);
       const paused = m.damage.version === growthVersion && m.damage.damage === growthDamage;
@@ -8136,7 +8147,7 @@ const unitChecks = async () => {
       brokenRepairs.push({ mode, waiting, delay, growing, paused, complete }); m.damage.dispose();
     }
     record("mirror damage: fully shattered and restored mirrors wait 120 seconds, regrow only with a closed gate and pause without jumping while open", brokenRepairs.every(row => row.waiting && row.delay && row.growing && row.paused && row.complete), JSON.stringify(brokenRepairs));
-    const crackOnly = make(); crackOnly.damage.hit(7.5, 0.2, 0.1, 0);
+    const crackOnly = make(); crackOnly.damage.hit(30, 0.2, 0.1, 0);
     const firstCrack = crackOnly.damage.cracks, crackVersion = crackOnly.damage.version;
     crackOnly.damage.update(BL.mirrorDamage.HEAL_DELAY - 0.01);
     const waited = crackOnly.damage.version === crackVersion && crackOnly.damage.cracks === firstCrack;
@@ -8148,12 +8159,12 @@ const unitChecks = async () => {
     record("mirror damage: crack-only damage waits quietly then seals directly without a missing-pane phase", waited && noPanePhase && halfCrack > 0 && halfCrack < firstCrack && crackRestored, JSON.stringify({ waited, firstCrack, halfCrack, noPanePhase, crackRestored }));
     const sealingHits = [], faceKey = (geo, face) => face.i.map(index => Array.from(geo.verts.subarray(index * 3, index * 3 + 3)).join(",")).sort().join("|");
     for (const progress of [0.25, 0.5, 0.75]) {
-      const m = make(); m.damage.hit(BL.mirrorDamage.PANEL_DAMAGE + 24, 0.2, 0.1, 0);
+      const m = make(); m.damage.hit(BL.mirrorDamage.PANEL_DAMAGE + 96, 0.2, 0.1, 0);
       const shard = m.root.children.find(node => node.visible && node.mirrorShard === m.panel), struck = shard.geometry;
       const x = shard.position.x, y = shard.position.y;
       m.damage.update(BL.mirrorDamage.HEAL_DELAY + panelTime + BL.mirrorDamage.CRACK_HEAL_TIME * progress);
       const before = m.panel.geometry, beforeCracks = m.damage.cracks, complete = !m.damage.holes && m.damage.contains(x, y);
-      const hit = m.damage.hit(2, x, y, 0), after = m.panel.geometry, keys = new Set(after.faces.map(face => faceKey(after, face)));
+      const hit = m.damage.hit(8, x, y, 0), after = m.panel.geometry, keys = new Set(after.faces.map(face => faceKey(after, face)));
       let remote = 0, changed = 0;
       for (const face of before.faces) {
         let cx = 0, cy = 0;
@@ -8172,13 +8183,13 @@ const unitChecks = async () => {
       const mean = shards.reduce((sum, node) => sum + node.position.x, 0) / shards.length;
       locality.push({ x, count: shards.length, mean }); m.damage.dispose();
     }
-    const m = make(); m.damage.hit(BL.mirrorDamage.PANEL_DAMAGE + 36, 0.2, 0.1, 0);
+    const m = make(); m.damage.hit(BL.mirrorDamage.PANEL_DAMAGE + 144, 0.2, 0.1, 0);
     const fragment = m.root.children.find(node => node.visible && node.mirrorShard === m.panel);
     const x = fragment.position.x, y = fragment.position.y, wasMissing = !m.damage.contains(x, y);
     m.damage.update(12);
     const before = m.panel.geometry, regrownCenter = m.damage.contains(x, y), beforeDamage = m.damage.damage;
-    const maxFragments = Math.ceil(2 / Math.min(...m.damage.panelHealth.filter(health => health > 0)));
-    m.damage.hit(2, x, y, 0);
+    const maxFragments = Math.ceil(8 / Math.min(...m.damage.panelHealth.filter(health => health > 0)));
+    m.damage.hit(8, x, y, 0);
     const shards = m.root.children.filter(node => node.visible && node.mirrorShard === m.panel).map(node => node.geometry);
     let overHole = 0, remoteRemoved = 0, holeFilled = 0, removed = 0, samples = 0;
     for (const geo of shards) for (const face of geo.faces) {
@@ -8196,7 +8207,7 @@ const unitChecks = async () => {
       if (was && !now) { removed++; if (!shards.some(geo => present(geo, px, py, true))) remoteRemoved++; }
     }
     const spent = m.damage.damage - beforeDamage; m.damage.dispose();
-    record("mirror damage: subsequent impacts choose nearby panes and interrupted repair spends proportional health while dropping only present glass", locality[0].mean < -0.8 && locality[1].mean > 0.8 && locality.every(row => row.count === 4) && wasMissing && regrownCenter && Math.abs(spent - 2) < 1e-9 && shards.length > 0 && shards.length <= maxFragments && samples > 0 && removed > 0 && !overHole && !remoteRemoved && !holeFilled, JSON.stringify({ locality, wasMissing, regrownCenter, spent, maxFragments, shards: shards.length, samples, removed, overHole, remoteRemoved, holeFilled }));
+    record("mirror damage: subsequent impacts choose nearby panes and interrupted repair spends proportional health while dropping only present glass", locality[0].mean < -0.8 && locality[1].mean > 0.8 && locality.every(row => row.count === 4) && wasMissing && regrownCenter && Math.abs(spent - 8) < 1e-9 && shards.length > 0 && shards.length <= maxFragments && samples > 0 && removed > 0 && !overHole && !remoteRemoved && !holeFilled, JSON.stringify({ locality, wasMissing, regrownCenter, spent, maxFragments, shards: shards.length, samples, removed, overHole, remoteRemoved, holeFilled }));
   }
   {
     const S = BL.scene, root = S.createNode(), owners = [], damage = [], player = {}, system = BL.breakables.create({ root, renderer: {}, fx: { burst() {}, damageNumber(x, y, z, amount) { damage.push({ x, y, z, amount }); } }, crew: { player },
@@ -8217,7 +8228,7 @@ const unitChecks = async () => {
     system.hit(null, { owner: owners[3], x: 0, y: 0, z: 0 }, 0.25);
     system.hit({}, { owner: owners[4], x: 0, y: 0, z: 0 }, 1.5, true);
     system.hit(null, { owner: { kind: "prop" }, x: 0, y: 0, z: 0 });
-    record("breakable damage numbers: only player attacks show full hit power, including overkill, while NPC attacks still damage objects", damage.length === 3 && damage.map(hit => hit.amount).join() === "0.25,2,1.5" && damage.every(hit => hit.y > 0.5) && owners[1].breakable.health === 0 && owners[2].breakable.health === 0.75 && owners[3].breakable.health === 0.75, JSON.stringify(damage));
+    record("breakable damage numbers: only player attacks show full hit power, including overkill, while NPC attacks still damage objects", damage.length === 3 && damage.map(hit => hit.amount).join() === "1,8,6" && damage.every(hit => hit.y > 0.5) && owners[1].breakable.health === 0 && owners[2].breakable.health === 3 && owners[3].breakable.health === 3, JSON.stringify(damage));
     system.update(0, item.respawnAt);
     const deferred = item.broken && !owners[0].active && !item.reward && item.respawnAt > 0;
     const rewardNodes = system.list.map(record => record.node); system.dispose();
