@@ -6388,21 +6388,8 @@
       && bananaCover.segmentClear(x, y, z, toX, toY, toZ);
   };
   const cameraGlyphCoverage = (x, y, z) => {
-    // An inactive wave only paints the permanent chamber. Reject points
-    // outside its exact volume before looking up terrain cave ownership.
-    const permanent = MATRIX_WORLD.permanentCave;
-    if (!MATRIX_WORLD.active) {
-      if (!permanent) return 0;
-      const plane = MATRIX_WORLD.permanentPlane, aperture = MATRIX_WORLD.permanentAperture, at = (permanent - 1) * 4;
-      const depth = -(plane[0] * x + plane[1] * y + plane[2] * z + plane[3]), bounds = MATRIX_WORLD.caveBounds, caves = MATRIX_WORLD.caves;
-      const across = caves[at + 1] * (x - bounds[at]) - caves[at] * (z - bounds[at + 2]), height = y - bounds[at + 1];
-      const room = depth > aperture[2] + 2.5 - aperture[3], throat = depth <= aperture[2];
-      const half = throat ? aperture[0] : aperture[0] + (room ? 0.5 : 0) + aperture[3], ceiling = aperture[1] + (room && !throat ? 1 : 0);
-      if (depth < -1e-6 || depth > bounds[at + 3] + aperture[3] || Math.abs(across) > half + 1e-6
-        || height < -1e-6 || height > ceiling + 1e-6) return 0;
-    }
     const caveIndex = island.rockCaveAt(x, y, z);
-    if (caveIndex && caveIndex === permanent) {
+    if (caveIndex && caveIndex === MATRIX_WORLD.permanentCave) {
       const plane = MATRIX_WORLD.permanentPlane, aperture = MATRIX_WORLD.permanentAperture, at = (caveIndex - 1) * 4;
       const depth = -(plane[0] * x + plane[1] * y + plane[2] * z + plane[3]), bounds = MATRIX_WORLD.caveBounds, caves = MATRIX_WORLD.caves;
       const across = caves[at + 1] * (x - bounds[at]) - caves[at] * (z - bounds[at + 2]), height = y - bounds[at + 1];

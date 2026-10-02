@@ -7065,6 +7065,21 @@ const dsbApproach = async (b, name) => {
   // Projection uses the last drawn camera; advance alone does not paint it.
   if (!await untilPage(b, 'B.dsb.phase === "land"')) throw Error("DSB approach did not draw");
 };
+const dsbClick = async (b, selector, mobile = false) => {
+  await b.focus(true); await b.send("Page.bringToFront");
+  await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`);
+  if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the native HUD click");
+  await b.evaluate(`(async () => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center", behavior: "instant" }); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); })()`);
+  // Animation callbacks precede compositor paint. Wait for the scrolled
+  // surface to commit before sending physical coordinates into that surface.
+  await b.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false, clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 } });
+  const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(); window.__hudPointer = []; for (const type of ["pointerdown", "click"]) document.addEventListener(type, event => { window.__hudPointer.push({ type, hits: e.contains(event.target), target: event.target.id || event.target.dataset.action || event.target.tagName }); }, { once: true, capture: true }); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
+  if (!p.hits) throw Error("Blocked pointer: " + selector);
+  if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
+  else await b.click(p.x, p.y);
+  const delivered = await b.evaluate(`window.__hudPointer`);
+  if (delivered?.length !== 2 || !delivered.every(event => event.hits)) throw Error("Native pointer missed " + selector + ": " + JSON.stringify(delivered));
+};
 const dsbExit = async (b, home = "bifrost") => {
   await b.evaluate(`__ooga.dsb.gate.activate(0); if (typeof __gateClock === "number") { __gateClock += 2000; __ooga.dsb.gate.update(); }`);
   await untilPage(b, 'B.dsb.gate.state === "ACTIVE"', 5000);
@@ -7074,12 +7089,7 @@ const dsbExit = async (b, home = "bifrost") => {
 // Placement contract exercises the moved landmarks without changing travel fixtures.
 for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (mobile ? "&canvas2d=1" : "")), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), why: "regression: moved Shop and TV keep collision, interactions, radio and cat navigation attached to their fronts", run: async b => {
   const check = (name, ok, detail = "") => record("DSB plaza " + (mobile ? "canvas2d: " : "webgl2: ") + name, ok, detail);
-  const press = async selector => {
-    await b.focus(true); await b.send("Page.bringToFront");
-    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center", behavior: "instant" }); const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; if (!e.contains(document.elementFromPoint(x, y))) throw Error("Blocked pointer: " + ${JSON.stringify(selector)} + JSON.stringify({ rect: r.toJSON(), hit: document.elementFromPoint(x, y)?.outerHTML.slice(0, 400), panel: document.getElementById("dsb-panel").getBoundingClientRect().toJSON(), viewport: [innerWidth, innerHeight] })); return { x, y }; })()`);
-    if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
-    else await b.click(p.x, p.y);
-  };
+  const press = selector => dsbClick(b, selector, mobile);
   check("landmark geometry and services absent during transit", await b.evaluate(`!__ooga.dsb.land && !__ooga.dsb.resources.shop && !__ooga.dsb.resources.tv && __gateDormancy.land === 0 && __gateDormancy.tv === 0 && __gateDormancy.radio === 0 && __gateDormancy.fetch === 0`));
   await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); document.querySelector('[data-action="dsb-skip"]').click();`);
   const placement = await b.evaluate(`(() => { const d = __ooga.dsb, a = d.land.landmarks, centre = { x: 0, z: 18 }; return { shop: a.shop.node.position, tv: a.tv.node.position, shopYaw: a.shop.node.rotation.y, tvYaw: a.tv.node.rotation.y, gate: d.gate.root.position, dialer: d.gate.dialer.position, land: __gateDormancy.land, tvCount: __gateDormancy.tv, inward: Object.values(a).every(l => { const p = l.point(); return Math.hypot(p.x-centre.x,p.z-centre.z) < Math.hypot(l.node.position.x-centre.x,l.node.position.z-centre.z); }) }; })()`);
@@ -7350,20 +7360,7 @@ for (const ready of [false, true]) scene("dsb", { label: "entrance audio " + rea
 
   } }] });
 for (const fallback of [false, true]) scene("dsb", { label: "dsb gameplay " + (fallback ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (fallback ? "&canvas2d=1" : "")), steps: [{ name: "dsb gameplay " + (fallback ? "canvas2d" : "webgl2"), why: "contract: preserve DSB scene behavior independently of the hub entrance", run: async (b) => {
-  const click = async (selector) => {
-    await b.focus(true); await b.send("Page.bringToFront");
-    await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`);
-    if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the native HUD click");
-    await b.evaluate(`(async () => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center", behavior: "instant" }); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); })()`);
-    // Animation callbacks precede compositor paint. Wait for the scrolled
-    // surface to commit before sending physical coordinates into that surface.
-    await b.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false, clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 } });
-    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(); window.__hudPointer = []; for (const type of ["pointerdown", "click"]) document.addEventListener(type, event => { window.__hudPointer.push({ type, hits: e.contains(event.target), target: event.target.id || event.target.dataset.action || event.target.tagName }); }, { once: true, capture: true }); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
-    if (!p.hits) throw Error("Blocked pointer: " + selector);
-    await b.click(p.x, p.y);
-    const delivered = await b.evaluate(`window.__hudPointer`);
-    if (delivered?.length !== 2 || !delivered.every(event => event.hits)) throw Error("Native pointer missed " + selector + ": " + JSON.stringify(delivered));
-  };
+  const click = selector => dsbClick(b, selector);
   const walkTo = async (x, z) => b.evaluate(`__ooga.pilot.navigate({ yaw: 0, pitch: 0.2, dist: 7, target: { x: ${x}, y: 1.7, z: ${z} }, position: { x: ${x}, y: 0, z: ${z} } }); __ooga.advance(0.15);`);
   await b.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await b.key("m"); await untilPage(b, "B.audio.ready", 10000);
