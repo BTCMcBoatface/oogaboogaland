@@ -871,8 +871,8 @@
     leaving = false;
     greeter = BL.factoryGreeter.create({ parent: root, input, fx, feed,
       visitor: () => people && people.player === avatar ? avatar : null,
-      demoRunning: () => feed.reading.contract === "obl.factory.demo.v1" || feed.reading.contract === null && !!shared.mock, leaveCave });
-    if (!avatar) greeter.greet();
+      demoRunning: () => feed.reading.contract === "obl.factory.demo.v1" || feed.reading.contract === null && !!shared.mock, leaveCave, coarse: COARSE });
+    if (!avatar) greeter.greet(false);
 
     factoryScene.root = root;
     factoryScene.camera = camera;

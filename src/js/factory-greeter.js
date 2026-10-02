@@ -7,8 +7,10 @@
   const { createNode, addChild, removeChild } = BL.scene;
   const DEMO = "obl.factory.demo.v1", HEIGHT = 1.05, BASE = HEIGHT * 5 / 16;
   const LINES = {
-    greeting: "Welcome! Want a tour of the factory?",
-    demo: "Welcome! This is a demo node. Want a tour?",
+    greeting: "Want a factory tour? Press Space.",
+    greetingTouch: "Want a factory tour? Tap me.",
+    demo: "Demo node. Want a tour? Press Space.",
+    demoTouch: "Demo node. Want a tour? Tap me.",
     noOogaDemo: "Demo node. Pick an Ooga on the island.",
     noOoga: "Pick an Ooga on the island for a tour.",
     follow: "Follow me: channels, core, switchboard.",
@@ -79,7 +81,7 @@
   // Explicit waypoints use the broad arrival stairs and the left pit-to-core stairs, not ladders.
   // y is the expected support at the waypoint; the actual step uses the hall's collision functions.
   const ROUTE = [
-    [1.55, 5, 26], [0, 5, 25], [0, 5, 22], [0, 0, 13],
+    [-1.55, 5, 26], [0, 5, 25], [0, 5, 22], [0, 0, 13],
     [-4.8, 0, 9], [-6.5, 0, 8.5], [-4.8, 0, 9], [-4.8, 0, 7.5],
     [-4.8, 5, 1.3], [-4.8, 5, 0.1], [-4.8, 5, 1.3], [-4.8, 0, 7.5], [-7, 0, 8.5]
   ];
@@ -134,7 +136,7 @@
   const TRAITS = models.cached(() => ({ ...contributors.traitsFor("foreman/factory"), display: "Factory foreman", height: HEIGHT,
     belly: 1, skin: "#bf855d", hair: "#35251a", fur: "#795333", face: "beard", dress: DRESS }));
 
-  const create = ({ parent, input, fx, feed, visitor, demoRunning, leaveCave }) => {
+  const create = ({ parent, input, fx, feed, visitor, demoRunning, leaveCave, coarse }) => {
     const figure = models.caveman(TRAITS()), body = figure.root, parts = figure.parts;
     body.position.x = ROUTE[0][0]; body.position.y = ROUTE[0][1] + BASE; body.position.z = ROUTE[0][2];
     parts.club.visible = parts.snack.visible = parts.hat.visible = false;
@@ -165,7 +167,6 @@
       input.add(face, { kind: "greeter-choice", choice: id, priority: 3, pickRay }, { radius: Math.hypot(halfW, halfH) });
       picks.push(face); buttons[id] = node;
     };
-    button("yes", "SHOW ME", 1.75); button("no", "EXPLORE", 1.35);
     for (let i = 0; i < TOUR_ORDER.length; i++) button(TOUR_ORDER[i], TOURS[TOUR_ORDER[i]].title, 2.35 - i * 0.5);
     button("next", "CONTINUE", 1.75);
     button("island", "PICK AN OOGA", 1.75); button("stop", "END TOUR", 1.35);
@@ -184,9 +185,8 @@
     };
     const show = (phase) => {
       state.phase = phase;
-      for (const id in buttons) buttons[id].visible = phase === "greeting" ? id === "yes" || id === "no"
-        : phase === "menu" ? TOUR_ORDER.includes(id) || id === "no"
-        : phase === "no-ooga" ? id === "island" || id === "no"
+      for (const id in buttons) buttons[id].visible = phase === "menu" ? TOUR_ORDER.includes(id)
+        : phase === "no-ooga" ? id === "island"
         : phase === "talk" ? id === "next" || id === "stop" : false;
     };
     const select = (index) => {
@@ -202,13 +202,18 @@
       state.spoken = id;
       fx.say(figure, SPEECH[id][state.utterance], 8);
     };
-    const greet = () => {
+    const greet = (interacting = true) => {
       if (state.phase === "return" || state.phase === "walk") return;
       if (state.phase === "talk") { say(state.spoken, true); return; }
+      if (interacting && visitor() && !near()) return;
       state.greeted = true;
-      buttons.no.position.y = 1.35;
-      show(visitor() ? "greeting" : "no-ooga");
-      say(visitor() ? demoRunning() ? "demo" : "greeting" : demoRunning() ? "noOogaDemo" : "noOoga");
+      if (interacting) {
+        if (visitor()) { select(0); show("menu"); say("menu"); }
+        else { show("no-ooga"); say(demoRunning() ? "noOogaDemo" : "noOoga"); }
+      } else {
+        show("greeting");
+        say(demoRunning() ? coarse ? "demoTouch" : "demo" : coarse ? "greetingTouch" : "greeting");
+      }
     };
     const end = (line) => {
       show("return"); state.away = state.blocked = 0; if (line) say(line);
@@ -232,11 +237,7 @@
     };
     const choose = (id) => {
       if (id === "island" && state.phase === "no-ooga") { leaveCave(); return; }
-      if (id === "no" && (state.phase === "greeting" || state.phase === "menu" || state.phase === "no-ooga")) { show("idle"); state.cooldown = 12; return; }
       if (!near()) { if (!visitor()) greet(); return; }
-      if (id === "yes" && state.phase === "greeting") {
-        buttons.no.position.y = 0.35; select(0); show("menu"); say("menu"); return;
-      }
       if (Object.hasOwn(TOURS, id) && state.phase === "menu") {
         tour = TOURS[id]; state.tour = id;
         state.waypoint = 0; state.away = state.blocked = 0; state.lastEvent = null;
@@ -303,9 +304,9 @@
     const update = (dt, elapsed) => {
       state.cooldown = Math.max(0, state.cooldown - dt);
       const actor = visitor();
-      if (state.phase === "idle" && !state.greeted && !state.cooldown && near(4)) greet();
+      if (state.phase === "idle" && !state.greeted && !state.cooldown && near(4)) greet(false);
       if (state.phase === "greeting" || state.phase === "menu") {
-        if (!actor || !near(6)) show("idle");
+        if (actor && !near() || !actor && state.phase === "menu") show("idle");
       }
       const touring = state.phase === "walk" || state.phase === "talk";
       if (touring) {
@@ -343,7 +344,6 @@
     const act = () => {
       if (!near() || state.phase === "walk" || state.phase === "return") return false;
       if (state.phase === "talk") choose("next");
-      else if (state.phase === "greeting") choose("yes");
       else if (state.phase === "menu") choose(TOUR_ORDER[state.selection]);
       else greet();
       return true;
@@ -371,8 +371,6 @@
       if (menuKey(e)) return true;
       if (e.repeat) return false;
       if (e.key === "t" || e.key === "T") { if (visitor()) return act(); greet(); return true; }
-      if (e.key === "Escape" && (state.phase === "walk" || state.phase === "talk")) { end("cancelled"); return true; }
-      if (e.key === "Escape" && (state.phase === "greeting" || state.phase === "menu" || state.phase === "no-ooga")) { show("idle"); state.cooldown = 12; return true; }
       return false;
     };
     const dispose = () => {
