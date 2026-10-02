@@ -1,0 +1,11 @@
+{
+  "name": "oogaboogaland-staging",
+  "compatibility_date": "2026-10-02",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./_site",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}
