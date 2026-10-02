@@ -390,7 +390,6 @@
     go("hub");
   };
   const onKey = (e) => {
-    if (greeter && greeter.onKey(e)) return true;
     if ((e.key === "x" || e.key === "X") && !e.repeat && pilot.modeAction("mode-toggle")) return true;
     if ((e.key === "1" || e.key === "2") && pilot.weaponMode(Number(e.key))) return true;
     if (e.key === "g" || e.key === "G") return pilot.weaponAction("weapon-toggle");
@@ -781,7 +780,7 @@
     });
     const tipFor = (hit) => {
       const o = hit.owner, tip = TIPS[o.kind];
-      if (o.kind === "greeter") return "Factory foreman · T to talk";
+      if (o.kind === "greeter") return COARSE ? "Factory foreman · tap to talk" : "Factory foreman · Space to talk";
       if (o.kind === "greeter-choice") return "Factory tour · tap to choose";
       if (o.kind === "line" || o.kind === "tunnel") {
         const b = o.place, c = b.line && mock.snapshot.channels.find((ch) => ch.id === b.line);

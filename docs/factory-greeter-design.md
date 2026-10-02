@@ -6,7 +6,7 @@ Draft implementation of four optional world tours, following drneski's design di
 
 A factory foreman in a leather apron and yellow hardhat stands on the left as visitors enter, leaving the central arrival path clear. He waves and offers a tour through speech only: Press Space on desktop, Tap me on phones. There are no initial SHOW ME or EXPLORE signs; walking past declines naturally. His greeting identifies the simulated demo node while it is running.
 
-Space beside him, or a click or tap on him, opens the tour signs. They disappear when a tour is chosen or the visitor walks away. The visitor chooses a tour, and follows with their own Ooga and camera. Space, the act button or T talks to the nearby foreman and advances choices; the signs can also be tapped. During walking, Space remains available for the visitor's usual action. Tapping the foreman at a stop repeats the current line. Continue advances only on request. Full lines remain voice-ready data; their short speech beats fit the existing single-line bubbles. Arrow keys select a tour and Enter or T starts it; menu arrows do not move the visitor.
+Space beside him, or a click or tap on him, opens the tour signs. They disappear when a tour is chosen or the visitor walks away. The visitor chooses a tour, and follows with their own Ooga and camera. Space or the act button talks to the nearby foreman and advances choices; the signs can also be tapped. During walking, Space remains available for the visitor's usual action. Tapping the foreman at a stop repeats the current line. Continue advances only on request. Full lines remain voice-ready data; their short speech beats fit the existing single-line bubbles. Arrow keys select a tour and Enter starts it; menu arrows do not move the visitor.
 
 Interacting without an Ooga opens directions to pick one on the island. Pick an Ooga returns to the island; the visitor must pick one there and walk into the factory. The greeter never assigns an Ooga.
 
@@ -46,7 +46,7 @@ Build and JavaScript syntax checks are the repository's default validation for t
 - Space/click/tap foreman → each of the four tours → all stops → return; decline, cancellation and repeat visits.
 - Stop following, wait for the warning and frustrated return; leave during a tour.
 - Public reports without routes, fees or private balances; demo, replay and no events; node stopped versus feed silence.
-- Space, T and tapped world signs; phone readability, sightlines and Canvas 2D.
+- Space, arrow keys, Enter and tapped world signs; phone readability, sightlines and Canvas 2D.
 - Route clearance, stair support, returning past the visitor and the scene leave contract.
 
 All four routes and their speech are implemented as proposals. Stair and bridge clearance, observation sightlines, menu picking and mobile readability remain for maintainer play-test before the draft is ready to land.

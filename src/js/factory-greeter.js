@@ -23,7 +23,7 @@
     failed: "A forward was reported failed. The report does not tell us why it failed.",
     demoReport: "This report comes from the simulated demo node, not a real node's activity.",
     replayReport: "This is replayed earlier activity. It is not a new event happening now.",
-    menu: "Tap a tour. Arrows choose; T starts it.",
+    menu: "Tap a tour. Arrows choose; Enter starts it.",
     followChannels: "Follow me to the forge and a channel.",
     followRebalancing: "Follow me to the rebalancer.",
     followHealth: "Follow me upstairs to the watchtower.",
@@ -366,13 +366,6 @@
       menuKey(e);
     };
     window.addEventListener("keydown", captureMenuKey, true);
-    const onKey = (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return false;
-      if (menuKey(e)) return true;
-      if (e.repeat) return false;
-      if (e.key === "t" || e.key === "T") { if (visitor()) return act(); greet(); return true; }
-      return false;
-    };
     const dispose = () => {
       window.removeEventListener("keydown", captureMenuKey, true);
       unsubscribe();
@@ -380,7 +373,7 @@
       removeChild(parent, body); removeChild(parent, signs);
       state.lastEvent = null;
     };
-    return { root: body, state, update, greet, choose, act, onKey, dispose,
+    return { root: body, state, update, greet, choose, act, dispose,
       liveGeometry(set) { set.add(figure.headOpen).add(figure.headClosed); } };
   };
   BL.factoryGreeter = { create, LINES, TOURS };
