@@ -1,6 +1,7 @@
 {
   "baseCommit": "dab6e36bea482f2d712b65f3e2d559348400b527",
   "renderbuffers": {
+    "method": "Independent base and head browsers; 1440x900 CSS pixels, DPR 2; four bytes per pixel per sample estimate",
     "before": {
       "size": {
         "width": 1440,
@@ -10,23 +11,23 @@
         {
           "requested": 4,
           "actual": 4,
-          "format": 32856,
           "w": 2039,
-          "h": 1274
+          "h": 1274,
+          "format": 32856
         },
         {
           "requested": 4,
           "actual": 4,
-          "format": 32856,
           "w": 2039,
-          "h": 1274
+          "h": 1274,
+          "format": 32856
         },
         {
           "requested": 4,
           "actual": 4,
-          "format": 33190,
           "w": 2039,
-          "h": 1274
+          "h": 1274,
+          "format": 33190
         }
       ],
       "bytes": 124688928
@@ -40,31 +41,34 @@
         {
           "requested": 2,
           "actual": 2,
-          "format": 32856,
           "w": 2039,
-          "h": 1274
+          "h": 1274,
+          "format": 32856
         },
         {
           "requested": 2,
           "actual": 2,
-          "format": 32856,
           "w": 2039,
-          "h": 1274
+          "h": 1274,
+          "format": 32856
         },
         {
           "requested": 2,
           "actual": 2,
-          "format": 33190,
           "w": 2039,
-          "h": 1274
+          "h": 1274,
+          "format": 33190
         }
       ],
       "bytes": 62344464
     },
     "savedMiB": 59.45631408691406,
-    "console": []
+    "console": {
+      "base": [],
+      "head": []
+    }
   },
-  "browserCases": [
+  "historicalBrowserCases": [
     {
       "name": "8 GB boundary",
       "passed": true,
@@ -327,7 +331,7 @@
       "error": 0
     }
   ],
-  "performance": {
+  "historicalPerformance": {
     "base": [
       {
         "check": "FAIL wall movement performance: ordinary movement stays responsive at a high-density desktop size",
@@ -420,5 +424,208 @@
         }
       }
     ]
+  },
+  "validation": {
+    "date": "2026-10-02",
+    "sourceHead": "6d3aff6a152a134a29dd7ccf036db36118551492",
+    "environment": {
+      "node": "24.12.0",
+      "hardware": "M1 Pro, 32 GB",
+      "power": "AC",
+      "lanes": 2,
+      "otherChromeProcessesPresent": true
+    },
+    "fullCommand": "LANES=2 npm run test:full",
+    "head": {
+      "reportedFailLines": 81,
+      "uniqueFailureNames": 79,
+      "unitFixtureException": true,
+      "finalTotalPrinted": false,
+      "performance": [
+        {
+          "name": "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+          "detail": {
+            "fps": 59.791629171880295,
+            "p95": 16.800000000000182,
+            "max": 50,
+            "worst": {
+              "gap": 45.29999999701977,
+              "at": -15.799999997019768,
+              "updateMs": 20.80000001192093,
+              "renderMs": 5.299999997019768,
+              "overlayMs": 17.299999997019768,
+              "donated": false
+            },
+            "outlined": 0,
+            "samples": 299,
+            "travel": 2.712500000000004,
+            "donated": false,
+            "particles": 0,
+            "quality": "high"
+          }
+        },
+        {
+          "name": "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+          "detail": {
+            "fps": 29.452736318373024,
+            "p95": 50,
+            "max": 66.60000000000036,
+            "worst": {
+              "gap": 63.5,
+              "at": 3158.4000000059605,
+              "updateMs": 18.299999997019768,
+              "renderMs": 2.5,
+              "overlayMs": 33.79999999701977,
+              "donated": true
+            },
+            "outlined": 148,
+            "samples": 148,
+            "travel": 4.133074999999966,
+            "donated": true,
+            "particles": 26,
+            "quality": "low"
+          }
+        }
+      ]
+    },
+    "base": {
+      "reportedFailLines": 80,
+      "uniqueFailureNames": 78,
+      "unitFixtureException": true,
+      "finalTotalPrinted": false,
+      "performance": [
+        {
+          "name": "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+          "detail": {
+            "fps": 35.383723487174805,
+            "p95": 33.5,
+            "max": 166.60000000000036,
+            "worst": {
+              "gap": 114.40000000596046,
+              "at": 2885.7000000029802,
+              "updateMs": 2.2999999970197678,
+              "renderMs": 2.5,
+              "overlayMs": 0.9000000059604645,
+              "donated": false
+            },
+            "outlined": 0,
+            "samples": 177,
+            "travel": 2.579975000000003,
+            "donated": false,
+            "particles": 0,
+            "quality": "low"
+          }
+        },
+        {
+          "name": "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+          "detail": {
+            "fps": 32.61539685376879,
+            "p95": 50,
+            "max": 116.70000000000073,
+            "worst": {
+              "gap": 141.5,
+              "at": 2645.000000005961,
+              "updateMs": 3.1000000089406967,
+              "renderMs": 2.5,
+              "overlayMs": 17.599999994039536,
+              "donated": true
+            },
+            "outlined": 164,
+            "samples": 164,
+            "travel": 2.3249999999999993,
+            "donated": true,
+            "particles": 26,
+            "quality": "low"
+          }
+        }
+      ]
+    },
+    "sharedFailureNames": 76,
+    "headOnly": [
+      "DSB plaza webgl2: Shop purchases still work",
+      "dsb gameplay: throwing consumes inventory and creates a visible moving tomato that splats and expires",
+      "soak: dsb cycles: six round trips retain node, target, tween and DOM counts"
+    ],
+    "baseOnly": [
+      "dsb gameplay webgl2",
+      "hub melee: one swing breaks a box, two a barrel and four a rock, and a broken rock is back whole within a minute"
+    ],
+    "qualityProbe": {
+      "memoryBoot": true,
+      "healthy": true,
+      "gpuBound": true,
+      "reactsIn": 2125,
+      "reactsFast": true,
+      "ignoresSpikes": true,
+      "bounded": true,
+      "warmup": true,
+      "ignoresPauses": true,
+      "fallback": true,
+      "bootFast": true,
+      "bootMedium": true,
+      "bootLow": true,
+      "bootOneWay": true,
+      "bootKeepsCoarse": true,
+      "bootMemory": true
+    },
+    "contextRecovery": [
+      {
+        "name": "base",
+        "before": {
+          "frames": 23,
+          "quality": "medium",
+          "ready": true
+        },
+        "lost": {
+          "ready": true,
+          "events": [
+            "lost"
+          ]
+        },
+        "after": {
+          "frames": 57,
+          "quality": "medium",
+          "ready": true,
+          "events": [
+            "lost",
+            "restored"
+          ]
+        },
+        "recovered": true,
+        "logs": []
+      },
+      {
+        "name": "head",
+        "before": {
+          "frames": 23,
+          "quality": "medium",
+          "ready": true
+        },
+        "lost": {
+          "ready": true,
+          "events": [
+            "lost"
+          ]
+        },
+        "after": {
+          "frames": 59,
+          "quality": "medium",
+          "ready": true,
+          "events": [
+            "lost",
+            "restored"
+          ]
+        },
+        "recovered": true,
+        "logs": []
+      }
+    ],
+    "expandedCases": {
+      "behaviorChecksReachedConsole": 7,
+      "cleanConsoleCases": 0,
+      "warning": "Canvas2D readback warning after scene returns",
+      "excludedCase": "16 GB: incorrect context-loss readiness wait; corrected event-based context probe recorded separately"
+    },
+    "baseM1TotalMemoryVerified": false
   }
 }
