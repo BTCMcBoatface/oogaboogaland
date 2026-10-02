@@ -740,8 +740,9 @@
       geo.verts.push(ox + ax * v * length + wx * u * width + nx * bulge, oy + ay * v * length + wy * u * width + ny * bulge, oz + az * v * length + wz * u * width + nz * bulge);
       geo.normals.push(nx, ny, nz);
     }
+    // Cupped cards need the same fan anchor on both sides, otherwise the reversed fan draws a different surface.
     const front = outline.map((_, k) => base + k);
-    geo.faces.push({ i: front, color, emissive: 0 }, { i: front.slice().reverse(), color, emissive: 0 });
+    geo.faces.push({ i: front, color, emissive: 0 }, { i: [front[0], ...front.slice(1).reverse()], color, emissive: 0 });
   };
   // A pointed leaf in two painted halves split down its midrib (the lit half a shade lighter), two-sided.
   const LEAF_HALF = [[0, 0], [0.34, 0.22], [0.4, 0.5], [0.24, 0.8], [0, 1]];
@@ -754,7 +755,7 @@
         geo.normals.push(nx, ny, nz);
       }
       const ids = LEAF_HALF.map((_, k) => base + k);
-      geo.faces.push({ i: ids, color, emissive: 0 }, { i: ids.slice().reverse(), color, emissive: 0 });
+      geo.faces.push({ i: ids, color, emissive: 0 }, { i: [ids[0], ...ids.slice(1).reverse()], color, emissive: 0 });
     }
   };
   // Foliage as the hand-painted bushes do it: a dark core dome, then rosettes of five or six pointed leaves
