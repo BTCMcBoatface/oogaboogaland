@@ -2220,18 +2220,6 @@
     // most columns hold neither, so rays cross them on voxels alone.
     const sightColumnWork = new Uint8Array(SX * SZ);
     for (let i = 0; i < SX * SZ; i++) if (windowColumns[i] || rampCollision[i] || basementCollision[i]) sightColumnWork[i] = 1;
-    // Exact occupied height bounds let a point ray cross an empty column
-    // interval without visiting each vertical voxel. Fragment/ramp columns
-    // retain the ordinary traversal and their convex clipping below.
-    const sightColumnLow = new Uint16Array(SX * SZ), sightColumnHigh = new Uint16Array(SX * SZ);
-    sightColumnLow.fill(SY);
-    for (let gx = 0; gx < SX; gx++) for (let gz = 0; gz < SZ; gz++) {
-      const column = gx * SZ + gz;
-      for (let gy = 0; gy < SY; gy++) if (data[(gx * SY + gy) * SZ + gz]) {
-        if (sightColumnLow[column] === SY) sightColumnLow[column] = gy;
-        sightColumnHigh[column] = gy + 1;
-      }
-    }
     const sightClearAt = (x, y, z, toX, toY, toZ) => {
       const dx = toX - x, dy = toY - y, dz = toZ - z;
       if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < 1e-12) return rockMaterialAt(x, y, z) === null;
@@ -2250,16 +2238,8 @@
       let tx = dx ? (ORIGIN.x + (gx + (dx > 0 ? 1 : 0)) * UNIT - x) / dx : Infinity, ty = dy ? (ORIGIN.y + (gy + (dy > 0 ? 1 : 0)) * UNIT - y) / dy : Infinity, tz = dz ? (ORIGIN.z + (gz + (dz > 0 ? 1 : 0)) * UNIT - z) / dz : Infinity;
       let t = lo, previousColumn = -1;
       for (let step = 0; step < SX + SY + SZ + 3; step++) {
-        const column = gx * SZ + gz, columnEnd = Math.min(tx, tz, hi);
-        let end = Math.min(columnEnd, ty), empty = false;
-        if (!sightColumnWork[column]) {
-          const a = y + dy * t, b = y + dy * columnEnd;
-          empty = !sightColumnHigh[column]
-            || Math.min(a, b) >= ORIGIN.y + sightColumnHigh[column] * UNIT + 1e-12
-            || Math.max(a, b) < ORIGIN.y + sightColumnLow[column] * UNIT - 1e-12;
-          if (empty) end = columnEnd;
-        }
-        if (!empty && end > t + 1e-12) {
+        const end = Math.min(tx, ty, tz, hi), column = gx * SZ + gz;
+        if (end > t + 1e-12) {
           if (data[(gx * SY + gy) * SZ + gz]) return false;
           if (column !== previousColumn && sightColumnWork[column]) {
             const columnEnd = Math.min(tx, tz, hi), a = y + dy * t, b = y + dy * columnEnd, minY = Math.min(a, b), maxY = Math.max(a, b), pieces = windowColumns[column];
@@ -2283,10 +2263,7 @@
         }
         if (end >= hi - 1e-12) break;
         if (tx <= end + 1e-12) { gx += sx; tx += stepX; }
-        if (ty <= end + 1e-12) {
-          const count = empty ? Math.floor((end - ty + 1e-12) / stepY) + 1 : 1;
-          gy += sy * count; ty += stepY * count;
-        }
+        if (ty <= end + 1e-12) { gy += sy; ty += stepY; }
         if (tz <= end + 1e-12) { gz += sz; tz += stepZ; }
         if (gx < 0 || gx >= SX || gy < 0 || gy >= SY || gz < 0 || gz >= SZ) break;
         t = end;
