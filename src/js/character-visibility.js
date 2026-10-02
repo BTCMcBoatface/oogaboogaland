@@ -3,18 +3,10 @@
   "use strict";
   const BL = window.BL = window.BL || {}, { mat4 } = BL.math, { boundsOf } = BL.scene;
   const UP = { x: 0, y: 1, z: 0 }, VERTICES = 64, FRAGMENTS = 1024, EPS = 1e-10;
-  const meshes = new WeakMap(), bakes = new WeakMap();
+  const meshes = new WeakMap();
   const meshOf = (geometry) => {
     let mesh = meshes.get(geometry);
     if (mesh) return mesh;
-    // Scene visits wrap the same immutable vertices and face indices in fresh
-    // geometry objects. Reuse their BVH instead of retaining duplicate builds.
-    const baked = bakes.get(geometry.verts);
-    if (baked) for (const bake of baked) {
-      let same = bake.faces.length === geometry.faces.length;
-      for (let i = 0; same && i < bake.faces.length; i++) same = bake.faces[i] === geometry.faces[i].i;
-      if (same) { meshes.set(geometry, bake.mesh); return bake.mesh; }
-    }
     const vertices = geometry.verts, nodes = [];
     let count = 0;
     for (const face of geometry.faces) if (face.i.length > 2) count += face.i.length - 2;
@@ -53,8 +45,6 @@
     };
     if (count) build(0, count, -1);
     mesh = { vertices, indices, order, nodes };
-    const bake = { faces: geometry.faces.map(face => face.i), mesh };
-    if (baked) { if (baked.length === 16) baked.shift(); baked.push(bake); } else bakes.set(geometry.verts, [bake]);
     meshes.set(geometry, mesh); return mesh;
   };
   const create = ({ root, renderer, camera, occluded = null, renderOpts = null }) => {
