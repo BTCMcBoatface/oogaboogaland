@@ -1937,6 +1937,21 @@
       return poolAlong + radius >= POOL_APPROACH.from - 1 && poolAlong - radius <= POOL_APPROACH.to + 0.5
         && Math.abs(x * POOL_Z - z * POOL_X) <= POOL_APPROACH.halfWidth + POOL_APPROACH.blend + radius;
     };
+    const stairAt = (x, y, z) => {
+      const i = column(x, z);
+      if (i < 0) return false;
+      if (rampCells[i] && Math.abs(rampFloorAt(x, z) - y) <= UNIT + 0.05) return true;
+      if (Math.abs(surfaceAt(x, z) - y) > UNIT + 0.05) return false;
+      if (Math.abs(x) < PASS_HALF && z < -MEADOW && z > -RADIUS) return true;
+      if (z >= STAIR_TERRACE.from - 1 && z <= STAIR_TERRACE.from + STAIR_TERRACE.top * 2 + 1
+        && Math.abs(x) < STAIR_TERRACE.halfWidth + STAIR_TERRACE.blend) return true;
+      const timechainAlong = x * TIMECHAIN_X + z * TIMECHAIN_Z;
+      if (timechainAlong >= TIMECHAIN.from - 1 && timechainAlong <= TIMECHAIN.from + TIMECHAIN.top * 2 + 1
+        && Math.abs(x * TIMECHAIN_Z - z * TIMECHAIN_X) < TIMECHAIN.halfWidth + TIMECHAIN.blend) return true;
+      const poolAlong = x * POOL_X + z * POOL_Z;
+      return poolAlong >= POOL_APPROACH.from - 1 && poolAlong <= POOL_APPROACH.to + 0.5
+        && Math.abs(x * POOL_Z - z * POOL_X) < POOL_APPROACH.halfWidth + POOL_APPROACH.blend;
+    };
     // Walking centerlines reuse the rendered path mask's bends; master curves stay fixed and navigation clips
     // them to the growing ring.
     const centerlines = spokes.map((s) => {
@@ -2392,6 +2407,7 @@
       windowPiecesAt: (x, z) => windowColumns[column(x, z)],
       isPath,
       overlapsStairs,
+      stairAt,
       isGrassAt,
       onLand,
       mouths,

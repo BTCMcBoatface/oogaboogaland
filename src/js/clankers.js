@@ -47,6 +47,11 @@
     const RAMP = { groundX: 0, groundZ: 0, uneven: 0 };
     const walkingRampAt = (x, y, z, heading) => !!(ctx.surfaceAt
       && BL.wallPanels.rampAt(ctx.surfaceAt, x, y, z, heading, RAMP));
+    const walkingStairsAt = (e, heading) => {
+      const p = e.root.position;
+      return !!(ctx.stairAt && ctx.stairAt(p.x, p.y, p.z))
+        || walkingRampAt(p.x, p.y, p.z, heading);
+    };
     const list = [], byOwner = new Map(), portals = new Array(sites.length).fill(null);
     // Stations are authored once in world space: { x, y, z, heading, kind,
     // side, enabled? }. labInside owns the entrance plane, independently of assignment.
@@ -3384,7 +3389,8 @@
         || Math.hypot(p.x - c.searchX, p.y - c.searchY, p.z - c.searchZ) > 0.35
         || Math.abs(Math.atan2(Math.sin(heading - c.searchHeading), Math.cos(heading - c.searchHeading))) > 0.18
         || !e.controlled && Math.hypot(e.goalX - c.searchGoalX, e.goalY - c.searchGoalY, e.goalZ - c.searchGoalZ) > 0.35
-        || caveAt(p.x, p.y, p.z) >= 0 || !e.controlled && (e.route === "exit" && e.fromSite >= 0 || e.route === "enter" || e.route === "apron")) {
+        || caveAt(p.x, p.y, p.z) >= 0 || walkingStairsAt(e, heading)
+        || !e.controlled && (e.route === "exit" && e.fromSite >= 0 || e.route === "enter" || e.route === "apron")) {
         c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = c.claimRetreat = false;
         c.claimOrder = 0; c.claimFor = -1; c.searchCursor = 0; c.retry = 0;
         if (climbTurn === e.index) climbTurn = -1;
@@ -3437,6 +3443,7 @@
     const tryClimbAlong = (e, heading, descending = false) => {
       if (!climbSolidAt || !climbSurfaceAt || e.climb.active || e.climb.retry > 0 || e.jump.active || e.drive.airborne
         || e.fire.rolling || e.pound || e.beat || e.recover > 0 || e.parked) return false;
+      if (walkingStairsAt(e, heading)) return false;
       if (descending && beginEdgeClimb(e, heading)) return true;
       if (!descending) heading = wallFaceHeading(e, heading);
       if (!Number.isFinite(heading)) return false;
@@ -3490,6 +3497,7 @@
       if (c.retry > 0) return false;
       heading = climbApproachHeading(e, heading, descending);
       if (!Number.isFinite(heading)) return false;
+      if (walkingStairsAt(e, heading)) return false;
       if (c.claimPending && c.searchDescending === descending && pendingClimbSearch(e)) {
         if (!admitClimb(e)) return false;
         c.searchPending = c.searchDeferred = false;
@@ -4944,6 +4952,7 @@
     };
     const beginEdgeClimb = (e, outward) => {
       const p = e.root.position, c = e.climb, d = e.drive;
+      if (walkingStairsAt(e, outward)) return false;
       const backing = e.controlled && Math.cos(outward - e.heading) < -0.25;
       if (d.airborne || c.active || !climbSurfaceAt
         || Math.abs(support(e, p.x, p.z, p.y, STEP) - p.y) > 0.2) return false;
@@ -4992,8 +5001,9 @@
       const speed = Math.hypot(d.vx, d.vz);
       if (speed < 0.2) return false;
       const travelHeading = Math.atan2(d.vx, d.vz);
-      if (!d.airborne && walkingRampAt(p.x, p.y, p.z, travelHeading)
-        && !cliffRiserAhead(p.x, p.z, travelHeading, 1)) return false;
+      if (ctx.stairAt && ctx.stairAt(p.x, p.y, p.z)
+        || !d.airborne && walkingRampAt(p.x, p.y, p.z, travelHeading)
+          && !cliffRiserAhead(p.x, p.z, travelHeading, 1)) return false;
       let heading = wallFaceHeading(e, travelHeading), descending = false;
       if (d.airborne && d.vy <= 0 && (!Number.isFinite(heading)
         || wallContactShare(e, p.x, p.y, p.z, heading) < WALL_ENTER_SHARE)) {
