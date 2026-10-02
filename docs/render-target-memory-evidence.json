@@ -1,631 +1,217 @@
 {
-  "baseCommit": "dab6e36bea482f2d712b65f3e2d559348400b527",
-  "renderbuffers": {
-    "method": "Independent base and head browsers; 1440x900 CSS pixels, DPR 2; four bytes per pixel per sample estimate",
-    "before": {
-      "size": {
-        "width": 1440,
-        "height": 900
-      },
-      "buffers": [
-        {
-          "requested": 4,
-          "actual": 4,
-          "w": 2039,
-          "h": 1274,
-          "format": 32856
-        },
-        {
-          "requested": 4,
-          "actual": 4,
-          "w": 2039,
-          "h": 1274,
-          "format": 32856
-        },
-        {
-          "requested": 4,
-          "actual": 4,
-          "w": 2039,
-          "h": 1274,
-          "format": 33190
-        }
-      ],
-      "bytes": 124688928
-    },
-    "after": {
-      "size": {
-        "width": 1440,
-        "height": 900
-      },
-      "buffers": [
-        {
-          "requested": 2,
-          "actual": 2,
-          "w": 2039,
-          "h": 1274,
-          "format": 32856
-        },
-        {
-          "requested": 2,
-          "actual": 2,
-          "w": 2039,
-          "h": 1274,
-          "format": 32856
-        },
-        {
-          "requested": 2,
-          "actual": 2,
-          "w": 2039,
-          "h": 1274,
-          "format": 33190
-        }
-      ],
-      "bytes": 62344464
-    },
-    "savedMiB": 59.45631408691406,
-    "console": {
-      "base": [],
-      "head": []
-    }
+  "validatedRuntime": "6d3aff6a152a134a29dd7ccf036db36118551492",
+  "base": "dab6e36bea482f2d712b65f3e2d559348400b527",
+  "environment": {
+    "date": "2026-10-02",
+    "node": "24.12.0",
+    "machine": "M1 Pro, 32 GB, AC power",
+    "fullSuiteLanes": 2,
+    "otherChromeProcessesPresent": true
   },
-  "historicalBrowserCases": [
-    {
-      "name": "8 GB boundary",
-      "passed": true,
-      "kind": "webgl2",
-      "opening": "medium",
-      "quality": "medium",
-      "drawn": 2,
-      "firstBuffers": [
+  "nativeAllocation": {
+    "base": {
+      "buffers": [
         {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
+          "requested": 4,
+          "actual": 4,
+          "w": 2039,
+          "h": 1274,
+          "format": 32856
         },
         {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
+          "requested": 4,
+          "actual": 4,
+          "w": 2039,
+          "h": 1274,
+          "format": 32856
         },
         {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
+          "requested": 4,
+          "actual": 4,
+          "w": 2039,
+          "h": 1274,
+          "format": 33190
         }
       ],
-      "error": 0
+      "logs": []
     },
-    {
-      "name": "4 GB",
-      "passed": true,
-      "kind": "webgl2",
-      "opening": "medium",
-      "quality": "medium",
-      "drawn": 2,
-      "firstBuffers": [
+    "head": {
+      "buffers": [
         {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
+          "requested": 2,
+          "actual": 2,
+          "w": 2039,
+          "h": 1274,
+          "format": 32856
         },
         {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
+          "requested": 2,
+          "actual": 2,
+          "w": 2039,
+          "h": 1274,
+          "format": 32856
         },
         {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
+          "requested": 2,
+          "actual": 2,
+          "w": 2039,
+          "h": 1274,
+          "format": 33190
         }
       ],
-      "error": 0
+      "logs": []
     },
+    "sameDimensions": true,
+    "estimatedBaseBytes": 124688928,
+    "estimatedHeadBytes": 62344464,
+    "estimatedSavingMiB": 59.45631408691406
+  },
+  "adaptiveQuality": {
+    "memoryBoot": true,
+    "healthy": true,
+    "gpuBound": true,
+    "reactsIn": 2125,
+    "reactsFast": true,
+    "ignoresSpikes": true,
+    "bounded": true,
+    "warmup": true,
+    "ignoresPauses": true,
+    "fallback": true,
+    "bootFast": true,
+    "bootMedium": true,
+    "bootLow": true,
+    "bootOneWay": true,
+    "bootKeepsCoarse": true,
+    "bootMemory": true
+  },
+  "highContextRestoration": [
     {
-      "name": "16 GB",
-      "passed": true,
-      "kind": "webgl2",
-      "opening": "high",
-      "quality": "high",
-      "drawn": 2,
-      "firstBuffers": [
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        }
-      ],
-      "error": 0,
-      "resizes": [
-        {
-          "quality": "high",
-          "size": {
-            "width": 390,
-            "height": 844
+      "name": "base",
+      "before": {
+        "frames": 21,
+        "quality": "high",
+        "ready": true
+      },
+      "lost": {
+        "ready": true,
+        "events": [
+          "lost"
+        ]
+      },
+      "after": {
+        "frames": 139,
+        "quality": "high",
+        "ready": true,
+        "events": [
+          "lost",
+          "restored"
+        ],
+        "buffers": [
+          {
+            "samples": 4,
+            "w": 1440,
+            "h": 813
           },
-          "live": 3,
-          "samples": [
-            2,
-            2,
-            2
-          ],
-          "error": 0
-        },
-        {
-          "quality": "medium",
-          "size": {
-            "width": 1920,
-            "height": 1080
+          {
+            "samples": 4,
+            "w": 1440,
+            "h": 813
           },
-          "live": 3,
-          "samples": [
-            2,
-            2,
-            2
-          ],
-          "error": 0
-        },
-        {
-          "quality": "low",
-          "size": {
-            "width": 1440,
-            "height": 900
+          {
+            "samples": 4,
+            "w": 1440,
+            "h": 813
+          }
+        ]
+      },
+      "recovered": true,
+      "logs": []
+    },
+    {
+      "name": "head",
+      "before": {
+        "frames": 24,
+        "quality": "high",
+        "ready": true
+      },
+      "lost": {
+        "ready": true,
+        "events": [
+          "lost"
+        ]
+      },
+      "after": {
+        "frames": 86,
+        "quality": "high",
+        "ready": true,
+        "events": [
+          "lost",
+          "restored"
+        ],
+        "buffers": [
+          {
+            "samples": 2,
+            "w": 1440,
+            "h": 813
           },
-          "live": 0,
-          "samples": [],
-          "error": 0
-        },
-        {
-          "quality": "high",
-          "size": {
-            "width": 1440,
-            "height": 900
+          {
+            "samples": 2,
+            "w": 1440,
+            "h": 813
           },
-          "live": 3,
-          "samples": [
-            2,
-            2,
-            2
-          ],
-          "error": 0
-        }
-      ],
-      "trips": [
-        {
-          "scene": "lab",
-          "records": 203,
-          "nodes": 1060,
-          "targets": 120,
-          "error": 0
-        },
-        {
-          "scene": "lab",
-          "records": 203,
-          "nodes": 1060,
-          "targets": 120,
-          "error": 0
-        }
-      ]
-    },
-    {
-      "name": "missing hint",
-      "passed": true,
-      "kind": "webgl2",
-      "opening": "high",
-      "quality": "high",
-      "drawn": 2,
-      "firstBuffers": [
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        }
-      ],
-      "error": 0
-    },
-    {
-      "name": "zero hint",
-      "passed": true,
-      "kind": "webgl2",
-      "opening": "high",
-      "quality": "high",
-      "drawn": 2,
-      "firstBuffers": [
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        }
-      ],
-      "error": 0
-    },
-    {
-      "name": "NaN hint",
-      "passed": true,
-      "kind": "webgl2",
-      "opening": "high",
-      "quality": "high",
-      "drawn": 2,
-      "firstBuffers": [
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        },
-        {
-          "samples": 2,
-          "w": 1440,
-          "h": 813
-        }
-      ],
-      "error": 0
-    },
-    {
-      "name": "touch screen without hint",
-      "passed": true,
-      "kind": "webgl2",
-      "opening": "medium",
-      "quality": "medium",
-      "drawn": 2,
-      "firstBuffers": [
-        {
-          "samples": 2,
-          "w": 487,
-          "h": 1055
-        },
-        {
-          "samples": 2,
-          "w": 487,
-          "h": 1055
-        },
-        {
-          "samples": 2,
-          "w": 487,
-          "h": 1055
-        }
-      ],
-      "error": 0
-    },
-    {
-      "name": "Canvas 2D at 8 GB",
-      "passed": true,
-      "kind": "canvas2d",
-      "quality": "low",
-      "drawn": 1,
-      "firstBuffers": [],
-      "error": 0
+          {
+            "samples": 2,
+            "w": 1440,
+            "h": 813
+          }
+        ]
+      },
+      "recovered": true,
+      "logs": []
     }
   ],
-  "historicalPerformance": {
-    "base": [
-      {
-        "check": "FAIL wall movement performance: ordinary movement stays responsive at a high-density desktop size",
-        "result": {
-          "fps": 55.949645319179396,
-          "p95": 16.800000000000182,
-          "max": 316.6999999999998,
-          "worst": {
-            "gap": 314.8999999910593,
-            "at": 388.0000000029804,
-            "updateMs": 5,
-            "renderMs": 2.5999999940395355,
-            "overlayMs": 5.799999997019768,
-            "donated": false
-          },
-          "outlined": 0,
-          "samples": 280,
-          "travel": 2.4559749999999996,
-          "donated": false,
-          "particles": 0,
-          "quality": "high"
-        }
-      },
-      {
-        "check": "FAIL wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
-        "result": {
-          "fps": 32.34953472586621,
-          "p95": 50,
-          "max": 50.100000000000364,
-          "worst": {
-            "gap": 53.69999998807907,
-            "at": 7.999999994039172,
-            "updateMs": 1.7999999970197678,
-            "renderMs": 2.4000000059604645,
-            "overlayMs": 40.79999999701977,
-            "donated": false
-          },
-          "outlined": 162,
-          "samples": 162,
-          "travel": 3.8742250000000045,
-          "donated": true,
-          "particles": 26,
-          "quality": "low"
-        }
-      }
-    ],
-    "changed": [
-      {
-        "check": "FAIL wall movement performance: ordinary movement stays responsive at a high-density desktop size",
-        "result": {
-          "fps": 59.791629171844676,
-          "p95": 16.799999999999272,
-          "max": 50,
-          "worst": {
-            "gap": 44.30000001192093,
-            "at": -15.799999994039354,
-            "updateMs": 20.099999994039536,
-            "renderMs": 5.700000002980232,
-            "overlayMs": 16.799999997019768,
-            "donated": false
-          },
-          "outlined": 0,
-          "samples": 299,
-          "travel": 2.7163749999999798,
-          "donated": false,
-          "particles": 0,
-          "quality": "high"
-        }
-      },
-      {
-        "check": "FAIL wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
-        "result": {
-          "fps": 32.938733954883176,
-          "p95": 50,
-          "max": 50,
-          "worst": {
-            "gap": 56.099999994039536,
-            "at": 9.599999994039536,
-            "updateMs": 2.3999999910593033,
-            "renderMs": 2.7000000029802322,
-            "overlayMs": 39.1000000089407,
-            "donated": false
-          },
-          "outlined": 165,
-          "samples": 165,
-          "travel": 3.7478999999999676,
-          "donated": true,
-          "particles": 26,
-          "quality": "low"
-        }
-      }
-    ]
-  },
-  "validation": {
-    "date": "2026-10-02",
-    "sourceHead": "6d3aff6a152a134a29dd7ccf036db36118551492",
-    "environment": {
-      "node": "24.12.0",
-      "hardware": "M1 Pro, 32 GB",
-      "power": "AC",
-      "lanes": 2,
-      "otherChromeProcessesPresent": true
-    },
-    "fullCommand": "LANES=2 npm run test:full",
-    "head": {
-      "reportedFailLines": 81,
-      "uniqueFailureNames": 79,
-      "unitFixtureException": true,
-      "finalTotalPrinted": false,
-      "performance": [
-        {
-          "name": "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
-          "detail": {
-            "fps": 59.791629171880295,
-            "p95": 16.800000000000182,
-            "max": 50,
-            "worst": {
-              "gap": 45.29999999701977,
-              "at": -15.799999997019768,
-              "updateMs": 20.80000001192093,
-              "renderMs": 5.299999997019768,
-              "overlayMs": 17.299999997019768,
-              "donated": false
-            },
-            "outlined": 0,
-            "samples": 299,
-            "travel": 2.712500000000004,
-            "donated": false,
-            "particles": 0,
-            "quality": "high"
-          }
-        },
-        {
-          "name": "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
-          "detail": {
-            "fps": 29.452736318373024,
-            "p95": 50,
-            "max": 66.60000000000036,
-            "worst": {
-              "gap": 63.5,
-              "at": 3158.4000000059605,
-              "updateMs": 18.299999997019768,
-              "renderMs": 2.5,
-              "overlayMs": 33.79999999701977,
-              "donated": true
-            },
-            "outlined": 148,
-            "samples": 148,
-            "travel": 4.133074999999966,
-            "donated": true,
-            "particles": 26,
-            "quality": "low"
-          }
-        }
-      ]
-    },
-    "base": {
-      "reportedFailLines": 80,
-      "uniqueFailureNames": 78,
-      "unitFixtureException": true,
-      "finalTotalPrinted": false,
-      "performance": [
-        {
-          "name": "wall movement performance: ordinary movement stays responsive at a high-density desktop size",
-          "detail": {
-            "fps": 35.383723487174805,
-            "p95": 33.5,
-            "max": 166.60000000000036,
-            "worst": {
-              "gap": 114.40000000596046,
-              "at": 2885.7000000029802,
-              "updateMs": 2.2999999970197678,
-              "renderMs": 2.5,
-              "overlayMs": 0.9000000059604645,
-              "donated": false
-            },
-            "outlined": 0,
-            "samples": 177,
-            "travel": 2.579975000000003,
-            "donated": false,
-            "particles": 0,
-            "quality": "low"
-          }
-        },
-        {
-          "name": "wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
-          "detail": {
-            "fps": 32.61539685376879,
-            "p95": 50,
-            "max": 116.70000000000073,
-            "worst": {
-              "gap": 141.5,
-              "at": 2645.000000005961,
-              "updateMs": 3.1000000089406967,
-              "renderMs": 2.5,
-              "overlayMs": 17.599999994039536,
-              "donated": true
-            },
-            "outlined": 164,
-            "samples": 164,
-            "travel": 2.3249999999999993,
-            "donated": true,
-            "particles": 26,
-            "quality": "low"
-          }
-        }
-      ]
-    },
+  "fullSuite": {
+    "command": "LANES=2 npm run test:full",
+    "headFailLines": 81,
+    "baseFailLines": 80,
+    "headUniqueFailures": 79,
+    "baseUniqueFailures": 78,
     "sharedFailureNames": 76,
-    "headOnly": [
-      "DSB plaza webgl2: Shop purchases still work",
-      "dsb gameplay: throwing consumes inventory and creates a visible moving tomato that splats and expires",
-      "soak: dsb cycles: six round trips retain node, target, tween and DOM counts"
-    ],
-    "baseOnly": [
-      "dsb gameplay webgl2",
-      "hub melee: one swing breaks a box, two a barrel and four a rock, and a broken rock is back whole within a minute"
-    ],
-    "qualityProbe": {
-      "memoryBoot": true,
-      "healthy": true,
-      "gpuBound": true,
-      "reactsIn": 2125,
-      "reactsFast": true,
-      "ignoresSpikes": true,
-      "bounded": true,
-      "warmup": true,
-      "ignoresPauses": true,
-      "fallback": true,
-      "bootFast": true,
-      "bootMedium": true,
-      "bootLow": true,
-      "bootOneWay": true,
-      "bootKeepsCoarse": true,
-      "bootMemory": true
-    },
-    "contextRecovery": [
-      {
-        "name": "base",
-        "before": {
-          "frames": 23,
-          "quality": "medium",
-          "ready": true
-        },
-        "lost": {
-          "ready": true,
-          "events": [
-            "lost"
-          ]
-        },
-        "after": {
-          "frames": 57,
-          "quality": "medium",
-          "ready": true,
-          "events": [
-            "lost",
-            "restored"
-          ]
-        },
-        "recovered": true,
-        "logs": []
+    "bothAbort": "breakables unit fixture: missing crew.player.root; reading position",
+    "completed": false,
+    "finalPassTotals": null
+  },
+  "controlledDSB": {
+    "control": "Existing PR 122 compositor-safe native click helper; original assertions unchanged; diagnostic copies only",
+    "baseAssertionsPassed": 54,
+    "headAssertionsPassed": 54,
+    "consoleClean": true,
+    "sixReturns": {
+      "control": "fixed low quality",
+      "bothBeforeAndAfter": {
+        "allNodes": 2775,
+        "targets": 622,
+        "tweens": 0,
+        "dom": 2831
       },
-      {
-        "name": "head",
-        "before": {
-          "frames": 23,
-          "quality": "medium",
-          "ready": true
-        },
-        "lost": {
-          "ready": true,
-          "events": [
-            "lost"
-          ]
-        },
-        "after": {
-          "frames": 59,
-          "quality": "medium",
-          "ready": true,
-          "events": [
-            "lost",
-            "restored"
-          ]
-        },
-        "recovered": true,
-        "logs": []
-      }
-    ],
-    "expandedCases": {
-      "behaviorChecksReachedConsole": 7,
-      "cleanConsoleCases": 0,
-      "warning": "Canvas2D readback warning after scene returns",
-      "excludedCase": "16 GB: incorrect context-loss readiness wait; corrected event-based context probe recorded separately"
+      "stable": true
     },
-    "baseM1TotalMemoryVerified": false
-  }
+    "originalDifferences": "Shop click hits tomato on both; head throw hits DIV, base throw later aborts at null projection; original head soak changes medium to low."
+  },
+  "performance": {
+    "coveredBaseFPS": 32.615,
+    "coveredHeadFPS": 29.453,
+    "bothCoveredP95ms": 50,
+    "bothCoveredQuality": "low",
+    "ordinaryBaseFPS": 35.38,
+    "ordinaryHeadFPS": 59.79,
+    "bothOrdinaryFail": true,
+    "equivalenceOrImprovementEstablished": false
+  },
+  "limitations": [
+    "Renderbuffer estimate assumes four bytes per pixel per sample; excludes textures, geometry, driver padding and process overhead.",
+    "Base M1 total-tab 700\u2013750 MB target unverified.",
+    "Controlled DSB results are diagnostic comparisons, not full-suite passes.",
+    "Expanded scene-return run: seven cases hit inherited Canvas console warning; eighth used invalid ready-state loss probe and is excluded. Corrected native-event context probe passes separately."
+  ]
 }
