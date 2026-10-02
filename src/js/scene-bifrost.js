@@ -1,17 +1,18 @@
 // ₿IFRÖST: the chamber of windows onto other worlds. A short tunnel from the island opens into a round hall of stone
 // and bronze; the ₿ mechanism turns at its middle, and round the wall stand the windows, an open world's labelled
-// over its arch. Travel is walking: an Ooga that walks through a window's field goes to that world, and one that walks
-// into a window whose world is not open yet crosses its reflection and emerges from the next mirror. A window's frame
-// glows brighter as someone comes near. Nobody but an Ooga crosses, so a visit without one only looks.
+// over its arch. Travel is walking: an Ooga that walks through a window's field goes to that world (into the poker room
+// at once, as its mirror back does), and one that walks into a window whose world is not open yet crosses its
+// reflection and emerges from the next mirror. A window's frame glows brighter as someone comes near, in its world's
+// colour, and the mechanism charges toward that colour too. Nobody but an Ooga crosses, so a visit without one only looks.
 //
 // Whoever walked in stays themselves: the Ooga the island handed over (`world.pilot`), or on a page that opens here,
-// `character=`. From the island it comes in through the tunnel's field, from DSB out of the DSB window; on a page that
-// opens here it stands at the tunnel's inner end. Walking back out through the field, Escape and the Leave button all
-// take it back out to the island's gate.
+// `character=`. From the island it comes in through the tunnel's field, from a world out of that world's window; on a
+// page that opens here it stands at the tunnel's inner end. Walking back out through the field, Escape and the Leave
+// button all take it back out to the island's gate.
 //
-// The DSB window shows DSB Land itself: its land is built off the graph and photographed once a page from above its
-// falls, in its own light, while the screen is dark, and the picture hangs at the end of the window's passage. Until
-// then the window shows a simple night over DSB's falls.
+// An open world's window shows that world itself: its models are built off the graph and photographed once a page (the
+// poker room once for each cave theme it shows), in its own light, while the screen is dark, and the picture hangs at
+// the end of the window's passage. Until then the window shows its row's stand-in.
 (() => {
   "use strict";
   const BL = window.BL = window.BL || {};
@@ -35,6 +36,7 @@
     entrance: view(0, 3.2, -2, 0, 0.12, 13),
     core: view(0, 3.4, 0, 0.5, 0.16, 9.5),
     dsb: toward(WINDOWS.findIndex((w) => w.id === "dsb")),
+    poker: toward(WINDOWS.findIndex((w) => w.id === "poker")),
     // Low by the dais, looking up the beam through the open dome, the ringed giant beside it.
     sky: view(0, 7, 0, -0.3, -0.7, 7)
   };
@@ -57,6 +59,13 @@
   const CHARGE_EASE = 2, BURST_GAP = [4.5, 1.6], BURST_FROM = 0.3;
   const BAND = 9, BAND_RATE = [0.3, 2.4], SURGE_TIME = 1.3, SURGE_WIDTH = 2.5;
   const SPARKLES = ["#ffc83a", "#fff2b8", "#7fe0ff", "#ffffff"].map((c) => models.particleGeometry(c, 0.1, 1));
+  // A burst charged toward an open world's window throws that world's sparkles instead: its colour, paler, warmed toward
+  // gold, and white. Cached by colour.
+  const sparkleSets = new Map();
+  const sparklesOf = (tint) => {
+    if (!sparkleSets.has(tint)) sparkleSets.set(tint, [tint, BM.blend(tint, "#ffffff", 0.45), BM.blend(tint, "#ffc83a", 0.3), "#ffffff"].map((c) => models.particleGeometry(c, 0.1, 1)));
+    return sparkleSets.get(tint);
+  };
   // How fast the heavens turn (radians a second: a turn in a little over an hour), how long a shooting star lasts, and
   // how long between them.
   const SKY_TURN = 0.0015, METEOR_LIFE = 0.8, METEOR_GAP = [3, 9];
@@ -71,7 +80,7 @@
   const TAU = Math.PI * 2;
   const RING_SPIN = [0.5, -0.35, 0.25], RING_TILT = [[Math.PI / 2, 0], [1.1, 0.5], [0.4, -0.9]];
   const MIRROR_ROTATION = math.quat.create();
-  // How many times, half a second apart, a page that opens here tries to photograph DSB Land.
+  // How many times, half a second apart, a page that opens here tries to photograph the open worlds.
   const PICTURE_TRIES = 10;
   // How far past the way in's field the island's picture of the islet hangs, square to the tunnel, as the Lightning
   // Factory hangs its own: far enough that it lines up with the islet seen through the field from anywhere in the hall.
@@ -84,45 +93,65 @@
   // In from the island's gate: a few steps inside the field, walking on down the tunnel toward the mechanism, the camera
   // just inside the field behind it.
   const GATE = { position: { x: 0, y: 0, z: ENTRY.field - 3 }, target: { x: 0, y: 1, z: ENTRY.field - 3 }, yaw: 0, pitch: 0.16, dist: 2.7 };
-  // The picture of DSB Land: taken from above its falls, looking down over the turtle to the far stars, in DSB's own
-  // light (scene-dsb.js: `RENDER`, and the two lamps `buildLand` hangs), then given back the saturation the page's
-  // grade adds again and tinted a little toward the field's blue.
-  const PREVIEW = {
-    width: 360, up: 0.36, eye: { x: 0, y: 40, z: 84 }, look: { x: 0, y: -3, z: 0 }, colour: 0.83, mist: 0.08, haze: [70, 120, 235],
-    opts: {
-      clear: [0.025, 0.014, 0.06], horizon: [0.11, 0.04, 0.19], zenith: [0.008, 0.006, 0.025], sky: [0.52, 0.43, 0.7], ground: [0.26, 0.17, 0.32],
-      sun: [0.8, 0.7, 0.9], light: { x: -0.4, y: 0.8, z: 0.4 }, stars: 1, shadowCenter: { x: 0, y: 0, z: 0 }, shadowExtent: 48, bloomStrength: 0.5,
-      lights: new Float32Array(80), lightCount: 2
+  // Each open world's picture, by scene: its models built off the graph (`build`, given the world's looks) and seen from
+  // `eye` toward `look`, `up` the tangent of half the view's height, in that world's own light (`opts`), then given back
+  // the saturation the page's grade adds again (`colour`) and misted a little toward the field's blue. DSB Land is seen
+  // from above its falls, down over the turtle to the far stars, in DSB's light (scene-dsb.js: `RENDER`, and the two
+  // lamps `buildLand` hangs); the poker room from over the aisle by its mirror, as its own view arrives, down between its
+  // tables in the cave theme the looks name, under its tables' lamps and its room lights (scene-poker.js lights it so).
+  const DSB_LIGHT = {
+    clear: [0.025, 0.014, 0.06], horizon: [0.11, 0.04, 0.19], zenith: [0.008, 0.006, 0.025], sky: [0.52, 0.43, 0.7], ground: [0.26, 0.17, 0.32],
+    sun: [0.8, 0.7, 0.9], light: { x: -0.4, y: 0.8, z: 0.4 }, stars: 1, shadowCenter: { x: 0, y: 0, z: 0 }, shadowExtent: 48, bloomStrength: 0.5,
+    lights: new Float32Array(80), lightCount: 2
+  };
+  DSB_LIGHT.lights.set([-24, 5, -15, 14, 0.8, 0.25, 1, 0, -12, 5, -15, 14, 1, 0.8, 0.2, 0]);
+  const POKER_LIGHT = {
+    clear: [0.1, 0.12, 0.09], sky: null, ground: null, direct: null, directStrength: 0.38, ambientFloor: 0.48, sun: { x: 0.2, y: 1, z: 0.3 },
+    shadowCenter: { x: 0, y: 1.5, z: 0 }, shadowExtent: 35, bloomStrength: 0.24, lights: new Float32Array(13 * 8), lightCount: 13
+  };
+  const pokerLight = (theme) => {
+    POKER_LIGHT.sky = theme.sky; POKER_LIGHT.ground = theme.ground; POKER_LIGHT.direct = theme.direct; POKER_LIGHT.ambientFloor = theme.ambient;
+    BL.pokerModels.TABLES.forEach((p, i) => POKER_LIGHT.lights.set([p.x, 5.1, p.z, 14, ...theme.tableLight, 0], i * 8));
+    for (let i = 0; i < 3; i++) POKER_LIGHT.lights.set([0, 6.15, (i - 1) * 24, 13, ...theme.roomLight, 0], (10 + i) * 8);
+    return POKER_LIGHT;
+  };
+  const SHOTS = {
+    dsb: {
+      width: 360, up: 0.36, eye: { x: 0, y: 40, z: 84 }, look: { x: 0, y: -3, z: 0 }, colour: 0.83, mist: 0.08, haze: [70, 120, 235],
+      build: () => BL.dsbModels.build().root, opts: () => DSB_LIGHT
+    },
+    poker: {
+      width: 360, up: 0.42, eye: { x: 0, y: 8.2, z: 33 }, look: { x: 0, y: 1.2, z: 6 }, colour: 0.83, mist: 0.05, haze: [70, 120, 235],
+      build: (look) => BL.pokerModels.build(look.theme.id).root, opts: (look) => pokerLight(look.theme)
     }
   };
-  PREVIEW.opts.lights.set([-24, 5, -15, 14, 0.8, 0.25, 1, 0, -12, 5, -15, 14, 1, 0.8, 0.2, 0]);
 
   let renderer, canvas, game, world, go, root, camera, hud, hooks, input, pilot, fx, agentPlay = null;
   let people = null, avatar = null, playerWorld = null, scene = null, leaving = false, dust = null, pictureTries = 0, pictureWait = 0;
   const targets = [];
 
-  // One picture of DSB Land for the page, kept on `world`; true once it exists. Built from DSB's own models off the
-  // graph, drawn once into the scene canvas and read straight back, as the island photographs itself for the Lightning
-  // Factory: the frame is never shown, since the scene draws over it before the browser presents. DSB's GPU records are
-  // released at once, so nothing of its land stays behind.
+  // One picture of each open world for the page, kept on `world.windowViews` by its looks' key (DSB Land's as `dsb`).
+  // Built from the world's own models off the graph, drawn once into the scene canvas and read straight back, as the
+  // island photographs itself for the Lightning Factory: the frame is never shown, since the scene draws over it before
+  // the browser presents. The models' GPU records are released at once, so nothing of them stays behind.
   // The renderer can take a picture once its programs are ready and the canvas has a size: a hidden page's has none.
   const canPicture = () => renderer.ready && canvas.clientWidth > 0 && canvas.clientHeight > 0;
-  const takePicture = () => {
+  const takePicture = (look, P) => {
     const views = world.windowViews || (world.windowViews = {});
-    if (views.dsb) return true;
+    if (views[look.key]) return true;
     if (!canPicture()) return false;
-    const P = PREVIEW, pic = BM.passage().picture, W = canvas.width, H = canvas.height, aspect = W / H;
+    const pic = BM.passage().picture, W = canvas.width, H = canvas.height, aspect = W / H;
     const across = P.up * pic.w / pic.h, t = Math.max(P.up, across / aspect);
     const shot = createCamera({ fov: 2 * Math.atan(t) * 180 / Math.PI, near: 0.5, far: 260 });
     Object.assign(shot.position, P.eye);
     Object.assign(shot.target, P.look);
-    const land = BL.dsbModels.build(), drawn = renderer.render(land.root, shot, P.opts);
+    const land = P.build(look), drawn = renderer.render(land, shot, P.opts(look));
     const release = (node) => {
       if (node.geometry) renderer.releaseGeometry(node.geometry);
       for (const child of node.children) release(child);
     };
     if (!drawn) {
-      release(land.root);
+      release(land);
       return false;
     }
     let src = canvas, sx = W / 2 * (1 - across / (t * aspect)), sy = H / 2 * (1 - P.up / t), sw = W - 2 * sx, sh = H * P.up / t;
@@ -137,7 +166,7 @@
     out.width = w; out.height = h;
     g.imageSmoothingQuality = "high";
     g.drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
-    release(land.root);
+    release(land);
     // The page grades what it draws, so a picture of a graded frame is graded twice: take back the saturation the
     // grade adds (WebGL only; Canvas 2D has no grade), and mist it toward the field's blue.
     const colour = renderer.kind === "webgl2" ? P.colour : 1, pixels = g.getImageData(0, 0, w, h), d = pixels.data;
@@ -148,17 +177,26 @@
     g.putImageData(pixels, 0, 0);
     const image = new Image();
     image.src = out.toDataURL("image/jpeg", 0.9);
-    views.dsb = { width: w, height: h, load: () => image };
+    views[look.key] = { width: w, height: h, load: () => image };
     return true;
   };
-  // A travel window's picture: DSB Land's photograph once there is one, the stand-in until then.
+  // The open worlds of a visit, each row with its looks now, read once so the windows and their pictures agree.
+  const openLooks = () => WINDOWS.filter((row) => row.kind === "travel" && BL.scenes[row.scene]).map((row) => ({ row, look: BM.lookOf(row) }));
+  // Every open world's picture; true once they all exist.
+  const takePictures = (looks) => {
+    let all = true;
+    for (const { row, look } of looks) if (!takePicture(look, SHOTS[row.scene])) all = false;
+    return all;
+  };
+  // A travel window's picture: its world's photograph once there is one, the stand-in until then.
   const hangPicture = (w) => {
-    const asset = w.row.scene === "dsb" && world.windowViews && world.windowViews.dsb;
+    if (w.picture.owned) return;
+    const asset = world.windowViews && world.windowViews[w.look.key];
     if (asset) {
       w.picture.geometry = BM.pictureQuad(asset, BM.passage().picture);
       w.picture.owned = true;
     } else {
-      w.picture.geometry = BM.dsbStandIn();
+      w.picture.geometry = BM.standIn(w.look.stand);
     }
   };
 
@@ -172,7 +210,7 @@
   const travel = (w) => {
     if (leaving) return;
     world.pilot = avatar.traits.name;
-    if (!go(w.row.scene, null, w.linked)) return;
+    if (!go(w.row.scene, null, !!w.row.instant)) return;
     leaving = true;
     pilot.setActive(false);
   };
@@ -191,8 +229,8 @@
 
   // The chamber for a visit: the hall, the mechanism and the tunnel from the cached builds, then each window by the
   // kind its row resolves to now: a travel window whose world is not open is a mirror instead.
-  const build = () => {
-    const s = { windows: [], kinds: [], rings: [] };
+  const build = (looks) => {
+    const s = { windows: [], kinds: [], rings: [], looks, lead: null, step: 0 };
     const hall = BM.hall(), pillars = BM.pillars(), tunnel = BM.tunnel(), field = BM.entryField(), name = BM.name(), base = BM.coreBase(), lit = BM.lighting();
     const outside = world.bifrostView;
     s.core = createNode({ geometry: base.stone });
@@ -233,7 +271,7 @@
     addChild(root, s.glyph, ...s.beam.map((b) => b.node), ...s.rings);
     // The mechanism's charge, the bands running up its beam and a burst's surge (1 when none is climbing), and its two
     // shockwaves: one round the ₿, one across the floor.
-    s.charge = 0; s.flare = 0; s.burstWait = BURST_GAP[0]; s.bob = 0; s.flow = 0; s.surge = 1;
+    s.charge = 0; s.flare = 0; s.burstWait = BURST_GAP[0]; s.bob = 0; s.flow = 0; s.surge = 1; s.stepLead = null;
     s.shocks = [[CORE.glyphY, 5], [0.03, 9]].map(([y, reach]) => {
       const node = createNode({ position: { x: 0, y, z: 0 }, geometry: BM.shockwave(), visible: false, sightHidden: true });
       addChild(root, node);
@@ -265,23 +303,24 @@
     // world is not open is a mirror instead.
     const winOpening = { minX: -WINDOW.halfW, maxX: WINDOW.halfW, floorY: 0, ceilingY: WINDOW_TOP };
     WINDOWS.forEach((row, i) => {
-      const f = BM.frameOf(i), kind = row.kind === "travel" && !BL.scenes[row.scene] ? "mirror" : row.kind;
-      const linked = kind === "mirror" && !!row.scene && !!BL.scenes[row.scene];
+      const f = BM.frameOf(i), open = looks.find((o) => o.row === row), kind = open ? "travel" : "mirror";
       const node = createNode({ position: { x: f.x, y: 0, z: f.z }, rotation: { x: 0, y: f.ry, z: 0 } }), stone = createNode({ geometry: BM.archStone() });
       const neon = createNode({ geometry: BM.archGlow(), sightHidden: true });
       addChild(node, stone, neon);
-      if (kind === "travel" || linked) {
+      if (kind === "travel") {
         const label = FM.label(row.label, "", { height: 1.1 }), board = createNode({ position: { x: 0, y: WINDOW_TOP + BM.FRAME.band + 1.15, z: BM.FRAME.front + 0.2 } });
         addChild(board, createNode({ geometry: BM.hanger(label.width, 1.35, BM.FRAME.front + 0.2) }), createNode({ geometry: label.back }), createNode({ geometry: label.face }));
         addChild(node, board);
       }
       addChild(root, node);
-      const w = { row, kind, linked, node, neon, ribs: null, rim: null, rims: null, tint: null, sn: Math.sin(f.bearing), c: Math.cos(f.bearing), phase: null, body: null, face: null, picture: null, light: -1, near: 0, hum: Math.random() * 0.3, transform: null, yaw: 0, crossings: 0 };
+      const w = { row, kind, look: open ? open.look : null, node, neon, ribs: null, rim: null, rims: null, tint: null, charge: null, sparkles: null, sn: Math.sin(f.bearing), c: Math.cos(f.bearing), phase: null, body: null, face: null, picture: null, light: -1, near: 0, hum: Math.random() * 0.3, transform: null, yaw: 0, crossings: 0 };
       if (kind === "travel") {
-        const passage = BM.passage();
-        w.rims = Array.from({ length: BM.RIM_STEPS }, (_, k) => BM.portalRim(row.tint, k));
+        const passage = BM.passage(), tint = w.look.tint;
+        w.rims = Array.from({ length: BM.RIM_STEPS }, (_, k) => BM.portalRim(tint, k));
         w.rim = createNode({ geometry: w.rims[0], sightHidden: true });
-        w.tint = math.hexToRgb(row.tint).map((v) => v / 255);
+        w.tint = math.hexToRgb(tint).map((v) => v / 255);
+        w.charge = BM.charged(tint);
+        w.sparkles = sparklesOf(tint);
         addChild(node, w.rim);
         w.picture = createNode({ sightHidden: true });
         w.ribs = createNode({ geometry: passage.glow, sightHidden: true });
@@ -302,7 +341,7 @@
       // A reflective face owns its contact atlas; the hidden ripple field
       // cannot sample contacts. Travel fields use their existing atlas.
       w.body = w.face ? BL.mirrorBody.create(w.face, new Map()) : w.phase.body;
-      w.tip = kind === "travel" || linked ? `${row.name} · walk through to travel` : TIPS.mirror[0];
+      w.tip = kind === "travel" ? `${row.name} · ${TIPS.travel[0]}` : TIPS.mirror[0];
       s.windows.push(w);
       s.kinds.push(kind);
       input.add(stone, { kind: "window", window: w }, { radius: 3 });
@@ -310,7 +349,7 @@
     });
     // Closed-world mirrors form a loop. One rigid transform per doorway
     // preserves its local crossing point and turns inward travel into an exit.
-    const mirrors = s.windows.filter((w) => w.kind === "mirror" && !w.linked);
+    const mirrors = s.windows.filter((w) => w.kind === "mirror");
     for (let i = 0; i < mirrors.length; i++) {
       const w = mirrors[i], other = mirrors[(i + 1) % mirrors.length];
       const yaw = other.node.rotation.y - w.node.rotation.y + Math.PI, c = Math.cos(yaw), sn = Math.sin(yaw);
@@ -329,7 +368,7 @@
 
   // Point lights, most important first so the lowest tier keeps them: the mechanism and the crown over it, the field
   // at the way out, then each window, mirrors too; the lanterns share what is left, each flickering like a flame.
-  const LANTERN_GLOW = [1.3, 0.8, 0.36], LANTERN_REACH = 7.5, WINDOW_GLOW = [0.4, 0.65, 1];
+  const LANTERN_GLOW = [1.3, 0.8, 0.36], LANTERN_REACH = 7.5, WINDOW_GLOW = [0.4, 0.65, 1], CORE_GLOW = [0.85, 0.55, 0.22];
   let fixedLights = 0;
   const lamp = (i, x, y, z, radius, r, g, b) => {
     const o = i * 8, l = RENDER_OPTS.lights;
@@ -337,7 +376,7 @@
   };
   const lightUp = (s) => {
     let n = 0;
-    lamp(n++, 0, CORE.glyphY, 0, 13, 0.85, 0.55, 0.22);
+    lamp(n++, 0, CORE.glyphY, 0, 13, ...CORE_GLOW);
     lamp(n++, 0, HALL.apex - 2.5, 0, 12, 1, 0.85, 0.55);
     lamp(n++, 0, 2.2, ENTRY.field - 1.2, 8, 0.35, 0.6, 1);
     // Each window's light starts at rest in the field's blue; an open world's takes its own tint each frame.
@@ -360,7 +399,7 @@
     // The picture comes first: rendering it moves the renderer's view, which the scene's own first frame puts back.
     // A page that opens here takes it on its first frame instead, once the renderer is ready and the build that sets
     // the page's quality tier is done.
-    const pictured = ctx.from !== null && takePicture();
+    const looks = openLooks(), pictured = ctx.from !== null && takePictures(looks);
     pictureTries = pictured ? 0 : PICTURE_TRIES;
     pictureWait = 0;
     camera = createCamera({ fov: 55, near: 0.3, far: 700 });
@@ -416,8 +455,7 @@
         if (o.kind === "window") {
           const w = o.window;
           if (PRESETS[w.row.id]) pilot.goPreset(w.row.id);
-          return hud.toast((w.kind === "travel" || w.linked) && !avatar ? "Only an Ooga can cross. Walk one in from the island."
-            : w.linked ? `Walk through the mirror to ${w.row.name}.` : TIPS[w.kind][1]);
+          return hud.toast(w.kind === "travel" && !avatar ? "Only an Ooga can cross. Walk one in from the island." : TIPS[w.kind][1]);
         }
         if (o.kind === "core") {
           pilot.goPreset("core");
@@ -434,7 +472,7 @@
     fx = fxMod.create({ root, input, hooks, hud, game, world, renderer, camera, overlay: ctx.overlay, tickerAt: { x: 0, y: 7, z: 0 } });
     dust = BL.dressing.motes({ count: 160, span: 14, low: 0.5, high: 9 });
     addChild(root, dust.node);
-    scene = build();
+    scene = build(looks);
     // The visitor's Ooga: `character=` on a page that opens here, else the one handed over, else a free view.
     const asked = ctx.from === null ? new URLSearchParams(location.search).get("character")?.trim().toLowerCase() : null;
     const named = asked ? contributors.roster.find((c) => c.name.toLowerCase() === asked) : null;
@@ -453,12 +491,8 @@
       for (const w of scene.windows) w.body.track(avatar.root, avatar.traits.height * 2, Math.max(avatar.headOpen.verts.length, avatar.headClosed.verts.length));
       // Back from a world, out of its window: standing in front of it, facing the mechanism. In from the island: through
       // the field at the tunnel's end.
-      const from = scene.windows.find((w) => (w.kind === "travel" || w.linked) && w.row.scene === ctx.from);
-      const preview = ctx.from === null && new URLSearchParams(location.search).get("debug") === "1"
-        && new URLSearchParams(location.search).get("bifrostMirror") === "poker"
-        ? scene.windows.find((w) => w.row.scene === "poker" && w.linked) : null;
+      const from = scene.windows.find((w) => w.kind === "travel" && w.row.scene === ctx.from);
       if (from) standBefore(from, 2.8);
-      else if (preview) standBefore(preview, 3.4, true);
       else if (ctx.from === "hub") pilot.navigate(GATE);
     }
     lightUp(scene);
@@ -474,11 +508,11 @@
   };
 
   // Stands the Ooga `out` metres in from a window's face, facing the mechanism, with the camera behind it.
-  const standBefore = (w, out, faceMirror = false) => {
+  const standBefore = (w, out) => {
     const d = HALL.r - out, x = w.sn * d, z = w.c * d;
     BACK.position.x = x; BACK.position.y = 0; BACK.position.z = z;
     BACK.target.x = x; BACK.target.y = 1; BACK.target.z = z;
-    BACK.yaw = Math.atan2(w.sn, w.c) + (faceMirror ? Math.PI : 0);
+    BACK.yaw = Math.atan2(w.sn, w.c);
     pilot.navigate(BACK);
   };
   // Where the Ooga stands against a window: how far past the wall's face (`along`) and how far across its opening.
@@ -506,7 +540,6 @@
         const t = -from / (to - from), across = (previousX + (p.x - previousX) * t) * w.c - (previousZ + (p.z - previousZ) * t) * w.sn;
         const bottom = previousY + (p.y - previousY) * t - avatar.baseY;
         if (bottom < -0.12 || !BM.inArch(across, bottom + avatar.bodyHeight, WINDOW.halfW, WINDOW.spring)) continue;
-        if (w.linked) { travel(w); return; }
         const m = w.transform, x = p.x, z = p.z, vx = avatar.leap.vx, vz = avatar.leap.vz;
         p.x = m[0] * x + m[8] * z + m[12]; p.z = m[2] * x + m[10] * z + m[14];
         avatar.root.rotation.y += w.yaw;
@@ -525,10 +558,23 @@
   // The mechanism, charged by how near anyone stands to an open world's window: the ₿ spins faster and bobs, its rings
   // whirl, and the light in the beam flows upward, a slow shimmer at rest and a rush fully charged; and once it is
   // charged it bursts now and then, throwing sparkles, two shockwaves and a flare, and sending a surge up the beam.
+  // Its light takes on the colour of the world it answers, the nearest open window's, kept while the charge ebbs: the
+  // beam, the shockwaves, the sparkles and the core's light, from gold at rest to that colour fully charged. The ₿ and
+  // its rings keep their gold and bronze.
   const mechanism = (s, dt, elapsed) => {
-    let want = 0;
-    for (let i = 0; i < s.windows.length; i++) if (s.windows[i].kind === "travel") want = Math.max(want, s.windows[i].near);
+    let want = 0, lead = null;
+    for (let i = 0; i < s.windows.length; i++) {
+      const w = s.windows[i];
+      if (w.kind === "travel" && w.near > want) { want = w.near; lead = w; }
+    }
     const k = (s.charge += (want - s.charge) * Math.min(1, dt * CHARGE_EASE));
+    if (lead) s.lead = lead;
+    const step = s.lead ? Math.round(k * (BM.CHARGE_STEPS - 1)) : 0;
+    if (step !== s.step || s.lead !== s.stepLead) {
+      s.step = step;
+      s.stepLead = s.lead;
+      for (let i = 0; i < s.beam.length; i++) s.beam[i].node.geometry = s.lead.charge.beam[step];
+    }
     s.glyph.rotation.y += dt * (0.6 + 5 * k);
     s.bob += dt * (1.5 + 4 * k);
     s.glyph.position.y = CORE.glyphY + Math.sin(s.bob) * 0.06 * (0.4 + k);
@@ -552,8 +598,11 @@
       s.burstWait -= dt;
       if (s.burstWait <= 0) {
         s.burstWait = BURST_GAP[0] + (BURST_GAP[1] - BURST_GAP[0]) * k + Math.random() * 1.2;
-        fx.burst(0, CORE.glyphY, 0, Math.round(18 + 30 * k), SPARKLES, 4 + 4 * k);
-        for (let i = 0; i < s.shocks.length; i++) { s.shocks[i].t = 0; s.shocks[i].node.visible = true; }
+        fx.burst(0, CORE.glyphY, 0, Math.round(18 + 30 * k), s.lead ? s.lead.sparkles : SPARKLES, 4 + 4 * k);
+        for (let i = 0; i < s.shocks.length; i++) {
+          s.shocks[i].t = 0; s.shocks[i].node.visible = true;
+          if (s.lead) s.shocks[i].node.geometry = s.lead.charge.shock[step];
+        }
         s.flare = 1;
         s.surge = 0;
       }
@@ -568,9 +617,11 @@
       w.node.smokeOpacity = Math.min(1, 3 * (1 - w.t));
       w.node.visible = w.t < 1;
     }
-    // The core's light swells with the charge and flares with a burst.
-    const L = RENDER_OPTS.lights, lift = 1 + 1.2 * k + 3 * s.flare;
-    L[4] = 0.85 * lift; L[5] = 0.55 * lift; L[6] = 0.22 * lift;
+    // The core's light swells with the charge and flares with a burst, warming from gold toward the lead's colour.
+    const L = RENDER_OPTS.lights, lift = 1 + 1.2 * k + 3 * s.flare, c = s.lead ? s.lead.tint : CORE_GLOW, m = s.lead ? k : 0;
+    L[4] = (CORE_GLOW[0] + (c[0] - CORE_GLOW[0]) * m) * lift;
+    L[5] = (CORE_GLOW[1] + (c[1] - CORE_GLOW[1]) * m) * lift;
+    L[6] = (CORE_GLOW[2] + (c[2] - CORE_GLOW[2]) * m) * lift;
   };
 
   // The heavens turn slowly overhead, and the sky pass's stars with them, while the moon stays where the hall's light
@@ -660,17 +711,15 @@
     }
     stepTweens(dt);
     fx.update(dt, elapsed);
-    // A page that opened here photographs DSB Land now, last, so the frame's own render puts the view back. The
+    // A page that opened here photographs the open worlds now, last, so the frame's own render puts the view back. The
     // renderer declines to draw while a program it needs is still compiling (the mirrors' among them), so it gets a try
-    // every half second, a few seconds in all.
+    // every half second, a few seconds in all; each window hangs its picture as soon as it has one.
     pictureWait -= dt;
     if (pictureTries > 0 && pictureWait <= 0 && canPicture()) {
       pictureWait = 0.5;
-      if (!takePicture()) pictureTries--;
-      else {
-        pictureTries = 0;
-        for (const w of s.windows) if (w.kind === "travel") hangPicture(w);
-      }
+      if (takePictures(s.looks)) pictureTries = 0;
+      else pictureTries--;
+      for (const w of s.windows) if (w.kind === "travel") hangPicture(w);
     }
   };
   const drawExtra = () => {};
@@ -704,8 +753,10 @@
       scene.gate.phase.liveGeometry(set);
       for (const w of scene.windows) {
         w.phase.liveGeometry(set);
-        // An open world's rim swaps through its steps, so every step stays on the GPU.
+        // An open world's rim swaps through its steps, and the mechanism through its colour's, so every step stays on
+        // the GPU.
         if (w.rims) for (const rim of w.rims) set.add(rim);
+        if (w.charge) for (let k = 0; k < BM.CHARGE_STEPS; k++) set.add(w.charge.beam[k]).add(w.charge.shock[k]);
       }
     }
     if (avatar) set.add(avatar.headOpen).add(avatar.headClosed);

@@ -38,9 +38,10 @@ Build with `npm run build`, then open `oogaboogaland.html`, or run
 For a direct file preview, append `?scene=poker` to the file URL.
 
 In the island, possess an Ooga and enter ₿IFRÖST. Walk through The Ember Den's
-mirror beside the DSB Land window. The same Ooga appears directly in the room,
+window beside the DSB Land window: its arch glows in the room's felt colour and
+it shows a picture of the room. The same Ooga appears directly in the room,
 without a title card or transition animation. The return mirror brings them
-back to ₿IFRÖST.
+back to ₿IFRÖST, in front of that window.
 
 **Quick Play** takes a free seat, adds enough computer opponents for four
 players and deals. Or choose any of the ten lobby rows, take a specific seat,
@@ -123,7 +124,11 @@ The original Banana Club remains the default.
 | Jungle Ruins | Mossy limestone bands, hanging vines, rune stones and fern-green felt. |
 | Moonstone Hollow | Pale mineral bands, silver trim, cool lanterns and violet felt. |
 
-These decorate the underground floor reached through ₿IFRÖST's Ember Den mirror;
+₿IFRÖST's window into the room follows the theme last chosen here: its arch
+glows in the theme's felt, lifted to glow, and its picture shows the room in
+that theme.
+
+These decorate the underground floor reached through ₿IFRÖST's Ember Den window;
 no repository cave slot is claimed. The cave finishes follow the mine's
 banded-rock architecture, with lanterns, vines and rune stones from the shared
 `BL.dressing` kit. Glowing fissures are visual decoration, not walking hazards.
