@@ -1,0 +1,424 @@
+{
+  "baseCommit": "dab6e36bea482f2d712b65f3e2d559348400b527",
+  "renderbuffers": {
+    "before": {
+      "size": {
+        "width": 1440,
+        "height": 900
+      },
+      "buffers": [
+        {
+          "requested": 4,
+          "actual": 4,
+          "format": 32856,
+          "w": 2039,
+          "h": 1274
+        },
+        {
+          "requested": 4,
+          "actual": 4,
+          "format": 32856,
+          "w": 2039,
+          "h": 1274
+        },
+        {
+          "requested": 4,
+          "actual": 4,
+          "format": 33190,
+          "w": 2039,
+          "h": 1274
+        }
+      ],
+      "bytes": 124688928
+    },
+    "after": {
+      "size": {
+        "width": 1440,
+        "height": 900
+      },
+      "buffers": [
+        {
+          "requested": 2,
+          "actual": 2,
+          "format": 32856,
+          "w": 2039,
+          "h": 1274
+        },
+        {
+          "requested": 2,
+          "actual": 2,
+          "format": 32856,
+          "w": 2039,
+          "h": 1274
+        },
+        {
+          "requested": 2,
+          "actual": 2,
+          "format": 33190,
+          "w": 2039,
+          "h": 1274
+        }
+      ],
+      "bytes": 62344464
+    },
+    "savedMiB": 59.45631408691406,
+    "console": []
+  },
+  "browserCases": [
+    {
+      "name": "8 GB boundary",
+      "passed": true,
+      "kind": "webgl2",
+      "opening": "medium",
+      "quality": "medium",
+      "drawn": 2,
+      "firstBuffers": [
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        }
+      ],
+      "error": 0
+    },
+    {
+      "name": "4 GB",
+      "passed": true,
+      "kind": "webgl2",
+      "opening": "medium",
+      "quality": "medium",
+      "drawn": 2,
+      "firstBuffers": [
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        }
+      ],
+      "error": 0
+    },
+    {
+      "name": "16 GB",
+      "passed": true,
+      "kind": "webgl2",
+      "opening": "high",
+      "quality": "high",
+      "drawn": 2,
+      "firstBuffers": [
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        }
+      ],
+      "error": 0,
+      "resizes": [
+        {
+          "quality": "high",
+          "size": {
+            "width": 390,
+            "height": 844
+          },
+          "live": 3,
+          "samples": [
+            2,
+            2,
+            2
+          ],
+          "error": 0
+        },
+        {
+          "quality": "medium",
+          "size": {
+            "width": 1920,
+            "height": 1080
+          },
+          "live": 3,
+          "samples": [
+            2,
+            2,
+            2
+          ],
+          "error": 0
+        },
+        {
+          "quality": "low",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "live": 0,
+          "samples": [],
+          "error": 0
+        },
+        {
+          "quality": "high",
+          "size": {
+            "width": 1440,
+            "height": 900
+          },
+          "live": 3,
+          "samples": [
+            2,
+            2,
+            2
+          ],
+          "error": 0
+        }
+      ],
+      "trips": [
+        {
+          "scene": "lab",
+          "records": 203,
+          "nodes": 1060,
+          "targets": 120,
+          "error": 0
+        },
+        {
+          "scene": "lab",
+          "records": 203,
+          "nodes": 1060,
+          "targets": 120,
+          "error": 0
+        }
+      ]
+    },
+    {
+      "name": "missing hint",
+      "passed": true,
+      "kind": "webgl2",
+      "opening": "high",
+      "quality": "high",
+      "drawn": 2,
+      "firstBuffers": [
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        }
+      ],
+      "error": 0
+    },
+    {
+      "name": "zero hint",
+      "passed": true,
+      "kind": "webgl2",
+      "opening": "high",
+      "quality": "high",
+      "drawn": 2,
+      "firstBuffers": [
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        }
+      ],
+      "error": 0
+    },
+    {
+      "name": "NaN hint",
+      "passed": true,
+      "kind": "webgl2",
+      "opening": "high",
+      "quality": "high",
+      "drawn": 2,
+      "firstBuffers": [
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        },
+        {
+          "samples": 2,
+          "w": 1440,
+          "h": 813
+        }
+      ],
+      "error": 0
+    },
+    {
+      "name": "touch screen without hint",
+      "passed": true,
+      "kind": "webgl2",
+      "opening": "medium",
+      "quality": "medium",
+      "drawn": 2,
+      "firstBuffers": [
+        {
+          "samples": 2,
+          "w": 487,
+          "h": 1055
+        },
+        {
+          "samples": 2,
+          "w": 487,
+          "h": 1055
+        },
+        {
+          "samples": 2,
+          "w": 487,
+          "h": 1055
+        }
+      ],
+      "error": 0
+    },
+    {
+      "name": "Canvas 2D at 8 GB",
+      "passed": true,
+      "kind": "canvas2d",
+      "quality": "low",
+      "drawn": 1,
+      "firstBuffers": [],
+      "error": 0
+    }
+  ],
+  "performance": {
+    "base": [
+      {
+        "check": "FAIL wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+        "result": {
+          "fps": 55.949645319179396,
+          "p95": 16.800000000000182,
+          "max": 316.6999999999998,
+          "worst": {
+            "gap": 314.8999999910593,
+            "at": 388.0000000029804,
+            "updateMs": 5,
+            "renderMs": 2.5999999940395355,
+            "overlayMs": 5.799999997019768,
+            "donated": false
+          },
+          "outlined": 0,
+          "samples": 280,
+          "travel": 2.4559749999999996,
+          "donated": false,
+          "particles": 0,
+          "quality": "high"
+        }
+      },
+      {
+        "check": "FAIL wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+        "result": {
+          "fps": 32.34953472586621,
+          "p95": 50,
+          "max": 50.100000000000364,
+          "worst": {
+            "gap": 53.69999998807907,
+            "at": 7.999999994039172,
+            "updateMs": 1.7999999970197678,
+            "renderMs": 2.4000000059604645,
+            "overlayMs": 40.79999999701977,
+            "donated": false
+          },
+          "outlined": 162,
+          "samples": 162,
+          "travel": 3.8742250000000045,
+          "donated": true,
+          "particles": 26,
+          "quality": "low"
+        }
+      }
+    ],
+    "changed": [
+      {
+        "check": "FAIL wall movement performance: ordinary movement stays responsive at a high-density desktop size",
+        "result": {
+          "fps": 59.791629171844676,
+          "p95": 16.799999999999272,
+          "max": 50,
+          "worst": {
+            "gap": 44.30000001192093,
+            "at": -15.799999994039354,
+            "updateMs": 20.099999994039536,
+            "renderMs": 5.700000002980232,
+            "overlayMs": 16.799999997019768,
+            "donated": false
+          },
+          "outlined": 0,
+          "samples": 299,
+          "travel": 2.7163749999999798,
+          "donated": false,
+          "particles": 0,
+          "quality": "high"
+        }
+      },
+      {
+        "check": "FAIL wall movement performance: moving behind cave walls during a donation stays responsive at a high-density desktop size",
+        "result": {
+          "fps": 32.938733954883176,
+          "p95": 50,
+          "max": 50,
+          "worst": {
+            "gap": 56.099999994039536,
+            "at": 9.599999994039536,
+            "updateMs": 2.3999999910593033,
+            "renderMs": 2.7000000029802322,
+            "overlayMs": 39.1000000089407,
+            "donated": false
+          },
+          "outlined": 165,
+          "samples": 165,
+          "travel": 3.7478999999999676,
+          "donated": true,
+          "particles": 26,
+          "quality": "low"
+        }
+      }
+    ]
+  }
+}

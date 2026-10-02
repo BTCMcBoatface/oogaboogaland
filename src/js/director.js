@@ -27,6 +27,11 @@
     : 100;
   const FADE = 0.25;
   const COARSE = window.matchMedia("(pointer: coarse)").matches;
+  // Choose before renderer creation so a memory-limited device never allocates high-tier targets.
+  // The signal is approximate and optional; absent or invalid values leave the boot-time probe in charge.
+  const DEVICE_MEMORY = navigator.deviceMemory;
+  const MEMORY_LIMITED = Number.isFinite(DEVICE_MEMORY) && DEVICE_MEMORY > 0 && DEVICE_MEMORY <= 8;
+  const INITIAL_QUALITY = COARSE || MEMORY_LIMITED ? "medium" : "high";
   const $ = (id) => document.getElementById(id);
   const mark = (name) => performance.mark(`ooga:${name}`);
   mark("boot");
@@ -47,7 +52,7 @@
   let renderer = null;
   if (!params.has("canvas2d")) {
     try {
-      renderer = glRenderer.createRenderer(sceneCanvas, { quality: COARSE ? "medium" : "high" });
+      renderer = glRenderer.createRenderer(sceneCanvas, { quality: INITIAL_QUALITY });
     } catch (err) {
       console.warn("WebGL2 renderer failed, using Canvas 2D fallback", err);
       // A canvas that has held a WebGL context can never return a 2D one: replace the element.
@@ -265,7 +270,7 @@
   const BOOT_MEDIUM = 3600, BOOT_LOW = 5400;
   const tierFromBoot = (ms) => {
     if (renderer.kind !== "webgl2") return;
-    const wanted = ms > BOOT_LOW ? "low" : ms > BOOT_MEDIUM ? "medium" : null;
+    const wanted = ms > BOOT_LOW ? "low" : ms > BOOT_MEDIUM || MEMORY_LIMITED ? "medium" : null;
     if (!wanted || QUALITY_ORDER.indexOf(wanted) <= QUALITY_ORDER.indexOf(renderer.quality)) return;
     renderer.setQuality(wanted);
     showQuality();
