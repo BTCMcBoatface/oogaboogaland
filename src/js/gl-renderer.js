@@ -23,7 +23,7 @@
   // Scenes fill up to POINT_LIGHT_CAPACITY lights in priority order; each tier draws only its first `lights`.
   const POINT_LIGHT_CAPACITY = 32;
   const QUALITY = {
-    high: { dpr: 1.5, msaa: 2, shadow: 2048, bloom: true, shafts: true, mirror: 1024, environment: 128, environmentCadence: 1, lights: 32 },
+    high: { dpr: 1.5, msaa: 4, shadow: 2048, bloom: true, shafts: true, mirror: 1024, environment: 128, environmentCadence: 1, lights: 32 },
     medium: { dpr: 1.25, msaa: 2, shadow: 1024, bloom: true, shafts: true, mirror: 768, environment: 96, environmentCadence: 2, lights: 20 },
     low: { dpr: 1, msaa: 0, shadow: 512, bloom: false, shafts: false, mirror: 512, environment: 64, environmentCadence: 4, lights: 10 }
   };
