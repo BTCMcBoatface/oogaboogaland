@@ -5460,6 +5460,29 @@ const bifrostDsb = { name: "bifrost dsb round trip", why: "playthrough: the same
   const back = await b.evaluate(`(() => { const B = window.__ooga, d = B.scene === "bifrost" && B.bifrost, a = d && d.avatar, w = d && d.scene.windows.find((w) => w.row.scene === "dsb"), p = a && a.root.position; return { scene: B.scene, ooga: a ? a.traits.name : null, along: p ? +(p.x * w.sn + p.z * w.c - window.BL.bifrostModels.HALL.r).toFixed(2) : null, across: p ? +(p.x * w.c - p.z * w.sn).toFixed(2) : null }; })()`);
   record("bifrost dsb round trip: walking through the DSB window takes the same Ooga into DSB Land, and DSB's gate home brings it back into the chamber, standing before the DSB window", there.scene === "dsb" && there.ooga === "portlandhodl" && back.scene === "bifrost" && back.ooga === "portlandhodl" && back.along > -3.5 && back.along < -2 && Math.abs(back.across) < 0.5, JSON.stringify({ there, back }));
 } };
+// The poker room's window: from the chamber straight into the room, without the fade, as the room's mirror back does,
+// and out through that mirror before the window again. The scene changing on the step after the crossing starts is the
+// instant cut; a fade would take a quarter second.
+const bifrostPoker = { name: "bifrost poker round trip", why: "playthrough: the same Ooga walks through the poker window straight into the poker room, and the room's mirror brings it back into the chamber before that window", run: async (b) => {
+  await b.evaluate(`(() => { const B = window.__ooga, r = window.BL.bifrostModels.HALL.r - 1.6, w = B.bifrost.scene.windows.find((w) => w.row.scene === "poker"), x = w.sn * r, z = w.c * r; B.pilot.navigate({ position: { x, y: 0, z }, target: { x: x + w.sn * 4, y: 1, z: z + w.c * 4 }, yaw: Math.atan2(w.sn, w.c) + Math.PI, pitch: 0.2, dist: 5 }); B.advance(0.5, 1 / 60); window.__pokerWindow = [w.sn, w.c]; })()`);
+  const inKey = await b.evaluate(`window.__pokerWindow`);
+  const k = await walkToward(b, inKey[0], inKey[1], 0.1);
+  await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: k, text: k, code: "Key" + k.toUpperCase() });
+  const there = await b.evaluate(`(() => { const B = window.__ooga; let started = -1, arrived = -1;
+    for (let i = 0; i < 180 && arrived < 0; i++) { B.advance(1 / 60, 1 / 60); if (started < 0 && B.transitioning) started = i; if (B.scene === "poker") arrived = i; }
+    return { scene: B.scene, ooga: B.crew && B.crew.player ? B.crew.player.traits.name : null, steps: arrived - started, started }; })()`);
+  await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: k, code: "Key" + k.toUpperCase() });
+  if (there.scene === "poker") {
+    // The poker scene's debug handle carries no camera, so the key that walks toward its mirror (+z) on screen is read
+    // from the scene's own.
+    const out = await b.evaluate(`(() => { const B = window.__ooga; B.pilot.navigate({ position: { x: 0, y: 0, z: 31 }, target: { x: 0, y: 1, z: 35 }, yaw: Math.PI, pitch: 0.15, dist: 4 }); B.advance(0.5, 1 / 60);
+      const c = BL.scenes.poker.camera, fx = c.target.x - c.position.x, fz = c.target.z - c.position.z, l = Math.hypot(fx, fz), f = [fx / l, fz / l], r = [-f[1], f[0]];
+      const score = { w: f[1], s: -f[1], d: -r[1], a: r[1] }; return Object.entries(score).sort((p, q) => q[1] - p[1])[0][0]; })()`);
+    await holdKey(b, out, 2.5);
+  }
+  const back = await b.evaluate(`(() => { const B = window.__ooga; for (let i = 0; i < 60 && (B.transitioning || B.scene !== "bifrost"); i++) B.advance(1 / 30, 1 / 30); const d = B.scene === "bifrost" && B.bifrost, a = d && d.avatar, w = d && d.scene.windows.find((w) => w.row.scene === "poker"), p = a && a.root.position; return { scene: B.scene, ooga: a ? a.traits.name : null, along: p ? +(p.x * w.sn + p.z * w.c - window.BL.bifrostModels.HALL.r).toFixed(2) : null, across: p ? +(p.x * w.c - p.z * w.sn).toFixed(2) : null }; })()`);
+  record("bifrost poker round trip: walking through the poker window takes the same Ooga straight into the poker room, without the fade, and the room's mirror brings it back into the chamber, standing before that window", there.scene === "poker" && there.ooga === "portlandhodl" && there.started >= 0 && there.steps <= 2 && back.scene === "bifrost" && back.ooga === "portlandhodl" && back.along > -3.5 && back.along < -2 && Math.abs(back.across) < 0.5, JSON.stringify({ there, back }));
+} };
 const arcadeWalking ={ name: "arcade walking", why: "rule: W A S D walk the visitor's Ooga their way on screen in Ooga Arcade, as they do on the island", run: async (b) => {
   const ooga = await walkKeys(b, "portlandhodl", 0, -1, [0, 2.2], 0.5);
   record("arcade walking: W A S D walk the visitor's Ooga away, left, back and right on screen on the hall floor from two camera angles", allWalk(ooga), JSON.stringify(ooga));
@@ -6837,6 +6860,7 @@ scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
 scene("bifrost", { url: hubPage(src, "solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
 scene("bifrost", { label: "dsb round trip", query: "character=portlandhodl", steps: [bifrostDsb] });
+scene("bifrost", { label: "poker round trip", query: "character=portlandhodl", steps: [bifrostPoker] });
 scene("bifrost", { label: "canvas2d", url: hubPage(src, "canvas2d=1"), steps: [bifrostCanvas] });
 scene("arcade", { query: "character=portlandhodl", steps: [arcadeWalking, arcadeMachine, arcadePlay, trip("arcade")] });
 scene("skee", { steps: [carnivalPlay("skee", 0.5), trip("skee")] });
