@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
@@ -8192,6 +8193,29 @@ const unitChecks = async () => {
   // Scene state built directly instead of booted; seed 1 matches scene-hub.js.
   // Sealed cave guides need the hub's seal nodes, so probes reading them stay in the browser tier.
   const island = BL.terrain.island({ seed: 1 });
+  {
+    // #93: share duplicate vertices without rounding the ramp/window boundaries. This fingerprint is the
+    // expanded face stream from the unmodified seed-1 island, so vertex storage and indices may change.
+    const geo = island.geometry;
+    let count = 0;
+    for (const face of geo.faces) count += 1 + face.i.length * 3;
+    const expanded = new Float64Array(count);
+    let at = 0;
+    for (const face of geo.faces) {
+      expanded[at++] = face.i.length;
+      for (const i of face.i) {
+        expanded[at++] = geo.verts[i * 3];
+        expanded[at++] = geo.verts[i * 3 + 1];
+        expanded[at++] = geo.verts[i * 3 + 2];
+      }
+    }
+    const hash = createHash("sha256").update(new Uint8Array(expanded.buffer)).digest("hex");
+    record("terrain memory: compact cached vertices preserve every authored face coordinate and winding exactly",
+      geo.verts instanceof Float64Array && geo.verts.byteLength < 1957458 * 4
+        && hash === "cdc680af3864bf0f0b067c5dd39240163cb9c3ba421b42ca43c7e0d095dbd2df"
+        && BL.terrain.island({ seed: 1 }) === island, JSON.stringify({ vertices: geo.verts.length / 3, bytes: geo.verts.byteLength, hash }));
+  }
+
   {
     const expected = {
       c11: [6.25, 0.75, 6.75], c10: [6.25, 0.75, 6.75], c9: [7, 0.5, 6.75],
