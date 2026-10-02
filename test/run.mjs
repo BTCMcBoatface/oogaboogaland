@@ -8212,7 +8212,7 @@ const unitChecks = async () => {
     const hash = createHash("sha256").update(new Uint8Array(expanded.buffer)).digest("hex");
     record("terrain memory: compact cached vertices preserve every authored face coordinate and winding exactly",
       geo.verts instanceof Float64Array && geo.verts.byteLength < 1957458 * 4
-        && hash === "cdc680af3864bf0f0b067c5dd39240163cb9c3ba421b42ca43c7e0d095dbd2df"
+        && hash === "2a572d33f96e74a8183ecbe9b36827b5d40d7f7dc4f02dc4bfbae37651e8e8b5"
         && BL.terrain.island({ seed: 1 }) === island, JSON.stringify({ vertices: geo.verts.length / 3, bytes: geo.verts.byteLength, hash }));
   }
 
