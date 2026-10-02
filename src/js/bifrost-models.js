@@ -6,8 +6,8 @@
 //
 // A window is a row in `WINDOWS` and a slot in `SLOTS`, in the same order. A `travel` row walks through to its
 // scene, and looks through a short passage lined with the field's blue onto a picture of that world (the scene
-// takes the picture); an open scene may also be reached through a mirror. Unassigned mirrors link to the next mirror.
-// Opening a world is changing its row, and giving the scene its picture and stand-in.
+// takes the picture); a world not open yet is a `mirror`, a reflector linked to the next mirror in the hall.
+// Opening a world is changing its row, and giving the scene its picture and the row its stand-in.
 //
 // The name is carved in raised gilt letters (`word`), chiselled strokes swept along each letter's centre line,
 // since the island's 3x5 sign alphabet has no ₿ or Ö. `supportAt`, `clearAt` and `walkable` are the walkable
@@ -38,12 +38,22 @@
   // The mechanism: the dais's two steps [radius, top], the plinth the Oogas cannot pass, and where the ₿ turns.
   const CORE = { steps: [[3.1, 0.25], [2.4, 0.5]], plinth: 1.5, glyphY: 3.4, rings: [1.6, 1.85, 2.1] };
 
+  // Until the scene has its picture, a window shows its world simply, as a `stand` describes it: bands of colour from
+  // the floor up, [from, to, colour, glow] in fractions of the picture's height, and nine small lights in the band
+  // `dotY` [from, span], every third in the second colour. DSB Land's is its purple night over a band of its falls,
+  // with stars.
+  const DSB_STAND = {
+    key: "dsb", bands: [[0, 0.3, "#403054", 0.55], [0.3, 0.36, "#49ddd9", 0.8], [0.36, 0.62, "#2a1648", 0.7], [0.62, 1, "#12082a", 0.8]],
+    dots: ["#49ddd9", "#ffdf38"], dotY: [0.66, 0.3]
+  };
   // The windows, left to right as the tunnel looks in, at their bearings round the wall. Only an open world carries a
-  // label, and a `tint`: the colour its frame's rim and light glow in, the colour of that world.
+  // label, a `tint` (the colour its frame's rim and light glow in, the colour of that world) and a `stand`-in; a world
+  // whose looks change gives all of them through `look`. `instant` crosses without the fade, as that world's own way
+  // back does.
   const WINDOWS = [
     { id: "west", kind: "mirror" },
-    { id: "dsb", kind: "travel", scene: "dsb", name: "DSB Land", label: "DSB", tint: "#3f8cff" },
-    { id: "north", kind: "mirror", scene: "poker", name: "The Ember Den", label: "EMBER DEN" },
+    { id: "dsb", kind: "travel", scene: "dsb", name: "DSB Land", label: "DSB", tint: "#3f8cff", stand: DSB_STAND },
+    { id: "poker", kind: "travel", scene: "poker", name: "The Ember Den", label: "EMBER DEN", instant: true, look: () => pokerLook() },
     { id: "east", kind: "mirror" }
   ];
   const SLOTS = [-1.95, -2.75, 2.75, 1.95];
@@ -582,15 +592,38 @@
     geo.imageSurface = { asset, rect: [-w / 2, 0, w, h] };
     return geo;
   };
-  // Until a picture is taken, the window shows the world simply: DSB Land's purple night over a band of its falls,
-  // with stars.
-  const dsbStandIn = cached(() => {
+  // A window's stand-in picture, as its `stand` describes it (see `DSB_STAND`), cached by the stand's key.
+  const stands = new Map();
+  const standIn = (stand) => {
+    if (stands.has(stand.key)) return stands.get(stand.key);
     const { w, h, z } = passage().picture, parts = [];
-    const band = (y0, y1, color, emissive) => parts.push(box({ w, h: y1 - y0, d: 0.05, color, emissive, offset: { y: (y0 + y1) / 2, z } }));
-    band(0, h * 0.3, "#403054", 0.55); band(h * 0.3, h * 0.36, "#49ddd9", 0.8); band(h * 0.36, h * 0.62, "#2a1648", 0.7); band(h * 0.62, h, "#12082a", 0.8);
-    for (let k = 0; k < 9; k++) parts.push(box({ w: 0.14, h: 0.14, d: 0.04, color: k % 3 ? "#49ddd9" : "#ffdf38", emissive: 1, offset: { x: ((k * 0.618) % 1 - 0.5) * w * 0.85, y: h * (0.66 + ((k * 0.37) % 1) * 0.3), z: z + 0.04 } }));
-    return noShadow(merge(...parts));
-  });
+    for (const [y0, y1, color, emissive] of stand.bands) parts.push(box({ w, h: h * y1 - h * y0, d: 0.05, color, emissive, offset: { y: (h * y0 + h * y1) / 2, z } }));
+    for (let k = 0; k < 9; k++) parts.push(box({ w: 0.14, h: 0.14, d: 0.04, color: k % 3 ? stand.dots[0] : stand.dots[1], emissive: 1, offset: { x: ((k * 0.618) % 1 - 0.5) * w * 0.85, y: h * (stand.dotY[0] + ((k * 0.37) % 1) * stand.dotY[1]), z: z + 0.04 } }));
+    const geo = noShadow(merge(...parts));
+    stands.set(stand.key, geo);
+    return geo;
+  };
+  // A colour lifted to glow: its hue kept, its saturation and lightness raised to at least `s` and `l`.
+  const glowing = (hex, s = 0.55, l = 0.58) => {
+    const [r, g, b] = hexToRgb(hex).map((v) => v / 255), max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    const hue = d === 0 ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    const S = Math.max(s, d === 0 ? 0 : d / (1 - Math.abs(max + min - 1))), L = Math.max(l, (max + min) / 2);
+    const c = (1 - Math.abs(2 * L - 1)) * S, x = c * (1 - Math.abs(hue % 2 - 1)), m = L - c / 2;
+    const rgb = hue < 1 ? [c, x, 0] : hue < 2 ? [x, c, 0] : hue < 3 ? [0, c, x] : hue < 4 ? [0, x, c] : hue < 5 ? [x, 0, c] : [c, 0, x];
+    return "#" + rgb.map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("");
+  };
+  // The poker room dresses itself in the cave theme its visitor last chose there, and so does its window: the theme's
+  // felt, lifted to glow, is the window's colour, and the room's floor, felt, walls, ceiling and lamps are its stand-in.
+  // The picture is the room in that theme, so it is keyed by the theme too.
+  const pokerLook = () => {
+    const theme = BL.pokerThemes.get(BL.pokerThemes.load()), ui = theme.ui, key = `poker:${theme.id}`;
+    return {
+      key, theme, tint: glowing(ui.feltLight),
+      stand: { key, bands: [[0, 0.2, theme.runner, 0.35], [0.2, 0.3, ui.feltLight, 0.6], [0.3, 0.78, theme.stone[1], 0.3], [0.78, 1, ui.deep, 0.5]], dots: [ui.bright, ui.accent], dotY: [0.42, 0.3] }
+    };
+  };
+  // An open world's looks now: the key its picture goes by, its tint and its stand-in.
+  const lookOf = (row) => row.look ? row.look() : { key: row.id, tint: row.tint, stand: row.stand };
   // A window's mirror, `MIRROR_Z` past the wall's face inside its arch: one quad facing +z at z 0, a reflector keyed on
   // its own geometry, so each window has a glass of its own (by slot). `backing` closes the arch behind the glass,
   // which shows nothing until its first capture and on Canvas 2D only its sheen. Every window shares the backing.
@@ -629,6 +662,8 @@
   // the one below, so the scene can light each drum on its own and run bands of light up the beam itself. `rows` hold
   // each drum's foot, height and radius, the beam's width up to the crown thinning to a thread at the top of the sky.
   const BEAM = { from: CORE.glyphY + 1.2, first: 0.2, grow: 1.075, waist: 90 };
+  const BEAM_GOLD = "#ffd98a", SHOCK_GOLD = "#ffe6a0";
+  const beamDrum = (color) => noShadow(lathe({ profile: [[0, 0], [1, 0], [1, 1], [0, 1]], segments: 10, color, emissive: 0.85 }));
   const coreBeam = cached(() => {
     const widthAt = (y) => y < HALL.apex ? 0.1 : y < BEAM.waist ? 0.1 - 0.05 * (y - HALL.apex) / (BEAM.waist - HALL.apex) : 0.05 * (SKY.beam - y) / (SKY.beam - BEAM.waist);
     const rows = [];
@@ -636,11 +671,28 @@
       const top = Math.min(SKY.beam, y + h);
       rows.push({ y, h: top - y, r: Math.max(0.006, widthAt((y + top) / 2)) });
     }
-    return { geometry: noShadow(lathe({ profile: [[0, 0], [1, 0], [1, 1], [0, 1]], segments: 10, color: "#ffd98a", emissive: 0.85 })), rows };
+    return { geometry: beamDrum(BEAM_GOLD), rows };
   });
   // The shockwave the mechanism throws off when it bursts, a thin glowing ring a metre in radius that the scene spreads
   // out, seen from above and below.
-  const shockwave = cached(() => noShadow(merge(lathe({ profile: [[1, 0], [0.88, 0]], segments: 48, color: "#ffe6a0", emissive: 1 }), lathe({ profile: [[0.88, 0], [1, 0]], segments: 48, color: "#ffe6a0", emissive: 1 }))));
+  const shockRing = (color) => noShadow(merge(lathe({ profile: [[1, 0], [0.88, 0]], segments: 48, color, emissive: 1 }), lathe({ profile: [[0.88, 0], [1, 0]], segments: 48, color, emissive: 1 })));
+  const shockwave = cached(() => shockRing(SHOCK_GOLD));
+  // The mechanism charging toward an open world takes on that world's colour: the beam's drum and the shockwave blended
+  // from their gold toward its `tint` in `CHARGE_STEPS` steps, the first their own gold. Cached by tint.
+  const CHARGE_STEPS = 6;
+  const chargedSets = new Map();
+  const charged = (tint) => {
+    if (chargedSets.has(tint)) return chargedSets.get(tint);
+    const beam = [coreBeam().geometry], shock = [shockwave()];
+    for (let k = 1; k < CHARGE_STEPS; k++) {
+      const t = k / (CHARGE_STEPS - 1);
+      beam.push(beamDrum(blend(BEAM_GOLD, tint, t)));
+      shock.push(shockRing(blend(SHOCK_GOLD, tint, t)));
+    }
+    const set = { beam, shock };
+    chargedSets.set(tint, set);
+    return set;
+  };
 
   // ---- the sky ------------------------------------------------------------------------------------------
 
@@ -914,11 +966,11 @@
     // The chamber's lights at rest, as `lightUp` sets them: the mechanism, the crown, the field at the way out, each
     // window in its open world's colour or else the field's, then each lantern's pool at the nine tenths of its glow its
     // flicker hovers about. The lanterns stand as `lighting` hangs them, [kind, x, y, z, turn].
-    const open = WINDOWS.map((row) => row.kind === "travel" && !!BL.scenes[row.scene]);
+    const looks = WINDOWS.map((row) => row.kind === "travel" && BL.scenes[row.scene] ? lookOf(row) : null);
     const lights = [[0, CORE.glyphY, 0, 13, 0.85, 0.55, 0.22], [0, HALL.apex - 2.5, 0, 12, 1, 0.85, 0.55], [0, 2.2, F - 1.2, 8, 0.35, 0.6, 1]];
     WINDOWS.forEach((row, i) => {
       const f = frameOf(i);
-      lights.push([f.x - Math.sin(f.bearing) * 1.6, 2.4, f.z - Math.cos(f.bearing) * 1.6, 7, ...(open[i] ? hexToRgb(row.tint).map((k) => k / 255 * 0.7) : [0.2, 0.325, 0.5])]);
+      lights.push([f.x - Math.sin(f.bearing) * 1.6, 2.4, f.z - Math.cos(f.bearing) * 1.6, 7, ...(looks[i] ? hexToRgb(looks[i].tint).map((k) => k / 255 * 0.7) : [0.2, 0.325, 0.5])]);
     });
     const plaque = name().letters.width / 2 + 1.1, lamps = [], POOL = [1.17, 0.72, 0.32], IRON = "#2c2e33", LANTERN = "#ffc860";
     for (const b of PILLARS) lamps.push(["post", Math.sin(b) * POST_R, 0, Math.cos(b) * POST_R, b + Math.PI / 2]);
@@ -1188,7 +1240,7 @@
         facing(g, [[X0, Y0, fz], [X1, Y1, fz], [X1, Y1, fz + 0.15], [X0, Y0, fz + 0.15]], BRONZE_DK, 0, xm, ym, fz + 0.075);
       }
       btcPlates(g, 0.56, 0, key, fz + 0.26, GOLD, 0.8);
-      if (open[i]) {
+      if (looks[i]) {
         const { depth, flare, rise } = WINDOW, n0 = wh + 0.05, n1 = wh + flare, h0 = ws + wh + 0.05, h1 = h0 + rise, lo = Y - 0.1;
         facing(g, [[-n0, lo, 0], [-n1, lo, -depth], [-n1, h1, -depth], [-n0, h0, 0]], PASSAGE, 0.3, 0, h0 / 2, -depth / 2);
         facing(g, [[n0, lo, 0], [n1, lo, -depth], [n1, h1, -depth], [n0, h0, 0]], PASSAGE, 0.3, 0, h0 / 2, -depth / 2);
@@ -1199,14 +1251,14 @@
           bits.push(FM.beam(-w, lo, z, -w, h, z, 0.1, FIELD, 0.5), FM.beam(-w, h, z, w, h, z, 0.1, FIELD, 0.5), FM.beam(w, h, z, w, lo, z, 0.1, FIELD, 0.5));
         }
         // The picture's stand-in, its stars brought forward to stand proud of the night behind them.
-        const picture = merge(dsbStandIn()), pz = passage().picture.z, v = picture.verts;
+        const picture = merge(standIn(looks[i].stand)), pz = passage().picture.z, v = picture.verts;
         for (let k = 2; k < v.length; k += 3) if (v[k] > pz + 0.03) v[k] = pz + 0.14;
         bits.push(picture);
-        const rim = geometry(), tint = () => row.tint;
+        const rim = geometry(), color = looks[i].tint, tint = () => color;
         archFace(rim, out, out + 0.18, fz + 0.08, tint, 1, 0.8, 1);
-        archSide(rim, out + 0.18, cz + 0.05, fz + 0.08, row.tint, 1, 0.8, false);
+        archSide(rim, out + 0.18, cz + 0.05, fz + 0.08, color, 1, 0.8, false);
         archFace(rim, out + FRAME.course, out + FRAME.course + 0.08, cz + 0.04, tint, 1, 0, 1);
-        archSide(rim, out + FRAME.course + 0.08, 0.5, cz + 0.04, row.tint, 1, 0, false);
+        archSide(rim, out + FRAME.course + 0.08, 0.5, cz + 0.04, color, 1, 0, false);
         rims.push(place(rim));
       } else {
         for (let k = 0; k < SILVER.length; k++) {
@@ -1238,8 +1290,8 @@
 
   BL.bifrostModels = {
     HALL, ENTRY, WINDOW, WINDOW_TOP, FRAME, CORE, WINDOWS, SLOTS, PILLARS, PILLAR_R, NAME, MIRROR_Z, COURT, BENCHES, BENCH_R, PLANTERS, PLANTER_R, PLANTER_TOP,
-    frameOf, inArch, hall, pillars, tunnel, entryField, archStone, archGlow, RIM_STEPS, portalRim, hanger, passage, pictureQuad, dsbStandIn, mirror, name,
-    SKY, sky, coreBase, coreGlyph, coreRings, coreBeam, shockwave, courtPosts, bench, planter, lighting, dressing, fieldSheet, fieldSparkles, archRing, banner,
+    frameOf, inArch, lookOf, hall, pillars, tunnel, entryField, archStone, archGlow, RIM_STEPS, portalRim, hanger, passage, pictureQuad, standIn, mirror, name,
+    SKY, sky, coreBase, coreGlyph, coreRings, coreBeam, shockwave, CHARGE_STEPS, charged, courtPosts, bench, planter, lighting, dressing, fieldSheet, fieldSparkles, archRing, banner,
     supportAt, clearAt, walkable, word, GLYPHS, gateWindow,
     PALETTE: { STONE, STONE_DK, STONE_LT, BRONZE, BRONZE_DK, BRASS, GOLD, GOLD_DK, TIMBER, TIMBER_DK, FIELD, FIELD_LT, FIELD_DK, PASSAGE, CLOTH },
     facing, archOutline, archEdge, archAt, archNeon, ball, disc, hoop, banners, blend
