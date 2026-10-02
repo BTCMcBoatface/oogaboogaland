@@ -34,7 +34,7 @@ jobs:
       - name: Refresh Oogatron activity snapshot
         run: node scripts/jumbotron-data.mjs "$OOGATRON_STATS_URL"
         env:
-          OOGATRON_STATS_URL: https://oogatron.oogaboogax.workers.dev/v2/stats
+          OOGATRON_STATS_URL: https://oogatron.wickedsmartbitcoin.workers.dev/v2/stats
       - name: Build and stage site
         run: node scripts/site.mjs _site
       - name: Upload the built page for the artifact job
