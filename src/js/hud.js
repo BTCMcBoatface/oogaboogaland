@@ -201,6 +201,8 @@
       primaryStrength: $("primary-strength"),
       primaryStrengthFill: $("primary-strength-fill"),
       gorillaSmash: $("gorilla-smash-hud"),
+      gorillaStrength: $("gorilla-strength"),
+      gorillaStrengthFill: $("gorilla-strength-fill"),
       weapon: $("weapon-hud"),
       weaponToggle: $("weapon-hud"),
       weaponReadout: $("weapon-readout"),
@@ -691,6 +693,12 @@
       el.jetpack.hidden = !jetpackShown || !!entry;
       refreshWeaponSummary();
       setMode(null);
+    };
+    const setGorillaSmashPower = (charge) => {
+      const power = 100 + Math.round(Math.max(0, Math.min(1, charge)) * 100);
+      el.gorillaStrengthFill.style.transform = `scaleY(${power / 200})`;
+      el.gorillaStrength.setAttribute("aria-valuenow", String(power));
+      el.gorillaStrength.setAttribute("aria-valuetext", `${power}% of normal smash damage`);
     };
     const setSubtitle = (text) => {
       el.subtitle.textContent = text;
@@ -1629,7 +1637,7 @@
       el.board.classList.remove("board-floating");
       el.board.removeAttribute("style");
     };
-    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, restoreBoards, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setDetachedView, fadeDetachedName, setAreaLabel, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
+    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, restoreBoards, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setGorillaSmashPower, setDetachedView, fadeDetachedName, setAreaLabel, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
   };
   // The account line in the sheet's foot is page-level: shown only when a backend answered, and
   // the director hands every change of `BL.net.state` here, whichever scene is active.

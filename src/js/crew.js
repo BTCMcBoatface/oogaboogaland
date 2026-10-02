@@ -116,7 +116,7 @@
   const WANDER_SPEED = 1.3, RUSH_SPEED = 2.8, PLAYER_SPEED = WALK.speed;
   const PLAYER_STEP = 0.125;
   const LADDER_SPEED = 2.4;
-  const SHOULDER_GAP = 0.68, SHOULDER_REACH = 1.3, SHOULDER_TWIST = 1.05;
+  const SHOULDER_GAP = 0.68, SHOULDER_TOUCH = 1.1, SHOULDER_REACH = 1.3, SHOULDER_TWIST = 1.05;
   // A body the scene owns rather than the roster can be bigger than an Ooga, so
   // the gap kept from it is wider than the one walkers keep from each other.
   const OUTSIDE_GAP = 0.86;
@@ -3379,7 +3379,7 @@
           if (npc && following(cave, other, NPC_PASS_REACH)) continue;
           const dx = other.shoulder.snapX - s.snapX, dz = other.shoulder.snapZ - s.snapZ;
           const along = dx * fx + dz * fz, side = dx * fz - dz * fx;
-          if (Math.abs(along) >= nearest || Math.abs(side) >= SHOULDER_GAP || dx * dx + dz * dz < SHOULDER_GAP * SHOULDER_GAP - 1e-6) continue;
+          if (Math.abs(along) >= nearest || Math.abs(side) >= SHOULDER_TOUCH || dx * dx + dz * dz < SHOULDER_GAP * SHOULDER_GAP - 1e-6) continue;
           // A moving leader yields only to a faster walker closing from behind, not to standing or receding neighbours.
           if (along <= 0 && (along < -0.95 || (other.shoulder.snapVX - s.snapVX) * fx + (other.shoulder.snapVZ - s.snapVZ) * fz < 0.08)) continue;
           nearest = Math.abs(along); found = other; across = side; rear = along <= 0;
@@ -3397,7 +3397,7 @@
         const side = dx * Math.cos(s.heading) - dz * Math.sin(s.heading);
         s.side = Math.abs(side) < 0.02 ? 1 : Math.sign(side);
         s.dodge = Math.abs(across) < 0.02 ? (s.rear ? -1 : 1) : Math.sign(across);
-        s.amount = prop ? clamp(1 - Math.max(hit.minContactAcross, -hit.maxContactAcross, 0) / 0.3, 0, 1) : clamp(1 - Math.abs(across) / SHOULDER_GAP, 0, 1);
+        s.amount = prop ? clamp(1 - Math.max(hit.minContactAcross, -hit.maxContactAcross, 0) / 0.3, 0, 1) : clamp(1 - Math.abs(across) / SHOULDER_TOUCH, 0, 1);
         if (prop) s.propOffset = s.dodge > 0 ? hit.minAcross - 0.315 : hit.maxAcross + 0.315;
       }
       fx = s.forwardX; fz = s.forwardZ;
@@ -3477,7 +3477,8 @@
       // Bodies the scene owns are obstacles like any other: the walker's own
       // avoidance steers around them rather than through them.
       if (!outsideClear(p.x, p.z, x, z, feet, cave.bodyHeight)) return false;
-      return npcWalkable(p.x, p.z, x, z, feet, cave.bodyHeight, cave) && groundAt(x, z, feet, feet, cave) >= feet - STEP - 1e-7;
+      return shoulderClear(cave, x, z) && npcWalkable(p.x, p.z, x, z, feet, cave.bodyHeight, cave)
+        && groundAt(x, z, feet, feet, cave) >= feet - STEP - 1e-7;
     };
     const resetWalkerRoute = (cave) => {
       const a = cave.avoidance;
@@ -4305,7 +4306,8 @@
       const y = cave.root.position.y - cave.baseY;
       const height = cave.bodyHeight + Math.max(0, cave.viewLift);
       // On foot, the scene's own walkers are bodies to walk round, not through.
-      if (!flying && cave.hop <= 0 && !outsideClear(fromX, fromZ, toX, toZ, y, height)) return false;
+      if (!flying && cave.hop <= 0 && (!shoulderClear(cave, toX, toZ)
+        || !outsideClear(fromX, fromZ, toX, toZ, y, height))) return false;
       return flying || cave.hop > 0
         ? flyable(fromX, fromZ, toX, toZ, y, height, cave) && groundAt(toX, toZ, y, y, cave) <= y
         : walkable(fromX, fromZ, toX, toZ, y, height, cave);
@@ -4420,6 +4422,7 @@
       const p = cave.root.position, leap = cave.leap;
       const fromX = p.x, fromZ = p.z;
       const wasGround = groundY(cave);
+      const onGorilla = ctx.standingOnGorilla && ctx.standingOnGorilla(cave, wasGround);
       if (cave.jet) runJet(cave, dt);
       else if (cave.traits.footRockets) runRocketJump(cave, dt);
       clampPlayerCeiling(cave, wasGround);
@@ -4465,7 +4468,7 @@
         const drop = wasGround - groundY(cave);
         if (drop > STEP) {
           cave.hop += drop;
-          if (!cave.cloudSupport && !inBananas(cave)) {
+          if (!onGorilla && !cave.cloudSupport && !inBananas(cave)) {
             cave.hopV = Math.max(cave.hopV, WALK.ledgeRise);
             // Aim may face away from travel. Leaving the same ledge must
             // carry the same motion in combat and carry views.

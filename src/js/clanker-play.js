@@ -17,7 +17,7 @@
     let savedNear = camera.near;
     const listeners = [];
     let player = null, view = "orbit", combat = false, disposed = false, jumpKey = false, jumpTap = false, run = false;
-    let actPointer = -1, smashPointer = -1, smashCharge = 0, shownCharge = -1, mouseButtons = 0, blockedButtons = 0, shoulder = 0;
+    let actPointer = -1, smashPointer = -1, smashFromButton = false, smashCharge = 0, shownCharge = -1, mouseButtons = 0, blockedButtons = 0, shoulder = 0;
     let focused = false, lockPending = false, wasLocked = false, unlockedAt = -Infinity, focusVersion = 0;
     let actMode = -1;
     let handoffBefore = false, holdingFollow = false, pinnedFollow = false, viewChanged = false, moving = false;
@@ -155,10 +155,10 @@
       actPointer = -1;
       if (pointer >= 0 && hud.el.act.hasPointerCapture(pointer)) hud.el.act.releasePointerCapture(pointer);
       const smash = smashPointer;
-      smashPointer = -1; smashCharge = 0;
+      smashPointer = -1; smashFromButton = false; smashCharge = 0;
       if (player) player.motion.poundCharge = 0;
       if (smash >= 0 && hud.el.gorillaSmash.hasPointerCapture(smash)) hud.el.gorillaSmash.releasePointerCapture(smash);
-      hud.el.gorillaSmash.style.setProperty("--pound-charge", "0");
+      hud.setGorillaSmashPower(0);
       shownCharge = -1;
       if (input) input.reset();
       pilot.controls.clearPointer();
@@ -339,6 +339,13 @@
         } else { rightDownAt = now; rightTravel = 0; }
       }
     };
+    const beginSmash = (event, fromButton) => {
+      if (smashPointer >= 0) return;
+      smashPointer = event.pointerId;
+      smashFromButton = fromButton;
+      smashCharge = 0;
+      if (fromButton && event.isTrusted) hud.el.gorillaSmash.setPointerCapture(event.pointerId);
+    };
     const onDown = (event) => {
       if (!player) return;
       if (event.target === hud.el.act) {
@@ -350,9 +357,7 @@
       } else if (event.target === hud.el.gorillaSmash || hud.el.gorillaSmash.contains(event.target)) {
         if (event.button !== 0 || smashPointer >= 0) return;
         consume(event);
-        smashPointer = event.pointerId;
-        smashCharge = 0;
-        if (event.isTrusted) hud.el.gorillaSmash.setPointerCapture(event.pointerId);
+        beginSmash(event, true);
       } else if (event.target === canvas && event.button === 2 && event.pointerType !== "touch") {
         consume(event); mouseButtons = event.buttons;
         rightPress();
@@ -360,7 +365,7 @@
         consume(event);
         mouseButtons = event.buttons;
         if (!focused) { blockedButtons |= event.buttons; focusCombat(); return; }
-        if (event.button === 0 && !(blockedButtons & 1)) clankers.smash();
+        if (event.button === 0 && !(blockedButtons & 1)) beginSmash(event, false);
       }
     };
     const moveView = (dx, dy) => {
@@ -404,7 +409,7 @@
       if (!player || !combat || !focused || event.target !== canvas || event.pointerType === "touch") return;
       consume(event);
       const pressed = event.buttons & ~mouseButtons & ~blockedButtons;
-      if (pressed & 1) clankers.smash();
+      if (pressed & 1) beginSmash(event, false);
       if (pressed & 2) rightPress();
       mouseButtons = event.buttons;
       blockedButtons &= event.buttons;
@@ -423,10 +428,13 @@
       } else if (event.pointerId === smashPointer) {
         consume(event);
         const charge = smashCharge;
-        smashPointer = -1; smashCharge = 0; player.motion.poundCharge = 0;
-        hud.el.gorillaSmash.style.setProperty("--pound-charge", "0"); shownCharge = -1;
-        if (hud.el.gorillaSmash.hasPointerCapture(event.pointerId)) hud.el.gorillaSmash.releasePointerCapture(event.pointerId);
-        hud.el.gorillaSmash.blur();
+        const fromButton = smashFromButton;
+        smashPointer = -1; smashFromButton = false; smashCharge = 0; player.motion.poundCharge = 0;
+        hud.setGorillaSmashPower(0); shownCharge = -1;
+        if (fromButton) {
+          if (hud.el.gorillaSmash.hasPointerCapture(event.pointerId)) hud.el.gorillaSmash.releasePointerCapture(event.pointerId);
+          hud.el.gorillaSmash.blur();
+        }
         clankers.smash(charge);
       } else if (event.target === canvas && combat && event.pointerType !== "touch") {
         consume(event);
@@ -476,7 +484,7 @@
         smashCharge = Math.min(1, smashCharge + dt / POUND_CHARGE_TIME);
         player.motion.poundCharge = smashCharge;
         const charge = Math.round(smashCharge * 100);
-        if (charge !== shownCharge) { shownCharge = charge; hud.el.gorillaSmash.style.setProperty("--pound-charge", String(charge / 100)); }
+        if (charge !== shownCharge) { shownCharge = charge; hud.setGorillaSmashPower(charge / 100); }
       }
       const axes = pilot.controls.read();
       const shoulderCombat = combat && view === "shoulder";

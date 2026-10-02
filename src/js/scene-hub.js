@@ -1403,9 +1403,11 @@
         l.debug.approximated = false;
       }
     }
-    // Registration order is spatially stable: camera movement never swaps lamp profiles.
-    for (let i = 0; i < lamps.length; i++) {
+    // Keep the campfire and pile lanterns in every quality tier, then fill the
+    // remaining slots in stable registration order.
+    for (let pass = 0; pass < 2; pass++) for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i];
+      if (!!l.centerLight !== (pass === 0)) continue;
       if (!l.lit || !l.light) continue;
       if (count < limit) {
         l.selected = true;
@@ -1704,6 +1706,7 @@
       const light = postDressing.lights, pick = postDressing.picks;
       const lamp = addLamp(glow, DRESSING_LAMPS[light[3]], 0, 0, 0, true, 0, `pile-post:${i}`);
       lamp.nightOnly = true;
+      lamp.centerLight = true;
       const pickNode = createNode({ geometry: PICK_GEOMETRY });
       const owner = { kind: "piece", piece: "lanternPost", variant: 0, node: pickNode, x: 0, y: 0, z: 0, next: 0, weaponType: "none" };
       addTarget(pickNode, owner, { radius: Math.max(0.35, pick[5]) });
@@ -8062,6 +8065,7 @@
     bifrostIsle = BL.scenes.bifrost ? buildBifrostIsle(archLamp) : null;
     const firePos = buildFire();
     fire = lamps[lamps.length - 1];
+    fire.centerLight = true;
     // The arch's lanterns pool warm light on its stone, ranked right after the fire so every tier keeps the fires first;
     // its glass glows with the islet's lamps.
     if (archLamp) addLamp({ glow: 0, flare: 0, visible: true }, LAMP.arch, archLamp.pool.x, archLamp.pool.y, archLamp.pool.z, true, 1, "bifrost:arch");
@@ -8126,6 +8130,10 @@
     unsubscribeChain = chain.subscribe(onChain);
     unsubscribeMempool = mempool.subscribe(onMempool);
     shared.characterSupportAt = characterSupportAt;
+    shared.standingOnGorilla = (cave, feet) => {
+      const p = cave.root.position;
+      return Math.abs(characterClankerSupportAt(p.x, p.z, feet, 0, cave) - feet) <= 1e-6;
+    };
     shared.carryCharacter = carryCharacter;
     shared.npcWalkable = npcWalkable;
     shared.prepareNpcRoutes = refreshWorkZones;

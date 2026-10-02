@@ -614,10 +614,10 @@
       state.beat = MANAGED_BEAT_TIME;
       return true;
     };
-    const pound = () => {
-      if (!managed || state.pound > 0 || state.beat > 0 || state.air || state.crouch > 0.01 || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
-      state.pound = POUND_TIME;
-      return true;
+    const pound = (allowAir = false, charge = 0) => {
+      if (!managed || state.pound > 0 || state.beat > 0 || state.air && !allowAir || state.crouch > 0.01 && !allowAir || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
+      state.pound = POUND_TIME * (1 - 0.34 * clamp(charge, 0, 1));
+      return state.pound;
     };
     // Called with no route while idle; returns once a new walk is wanted.
     let onIdle = null;
@@ -700,8 +700,8 @@
       } else if (moving > 0) bob = 0.02 * Math.abs(wave(state.phase, 0)) * moving;
       let poundLift = 0, slamDrive = 0;
       if (managed && state.poundCharge > 0 && state.pound <= 0) {
-        poundLift = state.poundCharge * 0.8;
-        pitch = 1.02 - 0.45 * poundLift;
+        poundLift = state.poundCharge;
+        pitch = 1.02 - 0.86 * poundLift;
       }
       if (managed && state.pound > 0) {
         const t = 1 - state.pound / POUND_TIME;
@@ -810,7 +810,7 @@
         } else if (managed && (state.pound > 0 || poundLift > 0)) {
           // Reach ahead of the lowered shoulders with straight arms as the
           // torso folds nearly parallel to the ground at impact.
-          limb(arm, -state.pitch - (state.smash ? 2.7 : 1.65) * poundLift - 0.9 * slamDrive, dt, slamDrive > 0 ? 28 : 18);
+          limb(arm, -state.pitch - (state.smash || state.poundCharge > 0 ? 2.7 : 1.65) * poundLift - 0.9 * slamDrive, dt, slamDrive > 0 ? 28 : 18);
           arm.rotation.z = damp(arm.rotation.z, 0, 18, dt);
         } else if (state.gait === "beat") {
           // Alternate fists on the chest, easing in and out of the pose
@@ -1227,11 +1227,11 @@
         else state.groomSide = groomSide;
       }
       if (motion && Number.isFinite(motion.groomPhase)) state.groomTime = motion.groomPhase;
-      state.smash = !!(motion && motion.smash && !airborne && !state.roll);
+      state.smash = !!(motion && motion.smash && !state.roll);
       state.lounge = !airborne && state.speed <= 0.1 && (lounge === "sit" || lounge === "back" || lounge === "left" || lounge === "right"
         || lounge === "lean-left" || lounge === "lean-right" || lounge === "lean-back") ? lounge : "";
       if (state.roll > 0 || airborne || state.climb > 0) state.lounge = "";
-      if (state.lounge || state.roll > 0 || airborne || state.climb > 0) state.pound = state.beat = state.chewing = 0;
+      if (state.lounge || state.roll > 0 || airborne && !state.smash || state.climb > 0) state.pound = state.beat = state.chewing = 0;
       if (state.speed > 0.1 || airborne) state.beat = 0;
       state.groundPlane = !!(groundPlaneAt && !airborne && !lab && !lounge && !state.climb && !state.roll
         && !state.beat && !state.pound && groundPlaneAt(px, py, pz, facing, state, motion));

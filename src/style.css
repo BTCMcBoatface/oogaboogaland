@@ -1665,10 +1665,10 @@ body[data-active-scene="arcade"] .magazine-hud {
 
 .gorilla-hud {
   flex: none;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 0;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
   user-select: none;
 }
 
@@ -1677,19 +1677,6 @@ body[data-active-scene="arcade"] .magazine-hud {
   height: 40px;
   transform: translateY(-2px);
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
-}
-
-#gorilla-smash-hud::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: 4px;
-  width: 100%;
-  background: #ffd84a;
-  transform: scaleX(var(--pound-charge, 0));
-  transform-origin: left;
-  pointer-events: none;
 }
 
 .mode-health {
