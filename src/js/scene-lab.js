@@ -210,7 +210,7 @@
     addChild(root, agent.root);
     // One owner for every part, so a tap on any limb is a tap on the Agent
     const agentOwner = { kind: "agent", agent };
-    for (const name of ["torso", "head", "armL", "armR", "legL", "legR"]) addProp(agent.parts[name], agentOwner);
+    for (const name of ["torso", "head", "armR", "armL", "legR", "legL"]) addProp(agent.parts[name], agentOwner);
     return agent;
   };
   const agentTripleClick = () => {

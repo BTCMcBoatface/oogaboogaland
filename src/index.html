@@ -444,7 +444,8 @@
         </div>
       </button>
       <button type="button" class="gorilla-hud" id="gorilla-smash-hud" data-action="gorilla-smash"
-        aria-label="Ground smash" title="Ground smash (1)" hidden>
+        aria-label="Ground smash; hold for double damage" title="Ground smash · hold for double damage (1)" hidden>
+        <span class="weapon-toggle">
         <svg class="gorilla-action-icon" viewBox="0 0 32 32" shape-rendering="crispEdges" aria-hidden="true">
           <path fill="#1d1a18" d="M2 9h8v16H2z" />
           <path fill="#393634" d="M3 11h6v12H3z" />
@@ -461,6 +462,13 @@
           <path fill="#403b36" d="M23 11h2v2h-2v1h-1v-2h1z" />
           <path fill="#24211e" d="M4 14h2v3H4zM6 19h3v2H6zM9 10h2v3H9z" />
         </svg>
+        </span>
+        <span class="equipment-compact primary-readout">
+          <span class="primary-strength" id="gorilla-strength" role="meter" aria-label="Ground smash power"
+            aria-valuemin="0" aria-valuemax="200" aria-valuenow="100" aria-valuetext="100% of normal smash damage">
+            <span class="primary-strength-fill" id="gorilla-strength-fill"></span>
+          </span>
+        </span>
       </button>
       <button type="button" class="primary-hud" id="primary-hud" data-action="weapon-primary" data-equipped="false" data-charging="false"
         aria-label="Equip primary melee weapon" aria-pressed="false" title="Equip primary melee weapon (1)" hidden>

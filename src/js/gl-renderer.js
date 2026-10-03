@@ -428,7 +428,8 @@ vec3 lightFactorAt(vec3 n) {
     float dist = length(ld);
     if (dist >= lp.w) continue;
     float a = clamp(1.0 - dist / lp.w, 0.0, 1.0);
-    a *= a;
+    if (uLights[i * 2 + 1].a > 0.5) a = 0.72 * (1.0 - smoothstep(0.2, 1.0, dist / lp.w));
+    else a *= a;
     factor += uLights[i * 2 + 1].rgb * a * max(dot(n, ld), 0.0) / max(dist, 0.0001);
   }
   if (uSpotLight[0].w > 0.0) {
@@ -1137,6 +1138,7 @@ uniform vec3 uZenith;
 uniform vec3 uSun;
 uniform vec3 uSunDir;
 uniform vec3 uMoonDir;
+uniform vec3 uMoonSunDir;
 uniform mat3 uStarMatrix;
 uniform float uStars;
 uniform float uTime;
@@ -1174,8 +1176,12 @@ void main() {
   float sd = max(dot(d, uSunDir), 0.0);
   float sunDisc = pow(sd, 600.0) * (1.0 - uStars);
   vec3 sun = uSun * (sunDisc + pow(sd, 6.0) * 0.18 * (1.0 - uStars));
-  float moonDisc = smoothstep(0.9985, 0.999, dot(d, uMoonDir)) * uStars;
-  vec3 moon = vec3(0.82, 0.88, 1.0) * moonDisc;
+  float moonDot = dot(d, uMoonDir);
+  float moonDisc = smoothstep(0.9985, 0.999, moonDot) * mix(0.3, 1.0, uStars) * smoothstep(-0.02, 0.005, d.y);
+  vec3 moonOffset = (d - uMoonDir * moonDot) / sqrt(0.003);
+  vec3 moonNormal = moonOffset - uMoonDir * sqrt(max(0.0, 1.0 - dot(moonOffset, moonOffset)));
+  float moonLit = smoothstep(-0.025, 0.025, dot(moonNormal, uMoonSunDir));
+  vec3 moon = vec3(0.82, 0.88, 1.0) * moonDisc * moonLit;
   vec3 stars = vec3(0.0);
   if (uStars > 0.002) {
     vec3 starD = normalize(uStarMatrix * d);
@@ -1436,7 +1442,7 @@ void main() {
         mesh: compile(MESH_VS, meshFragment, ["uViewProj", "uLightViewProj", "uEye", "uViewDirection", "uLightDir", "uSky", "uGround", "uSun", "uDirectStrength", "uAmbientFloor", "uDiffuseFloor", "uShadowStrength", "uShadowFloor", "uShadowBias", "uShadow", "uShadowTexel", "uLights", "uLightCount", "uSpotLight", "uFog", "uFogRange", "uMatrixParams", "uMatrixOrigin", "uMatrixGlyph", "uMatrixCave", "uMatrixCaves", "uMatrixCaveBounds", "uMatrixCaveNear", "uMatrixPermanentCave", "uMatrixPermanentPlane", "uMatrixPermanentAperture", "uMatrixLivingGlobal", "uMatrixGlyphTex", "uMatrixSamples", "uClipMinY", "uClipMaxY", "uObjectClip", "uObjectSlab", "uProjective", "uMatrixGlyphOpacity", "uGlassOpacity", "uVoxel", "uWindTime", "uSway", "uSwing", "uGlass", "uLightBeam"]),
         shadow: compile(SHADOW_VS, SHADOW_FS, ["uLightViewProj", "uClipMinY", "uClipMaxY", "uObjectClip"]),
         line: compile(LINE_VS, LINE_FS, ["uViewProj", "uViewport", "uWidth", "uClipMaxY", "uObjectClip"]),
-        sky: compile(QUAD_VS, SKY_FS, ["uInvViewProj", "uHorizon", "uZenith", "uSun", "uSunDir", "uMoonDir", "uStarMatrix", "uStars", "uTime", "uHazeDrop", "uClouds", "uSea", "uSeaEye"]),
+        sky: compile(QUAD_VS, SKY_FS, ["uInvViewProj", "uHorizon", "uZenith", "uSun", "uSunDir", "uMoonDir", "uMoonSunDir", "uStarMatrix", "uStars", "uTime", "uHazeDrop", "uClouds", "uSea", "uSeaEye"]),
         blur: compile(QUAD_VS, BLUR_FS, ["uTex", "uDir"]),
         composite: compile(QUAD_VS, COMPOSITE_FS, ["uScene", "uBloom", "uBloomWide", "uBloomStrength", "uDepth", "uShaft", "uShaftColor"])
       };
@@ -2916,6 +2922,7 @@ void main() {
         horizon,
         zenith,
         moon = DEFAULT_MOON,
+        moonSun = sunDirection,
         stars = 0,
         starMatrix = DEFAULT_STAR_MATRIX,
         time = 0,
@@ -2952,6 +2959,7 @@ void main() {
         gl.uniform3fv(pg.sky.u.uSun, sun);
         gl.uniform3f(pg.sky.u.uSunDir, sx, sy, sz);
         gl.uniform3f(pg.sky.u.uMoonDir, moon.x, moon.y, moon.z);
+        gl.uniform3f(pg.sky.u.uMoonSunDir, moonSun.x, moonSun.y, moonSun.z);
         gl.uniformMatrix3fv(pg.sky.u.uStarMatrix, false, starMatrix);
         gl.uniform1f(pg.sky.u.uStars, stars);
         // The sky's clouds, stars and sea move on the renderer's own clock, so every scene's water is alive.

@@ -2433,11 +2433,11 @@ const characterChecks = async () => {
     const traits = BL.contributors.traitsFor(c.handle), m = BL.models.caveman(traits);
     // A second colourway has to pair every voxel part both ways, heads included,
     // so crew.js changes the whole body and a second change puts it back.
-    const parts = ["legL", "legR", "torso", "armL", "armR", "head"].map((key) => m.parts[key].geometry).concat([m.headOpen, m.headClosed]);
+    const parts = ["legR", "legL", "torso", "armR", "armL", "head"].map((key) => m.parts[key].geometry).concat([m.headOpen, m.headClosed]);
     const tint = !c.dress || !c.dress.tint ? !m.tint
       : !!m.tint && parts.every((geo) => m.tint.has(geo) && m.tint.get(m.tint.get(geo)) === geo && m.tint.get(geo).faces.length === geo.faces.length);
     return { handle: c.handle, joined: c.joined > 1.7e9 && c.joined < 4e9, built: m.headOpen.faces.length > 0 && m.headClosed.faces.length > 0 && m.headOpen !== m.headClosed,
-      parts: ["legL", "legR", "torso", "armL", "armR", "head", "club", "gun"].every((key) => m.parts[key]), hooks: Object.keys(c.dress || {}).every((key) => hooks.includes(key) && typeof c.dress[key] === "function"),
+      parts: ["legR", "legL", "torso", "armR", "armL", "head", "club", "gun"].every((key) => m.parts[key]), hooks: Object.keys(c.dress || {}).every((key) => hooks.includes(key) && typeof c.dress[key] === "function"),
       tint, voice: !c.voice || typeof c.voice.poke === "string" && Array.isArray(c.voice.idle),
       display: c.display === undefined || typeof c.display === "string" && !!c.display.trim() && c.display.length <= 39 };
   });
@@ -3389,7 +3389,9 @@ const hubBlockHeight = { name: "header clock and block height", why: "rule: the 
   record("header: a single-digit clock is centered from its displayed time and local zone, while the chain feed paints block height below it and banana-meter updates cannot overwrite it", before.height === "\u2014" && !before.bananas && before.text === `9:00 AM ${before.zone}` && before.viewWidth === before.cells && Math.abs(before.cssWidth - before.cells / 6) < 1e-6 && after.shown === "900,123" && after.afterMeter === after.shown && after.label === "Bitcoin block height 900123" && !after.bananas && !after.icon, JSON.stringify({ before, after }));
 } };
 const hubWalking = { name: "hub walking", why: "regression: steering keys came out mirrored, and the removed hub Agent could still be summoned", run: async (b) => {
-  const ooga = await walkKeys(b, "portlandhodl", -8, 8, [0, 2.2], 0.6);
+  // Keep each directional check in the same clear patch as walking speed changes.
+  const duration = await b.evaluate(`2 / BL.pilot.WALK.speed`);
+  const ooga = await walkKeys(b, "portlandhodl", -8, 8, [0, 2.2], duration);
   const running = await b.evaluate(`(() => {
     const B = __ooga, a = B.cavemen.get("portlandhodl"), P = B.pilot, rows = [];
     const key = (type, key, code, location = 0, shiftKey = false) => window.dispatchEvent(new KeyboardEvent(type, { key, code, location, shiftKey }));
@@ -3477,7 +3479,9 @@ const hubRainforestSteps = { name: "rainforest bridge steps", why: "regression: 
       B.advance(0.2, 1 / 60);
       let stalled = 0, longest = 0, airborne = false;
       key("keydown", "w");
-      for (let i = 0; i < 90; i++) {
+      // Stop at the bridge landing rather than running for the old walking
+      // duration, which now carries the faster Ooga beyond the diagonal test lane.
+      for (let i = 0; i < 90 && a.root.position.x * D.x + a.root.position.z * D.z < 33; i++) {
         const p = a.root.position, before = p.x * D.x + p.z * D.z;
         B.advance(1 / 60, 1 / 60);
         stalled = p.x * D.x + p.z * D.z - before < 0.01 ? stalled + 1 : 0;
@@ -3485,7 +3489,11 @@ const hubRainforestSteps = { name: "rainforest bridge steps", why: "regression: 
       }
       key("keyup", "w");
       const top = a.root.position.x * D.x + a.root.position.z * D.z, feet = a.root.position.y - a.baseY;
-      key("keydown", "s"); B.advance(1.5, 1 / 60); key("keyup", "s");
+      key("keydown", "s");
+      for (let i = 0; i < 90 && a.root.position.x * D.x + a.root.position.z * D.z > 26; i++) {
+        B.advance(1 / 60, 1 / 60); airborne ||= a.hop > 0.01;
+      }
+      key("keyup", "s");
       rows.push({ across, replay, top, feet, bottom: a.root.position.x * D.x + a.root.position.z * D.z, longest, airborne });
     }
     const v = P.bridge().verts;
@@ -4927,6 +4935,7 @@ const hubBirdsEyeProjection = { name: "birds-eye projection", why: "rule: overhe
 const hubCombatReplay = { name: "birds-eye combat replay", why: "contract: replay links preserve north-up intent and legacy combat orbit poses still migrate", run: async (b) => {
   const northState = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, key = (type, value) => window.dispatchEvent(new KeyboardEvent(type, { key: value }));
+    if (!P.birdsEye) { P.hooks.onZoom(1.2); B.advance(1.5, 1 / 60); }
     const angle = () => Math.atan2(-B.camera.up.x, -B.camera.up.z), wrap = n => Math.atan2(Math.sin(n), Math.cos(n));
     key("keydown", "q"); B.advance(0.4, 1 / 60); key("keyup", "q"); B.advance(0.6, 1 / 60);
     const before = angle(), pose = JSON.parse(document.getElementById("position-debug").dataset.pose);
@@ -5555,7 +5564,9 @@ const factoryEntrance = { name: "factory entrance", why: "regression: flying abo
 // bridge and through the portal's field as the widest Ooga; W A S D in the hall; back out through the field; Escape.
 const bifrostEntrance = { name: "bifrost entrance", why: "playthrough: an Ooga walks through the arch and the portal's field into the chamber as the same Ooga, with DSB Land's picture and the view back out", run: async (b) => {
   await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"), g = B.island.gate, z = g.z + 2; if (B.crew.player !== a) B.pilot.possess(a); B.pilot.navigate({ position: { x: g.x, y: B.island.surfaceAt(g.x, z), z }, target: { x: g.x, y: 6, z: z - 6 }, yaw: 0, pitch: 0.2, dist: 5 }); B.advance(0.5, 1 / 60); })()`);
-  await walkToward(b, 0, -1, 2.5);
+  // Stop on the first bridge span. A fixed walking duration can reach the islet's higher court,
+  // whose valid half-metre rise must not be compared with the bridge's flat arrival height.
+  await b.evaluate(`(() => { const B = __ooga, I = BL.bifrostIsle, sp = I.spot(B.island); window.dispatchEvent(new KeyboardEvent("keydown", { key: "w", code: "KeyW" })); for (let i = 0; i < 240; i++) { B.advance(1 / 60, 1 / 60); const p = B.crew.player.root.position; if (p.x * Math.sin(I.AXIS.bearing) - p.z * Math.cos(I.AXIS.bearing) > sp.rim + I.HEAD.over + 0.5) break; } window.dispatchEvent(new KeyboardEvent("keyup", { key: "w", code: "KeyW" })); B.advance(0.1, 1 / 60); })()`);
   // The deck starts where the stone head ends, `HEAD.over` out past the rim along the islet's axis.
   const arch = await b.evaluate(`(() => { const B = window.__ooga, I = window.BL.bifrostIsle, a = B.crew.player, p = a.root.position, g = B.island.gate, s = B.bifrost.site.arrival, sp = I.spot(B.island); return { past: +(g.z - p.z).toFixed(2), onDeck: p.x * Math.sin(I.AXIS.bearing) - p.z * Math.cos(I.AXIS.bearing) > sp.rim + I.HEAD.over, feet: +(p.y - a.baseY).toFixed(2), deck: +s.y.toFixed(2) }; })()`);
   record("bifrost entrance: from the pass stairs the roster's widest Ooga walks through the arch out onto the bridge's deck", arch.onDeck && Math.abs(arch.feet - arch.deck) < 0.3, JSON.stringify(arch));
@@ -5828,9 +5839,9 @@ for (const fallback of [false, true]) scene("hub", { label: "timechain " + (fall
 scene("hub", { label: "timechain resident", steps: [{ name: "timechain resident", why: "regression: Sani slept in HQ on ordinary visits, leaving his island empty", run: async (b) => {
   const result = await b.evaluate(`(() => {
     const B = __ooga, D = BL.scenes.hub.debug, T = D.timechainIsland, c = B.cavemen.get('SaniExp'), s = T.seat;
-    const read = () => ({ visible: c.root.visible, seated: s.active, distance: Math.hypot(c.root.position.x - s.x, c.root.position.z - s.z), lean: c.root.rotation.x, leg: c.parts.legL.rotation.x, facingScreen: Math.cos(c.root.rotation.y - T.place.ry) < -0.99 });
-    const before = read(), arm = c.parts.armL.rotation.x; c.act.until = 0; B.advance(0.25, 1 / 60);
-    const typing = c.parts.armL.rotation.x !== arm;
+    const read = () => ({ visible: c.root.visible, seated: s.active, distance: Math.hypot(c.root.position.x - s.x, c.root.position.z - s.z), lean: c.root.rotation.x, leg: c.parts.legR.rotation.x, facingScreen: Math.cos(c.root.rotation.y - T.place.ry) < -0.99 });
+    const before = read(), arm = c.parts.armR.rotation.x; c.act.until = 0; B.advance(0.25, 1 / 60);
+    const typing = c.parts.armR.rotation.x !== arm;
     const spin = rate => {
       T.beer.pause();
       s.angle = s.speed = 0;
@@ -5853,7 +5864,7 @@ scene("hub", { label: "timechain resident", steps: [{ name: "timechain resident"
       for (let i = 0; i < 130 * rate; i++) {
         beer.update(c, T.seat, 1 / rate);
         const s = beer.state;
-        if (s.mode === 'chug') drinkArm = Math.min(drinkArm, c.parts.armR.rotation.x);
+        if (s.mode === 'chug') drinkArm = Math.min(drinkArm, c.parts.armL.rotation.x);
         if (s.mode === 'rise') empty ||= s.litres < 0.001;
         if (s.mode === 'walk') walked ||= Math.hypot(c.root.position.x - T.seat.x, c.root.position.z - T.seat.z) > 3;
         if (s.mode === 'fill') {
@@ -5875,7 +5886,7 @@ scene("hub", { label: "timechain resident", steps: [{ name: "timechain resident"
       D.useProp(D.props.find(p => p.prop === prop));
       const triggered = beer.state.mode === action || action === 'spin' && beer.state.mode === 'spin';
       const phases = new Set(); let drinkArm = 0;
-      for (let i = 0; i < 40 * 60; i++) { beer.update(c, T.seat, 1 / 60); phases.add(beer.state.mode); if (beer.state.mode === 'chug') drinkArm = Math.min(drinkArm, c.parts.armR.rotation.x); }
+      for (let i = 0; i < 40 * 60; i++) { beer.update(c, T.seat, 1 / 60); phases.add(beer.state.mode); if (beer.state.mode === 'chug') drinkArm = Math.min(drinkArm, c.parts.armL.rotation.x); }
       return { triggered, phases: [...phases], ...beer.state, drinkArm, shardsHidden: !beer.shards.visible, streamOff: !beer.stream.visible };
     };
     const chug = journey('chug'), spin = journey('spin');
@@ -5890,7 +5901,7 @@ scene("hub", { label: "chilling", query: "status=chillin&pos=0", steps: [{ name:
   record("chilling Oogas: every Ooga rests beyond the banana ring without eating, and 2140data carries rather than continuously spins his nunchaku", state.rows.every(c => c.state === "chilling" && c.radius >= state.inner && !c.snack) && !state.spin && Math.abs(state.clubYaw) < 1e-6, JSON.stringify(state));
   const seated = await b.evaluate(`(() => {
     const gorilla = BL.agent.create({ managed: true, groundAt: () => 0 }), motion = { groom: 0, groomPhase: 0 };
-    const parts = [gorilla.parts.head, gorilla.parts.armL, gorilla.parts.armR];
+    const parts = [gorilla.parts.head, gorilla.parts.armR, gorilla.parts.armL];
     gorilla.poseManaged(2, 0, 0, 0, 0, 0, false, false, "sit", motion);
     const low = parts.map(part => part.rotation.x), high = low.slice();
     let compact = true, displacement = 0;
@@ -6209,7 +6220,7 @@ scene("hub", { label: "lab work rotation", query: "status=clankin", steps: [{ na
         if (e.lab.station === desk) claims++;
         if (e.motion.labWork !== "type") continue;
         seconds[i] += 1 / 30;
-        low[i] = Math.min(low[i], e.parts.armR.rotation.x); high[i] = Math.max(high[i], e.parts.armR.rotation.x);
+        low[i] = Math.min(low[i], e.parts.armL.rotation.x); high[i] = Math.max(high[i], e.parts.armL.rotation.x);
       }
       duplicate ||= claims > 1;
     }
@@ -6429,7 +6440,8 @@ scene("hub", { label: "gorilla stone core", query: "status=chillin", steps: [{ n
       if (B.island.solidAt(p.x + Math.sin(e.heading) * 0.7, p.y + 0.85, p.z + Math.cos(e.heading) * 0.7)) buriedFrames++;
       if (Math.hypot(p.x - previousX, p.z - previousZ) > 1e-5) movingFrames++;
       previousX = p.x; previousZ = p.z;
-      if (!(frame % 12)) state.trace.push({ frame, x: p.x, y: p.y, z: p.z, heading: e.heading });
+      if (!(frame % 12)) state.trace.push({ frame, x: p.x, y: p.y, z: p.z, heading: e.heading,
+        climbing: e.climb.active, freeClimb: e.climb.free, climbAxis: e.drive.climbAxis });
     }
     state.slide = { tangent: (e.root.position.x - x) * sz - (e.root.position.z - z) * sx, movingFrames, buriedFrames };
     return state;
@@ -6590,6 +6602,111 @@ scene("hub", { label: "gorilla roof descent", query: "status=chillin", steps: [{
   record("gorilla roof descent: the autonomous OBL roof departure reaches the main floor without climbing back onto the roof or relocation",
     state.mounted && state.y < 0.15 && Math.abs(state.y - state.floor) < 0.1 && !state.active && !state.reversals && !state.recoveries, JSON.stringify(state));
 } }] });
+scene("hub", { label: "gorilla carry jump", query: "status=chillin", steps: [{ name: "gorilla carry jump", why: "regression: a parked gorilla's recovery outlasted jump input while dragging an Ooga, blocking takeoff and a charged midair throw", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, C = B.clankers, S = BL.scene, c = B.cavemen.get("portlandhodl"), e = C.list.find(entry => entry.owner === c);
+    B.pilot.release(true); C.release();
+    for (const other of C.list) {
+      other.owner.override = other.owner.state = other === e ? "chilling" : "away";
+      other.active = other.root.visible = other === e;
+    }
+    for (const cave of B.cavemen.values()) cave.root.visible = cave === c;
+    for (const prop of B.props) prop.node.visible = false;
+    Object.assign(e, { active: true, phase: "chill", mode: "chilling", route: "", fromSite: -1, lounge: "",
+      loungeDepart: false, parked: true, biped: true, recover: 0, rest: 120, pound: 0, beat: 0, stand: 0,
+      heading: 0, speed: 0, footprintMode: "stand" });
+    e.jump.active = e.climb.active = e.drive.airborne = e.fire.burning = e.fire.rolling = false;
+    Object.assign(e.motion, { lab: false, climb: 0, climbBlend: NaN, mantle: 0, supportOffset: 0, landing: 0, takeoff: 0 });
+    Object.assign(e.root.position, { x: -8, y: 0, z: 8 });
+    e.gorilla.poseManaged(2, -8, 0, 8, 0, 0, false, true, "", e.motion);
+    S.updateWorld(BL.scenes.hub.root); B.headquarters.solids.companions.sync();
+    c.root.visible = true; c.root.quaternion = null; c.walk = null; c.bedTravel.mode = "";
+    c.camp.seat = null; c.camp.burning = c.camp.rolling = c.camp.panic.active = c.roofEscape.active = false;
+    c.hop = c.hopV = c.jumps = c.leap.vx = c.leap.vz = 0; c.act.kind = "idle"; c.act.until = Infinity;
+    c.root.position.x = -8; c.root.position.z = 8.7;
+    c.root.position.y = c.baseY + B.headquarters.solids.companions.supportAt(-8, 8.7, Infinity, 0, 0.3);
+    B.clankerPlay.possess(e, true);
+    S.updateWorld(BL.scenes.hub.root); B.headquarters.solids.companions.sync();
+    const key = (type, name, code) => window.dispatchEvent(new KeyboardEvent(type, { key: name, code, bubbles: true, cancelable: true }));
+    key("keydown", "g", "KeyG"); B.advance(1 / 60, 1 / 60);
+    const grabbed = c.grabbedBy === e, pendingRecovery = e.recover > 0;
+    key("keydown", " ", "Space"); B.advance(1 / 60, 1 / 60);
+    const tookOff = e.drive.airborne && e.drive.jumps === 1 && c.grabbedBy === e;
+    for (let i = 0; i < 12; i++) B.advance(1 / 60, 1 / 60);
+    S.updateWorld(BL.scenes.hub.root);
+    const arm = e.gorilla.parts.armL, leg = c.parts.legR, a = S.boundsOf(arm.geometry), f = S.boundsOf(leg.geometry);
+    const hand = new Float64Array(3), foot = new Float64Array(3);
+    BL.math.mat4.transformPoint(hand, arm.world, a.center[0], a.min[1] + 0.08, a.center[2]);
+    BL.math.mat4.transformPoint(foot, leg.world, f.center[0], f.min[1], f.center[2]);
+    const grip = Math.hypot(hand[0] - foot[0], hand[1] - foot[1], hand[2] - foot[2]);
+    key("keyup", " ", "Space"); key("keydown", " ", "Space"); B.advance(1 / 60, 1 / 60);
+    const secondJump = e.drive.airborne && e.drive.jumps === 2 && c.grabbedBy === e;
+    key("keyup", " ", "Space");
+    const button = document.getElementById("gorilla-smash-hud"), serial = e.smashSerial;
+    button.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 31, pointerType: "mouse", button: 0, buttons: 1, bubbles: true }));
+    for (let i = 0; i < 12; i++) B.advance(1 / 60, 1 / 60);
+    const charged = c.grabbedBy === e && e.drive.airborne
+      && Number(document.getElementById("gorilla-strength").getAttribute("aria-valuenow")) > 33;
+    button.dispatchEvent(new PointerEvent("pointerup", { pointerId: 31, pointerType: "mouse", button: 0, buttons: 0, bubbles: true }));
+    const heldThroughRelease = c.grabbedBy === e;
+    for (let i = 0; i < 17; i++) B.advance(1 / 60, 1 / 60);
+    const thrownInAir = !c.grabbedBy && e.drive.airborne && c.hop > 0 && Math.hypot(c.leap.vx, c.leap.vz) > 1;
+    key("keyup", "g", "KeyG");
+    return { grabbed, pendingRecovery, tookOff, grip, secondJump, charged, heldThroughRelease, thrownInAir,
+      smashUnchanged: e.smashSerial === serial };
+  })()`);
+  record("gorilla carry jump: parked recovery cannot swallow takeoff; both jumps hold the Ooga's right foot and a charged click releases them in midair without smashing",
+    state.grabbed && state.pendingRecovery && state.tookOff && state.grip < 0.04 && state.secondJump && state.charged
+      && state.heldThroughRelease && state.thrownInAir && state.smashUnchanged, JSON.stringify(state));
+} }] });
+scene("hub", { label: "gorilla lab carry jump", query: "character=gorilla-portlandhodl&status=clankin", steps: [{ name: "gorilla lab carry jump", why: "regression: a running gorilla's upward jump was rejected as a fresh peer overlap in EntropyLab while G was held", run: async (b) => {
+  const state = await b.evaluate(`(() => {
+    const B = __ooga, S = BL.scene, e = B.clankers.player, cave = e.owner, p = e.root.position;
+    cave.state = "working"; cave.root.visible = true; cave.root.quaternion = null; cave.walk = null; cave.bedTravel.mode = "";
+    cave.camp.seat = null; cave.camp.burning = cave.camp.rolling = cave.camp.panic.active = cave.roofEscape.active = false;
+    cave.health.stunned = 0; cave.hop = cave.hopV = cave.jumps = cave.leap.vx = cave.leap.vz = 0;
+    cave.act.kind = "idle"; cave.act.until = Infinity;
+    const mesh = B.headquarters.solids.companions;
+    const key = (type, name, code) => window.dispatchEvent(new KeyboardEvent(type, { key: name, code, bubbles: true, cancelable: true }));
+    const startY = p.y, startZ = p.z, serial = e.smashSerial;
+    key("keydown", "Shift", "ShiftLeft"); key("keydown", "w", "KeyW");
+    for (let i = 0; i < 5; i++) B.advance(1 / 60, 1 / 60);
+    const ran = e.drive.run && e.drive.z < -0.5 && Math.abs(p.z - startZ) > 0.2;
+    S.updateWorld(BL.scenes.hub.root); mesh.sync();
+    let support = -Infinity, riderX = p.x, riderZ = p.z;
+    for (let dx = -1; dx <= 1.001; dx += 0.2) for (let dz = -1; dz <= 1.001; dz += 0.2) {
+      const x = p.x + dx, z = p.z + dz;
+      const y = mesh.supportAt(x, z, Infinity, 0, 0.3, null, null, false, node => e.renderParts.includes(node));
+      if (y > support) { support = y; riderX = x; riderZ = z; }
+    }
+    cave.root.position.x = riderX; cave.root.position.z = riderZ; cave.root.position.y = cave.baseY + support;
+    S.updateWorld(BL.scenes.hub.root); mesh.sync();
+    key("keydown", "g", "KeyG"); B.advance(1 / 60, 1 / 60);
+    const grabbed = cave.grabbedBy === e;
+    key("keydown", " ", "Space"); B.advance(1 / 60, 1 / 60);
+    const first = e.drive.airborne && e.drive.jumps === 1 && e.drive.vy > 1 && p.y > startY + 0.05 && cave.grabbedBy === e;
+    let peak = p.y;
+    for (let i = 0; i < 8; i++) { B.advance(1 / 60, 1 / 60); peak = Math.max(peak, p.y); }
+    key("keyup", " ", "Space"); key("keydown", " ", "Space"); B.advance(1 / 60, 1 / 60);
+    const second = e.drive.airborne && e.drive.jumps === 2 && e.drive.vy > 1 && cave.grabbedBy === e;
+    key("keyup", " ", "Space");
+    const button = document.getElementById("gorilla-smash-hud");
+    button.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 51, pointerType: "mouse", button: 0, buttons: 1, bubbles: true }));
+    for (let i = 0; i < 8; i++) B.advance(1 / 60, 1 / 60);
+    const charged = e.drive.airborne && cave.grabbedBy === e
+      && Number(document.getElementById("gorilla-strength").getAttribute("aria-valuenow")) > 33;
+    button.dispatchEvent(new PointerEvent("pointerup", { pointerId: 51, pointerType: "mouse", button: 0, buttons: 0, bubbles: true }));
+    const heldThroughRelease = cave.grabbedBy === e;
+    for (let i = 0; i < 17; i++) B.advance(1 / 60, 1 / 60);
+    const thrownInAir = !cave.grabbedBy && e.drive.airborne && cave.hop > 0 && Math.hypot(cave.leap.vx, cave.leap.vz) > 1;
+    key("keyup", "g", "KeyG"); key("keyup", "w", "KeyW"); key("keyup", "Shift", "ShiftLeft");
+    return { lab: e.motion.lab, ran, grabbed, first, peak, second, charged, heldThroughRelease, thrownInAir,
+      smashUnchanged: e.smashSerial === serial };
+  })()`);
+  record("gorilla lab carry jump: Shift+W+G keeps a running grab through both jumps and a charged midair throw without a smash",
+    state.lab && state.ran && state.grabbed && state.first && state.peak > 0.5 && state.second && state.charged && state.heldThroughRelease
+      && state.thrownInAir && state.smashUnchanged, JSON.stringify(state));
+} }] });
 scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1", steps: [{ name: "gorilla prop traversal", why: "regression: low props interrupted the gallop, jump input delayed takeoff, and a stale motion envelope trapped gorillas beneath trees", run: async (b) => {
   const state = await b.evaluate(`(() => {
     const B = __ooga, S = BL.scene, root = BL.scenes.hub.root, C = B.clankers, e = C.list.find(e => e.owner.traits.name === "portlandhodl"), solids = B.headquarters.solids.props;
@@ -6702,17 +6819,24 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
       jumps.push({ run, gait, startSpeed, switchSpeed, firstAir, heldTravel, stopped, vx, peak, heldJumps, heldLanded, releaseJumps,
         secondCount, secondVelocity, thirdCount, thirdVelocity, secondLift, landed, nextJump });
     }
-    const tree = B.props.find(prop => prop.prop === "tree"); tree.node.visible = true; S.updateWorld(root); solids.sync();
+    const tree = B.props.find(prop => prop.prop === "tree"), treePosition = { ...tree.node.position };
+    // Scattered trees live on cliff ledges; a westward retreat from the first
+    // can start beyond the island. Use the same cleared ground as the props.
+    Object.assign(tree.node.position, { x: 12, y: B.island.surfaceAt(12, 0), z: 0 });
+    tree.node.visible = true; S.updateWorld(root); solids.sync();
     const q = tree.node.position; setup(q.x - 2.8, q.z, Math.PI / 2);
+    const startY = e.root.position.y;
     e.drive.motionEnvelope = true; e.drive.motionRecover = 0.6;
-    let lowFrames = 0, bipedFrames = 0, movingFrames = 0, previous = e.root.position.x;
+    let lowFrames = 0, bipedFrames = 0, movingFrames = 0, airborneFrames = 0, previous = e.root.position.x;
     advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.5, () => {
       if (e.gorilla.debug.gait === "knuckle" && !e.drive.airborne) lowFrames++; if (e.biped) bipedFrames++;
+      if (e.drive.airborne) airborneFrames++;
       if (Math.abs(e.root.position.x - previous) > 1e-5) movingFrames++;
       previous = e.root.position.x;
     });
-    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames, envelopeCleared: !e.drive.motionEnvelope && !e.drive.motionRecover };
-    tree.node.visible = false;
+    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, startY, endY: e.root.position.y,
+      lowFrames, bipedFrames, movingFrames, airborneFrames, envelopeCleared: !e.drive.motionEnvelope && !e.drive.motionRecover };
+    Object.assign(tree.node.position, treePosition); tree.node.visible = false; S.updateWorld(root); solids.sync();
     // Keep the identical obstacle outside the arcade's reserved entrance apron.
     const screen = S.createNode({ geometry: BL.models.box({ w: 0.5, h: 4, d: 4, color: BL.math.hexToRgb("#454545") }),
       position: { x: 12, y: B.island.surfaceAt(12, 10) + 2, z: 10 } });
@@ -6950,7 +7074,7 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
       let gap = Infinity, overlap = null;
       S.traverseVisible(e.root, node => {
         if (!node.geometry) return;
-        const v = node.geometry.verts, m = node.world, clip = node.geometry.clipPlane, hand = node === e.parts.armL || node === e.parts.armR;
+        const v = node.geometry.verts, m = node.world, clip = node.geometry.clipPlane, hand = node === e.parts.armR || node === e.parts.armL;
         let low = Infinity, high = -Infinity;
         if (hand) for (let i = 1; i < v.length; i += 3) { low = Math.min(low, v[i]); high = Math.max(high, v[i]); }
         for (let i = 0; i < v.length; i += 3) {
@@ -7015,10 +7139,10 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
       const settled = e.gorilla.debug.pitch, gait = e.gorilla.debug.gait;
       let workRaise = null;
       if (entering) {
-        S.updateWorld(e.root, root.world); const handY = center(e.parts.armR)[1];
+        S.updateWorld(e.root, root.world); const handY = center(e.parts.armL)[1];
         e.motion.labWork = "touch"; e.motion.labSide = 1;
         e.gorilla.poseManaged(0.5, e.root.position.x, e.root.position.y, e.root.position.z, 3.665191429188082, 0, false, true, "", e.motion);
-        S.updateWorld(e.root, root.world); workRaise = center(e.parts.armR)[1] - handY;
+        S.updateWorld(e.root, root.world); workRaise = center(e.parts.armL)[1] - handY;
         e.motion.labWork = "";
       }
       rows.push({ entering, before, after, settled, gait, maxStep, workRaise });
@@ -8632,7 +8756,7 @@ const unitChecks = async () => {
 
   {
     const make = () => BL.models.caveman(BL.contributors.traitsFor("w-s-bitcoin")), a = make(), b = make();
-    const keys = ["gun", "fingersL", "fingersR"], quaternions = keys.map(key => Array.from(b.parts[key].quaternion));
+    const keys = ["gun", "fingersR", "fingersL"], quaternions = keys.map(key => Array.from(b.parts[key].quaternion));
     const banana = { visible: b.parts.gunBananas[0].visible, scale: { ...b.parts.gunBananas[0].scale } };
     const independent = a.root !== b.root && a.parts.gunBody.geometry === b.parts.gunBody.geometry
       && a.parts.gunBananas !== b.parts.gunBananas && a.parts.gunBananas.length === 9

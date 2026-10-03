@@ -8,11 +8,12 @@
   const DOUBLE_MS = 380;
   const DOUBLE_PX = 24;
   const WHEEL_GAP_MS = 220;
-  const create = ({ canvas, renderer, camera, hooks = {} }) => {
+  const create = ({ canvas, renderer, camera, hooks = {}, preciseHover = false }) => {
     const targets = [];
     const weaponTargets = BL.weaponTargets.create(targets);
     const pointers = new Map();
     const ray = { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0 };
+    const hoverHit = { node: null, owner: null, distance: Infinity };
     const C = new Float32Array(3);
     const aimView = BL.math.mat4.create(), aimInverse = BL.math.mat4.create(), aimUp = { x: 0, y: 1, z: 0 };
     let hoverX = -1, hoverY = -1, hoverDirty = false, hovered = null;
@@ -81,6 +82,12 @@
         }
       }
       return best ? { node: best.node, owner: best.owner, t: bestT } : null;
+    };
+    const pickHover = (px, py) => {
+      if (!preciseHover) return pick(px, py);
+      renderer.ray(px, py, camera, ray);
+      return weaponTargets.ray(hoverHit, ray.ox, ray.oy, ray.oz, ray.dx, ray.dy, ray.dz,
+        camera.far, null, null, true) ? hoverHit : null;
     };
     const aimPoint = (px, py, out, ignoreCave = null) => {
       // A one-off aim entry must use the current eye, not the renderer's
@@ -317,7 +324,7 @@
       if (!hoverDirty) return;
       hoverDirty = false;
       const busy = gesture && gesture.mode !== "pending";
-      const hit = !busy && hoverX >= 0 ? pick(hoverX, hoverY) : null;
+      const hit = !busy && hoverX >= 0 ? pickHover(hoverX, hoverY) : null;
       const node = hit ? hit.node : null;
       if (node !== hovered) {
         hovered = node;

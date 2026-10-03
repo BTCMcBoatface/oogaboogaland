@@ -636,7 +636,7 @@
       }
       stations.push({ x: side * (half - 1.78), y: 0, z: -3.1, heading: side * Math.PI / 2, kind: "touch", side, contact: screen });
     }
-    for (const side of [-1, 1]) stations.push({ x: side * (half - 0.44 - 1.213094), y: 0, z: (side > 0 ? -1.38 : -1.68) + side * 0.272893, heading: side * Math.PI / 2, kind: "carry", side });
+    for (const side of [-1, 1]) stations.push({ x: side * (half - 0.44 - 1.213094), y: 0, z: (side > 0 ? -1.38 : -1.68) + side * 0.572893, heading: side * Math.PI / 2, kind: "carry", side });
     const updateScreens = (dt, activeMask, claimedMask = activeMask) => {
       let changed = false;
       for (let i = 0; i < displays.length; i++) {

@@ -40,12 +40,12 @@
   };
   // Cycle offsets: a four-beat walk, a bound (pairs half a cycle apart), a biped walk
   const OFFSETS = {
-    knuckle: { legL: 0, armL: 0.25, legR: 0.5, armR: 0.75 },
-    gallop: { legL: 0, legR: 0.08, armL: 0.5, armR: 0.58 },
-    hunch: { legL: 0, armR: 0, legR: 0.5, armL: 0.5 },
-    upright: { legL: 0, armR: 0, legR: 0.5, armL: 0.5 }
+    knuckle: { legR: 0, armR: 0.25, legL: 0.5, armL: 0.75 },
+    gallop: { legR: 0, legL: 0.08, armR: 0.5, armL: 0.58 },
+    hunch: { legR: 0, armL: 0, legL: 0.5, armR: 0.5 },
+    upright: { legR: 0, armL: 0, legL: 0.5, armR: 0.5 }
   };
-  const LIMBS = [{ leg: "legL", arm: "armL", side: -1 }, { leg: "legR", arm: "armR", side: 1 }];
+  const LIMBS = [{ leg: "legR", arm: "armR", side: -1 }, { leg: "legL", arm: "armL", side: 1 }];
   const BEAT_TIME = 1.6;
   const POUND_TIME = 0.64, CHEW_TIME = 0.44, MANAGED_BEAT_TIME = 1.2;
   const MANAGED_MOTION_RADIUS = 2.25, MANAGED_MOTION_HEIGHT = 2.8;
@@ -68,7 +68,7 @@
   // current rig actually fits; transitions retain the complete radial envelope.
   // When both lab envelopes fit, keep the requested route's shape: walking
   // reserves its circle, while retracting work arms keep their forward capsules.
-  const footprintProfile = (entry) => !entry.compact ? 0 : entry.planningSeat ? 5 : entry.planningRoam ? 1 : entry.footprintMode === "lab" ? entry.planningLab ? entry.planningLabWork === "" ? entry.motion && entry.motion.labSqueeze && !entry.gorilla.labItem ? 9 : 8 : 6 : entry.gorilla.labSqueezeCompact ? 9 : entry.gorilla.labIdleCompact ? 7 : entry.gorilla.labWalkCompact && entry.motion && !entry.motion.labSqueeze && !entry.motion.labWork ? 8 : entry.gorilla.labCompact ? 6 : entry.gorilla.labWalkCompact ? 8 : 0 : entry.footprintMode === "sit" ? entry.gorilla.sitCompact ? 5 : 0 : entry.footprintMode === "park" ? entry.gorilla.parkCompact ? 4 : 0
+  const footprintProfile = (entry) => entry.controlled && entry.actionControlled ? 1 : !entry.compact ? 0 : entry.planningSeat ? 5 : entry.planningRoam ? 1 : entry.footprintMode === "lab" ? entry.planningLab ? entry.planningLabWork === "" ? entry.motion && entry.motion.labSqueeze && !entry.gorilla.labItem ? 9 : 8 : 6 : entry.gorilla.labSqueezeCompact ? 9 : entry.gorilla.labIdleCompact ? 7 : entry.gorilla.labWalkCompact && entry.motion && !entry.motion.labSqueeze && !entry.motion.labWork ? 8 : entry.gorilla.labCompact ? 6 : entry.gorilla.labWalkCompact ? 8 : 0 : entry.footprintMode === "sit" ? entry.gorilla.sitCompact ? 5 : 0 : entry.footprintMode === "park" ? entry.gorilla.parkCompact ? 4 : 0
     : entry.footprintMode === "stand" ? entry.gorilla.standCompact ? 3 : 0
     : entry.footprintMode === "pound" ? entry.gorilla.poundCompact ? 2 : 0 : entry.gorilla.compact ? 1 : 0;
   const footprintCount = (entry) => { const profile = footprintProfile(entry); return profile === 5 || profile === 6 ? 2 : profile === 1 || profile === 2 ? 3 : 1; };
@@ -369,10 +369,10 @@
     const flask = labFlaskGeometry();
     flask.labGripY = 9.5 * U * 0.65 * LAB_FLASK_HEIGHT;
     return {
-      legL: part("legL", legVox, { x: -2 * U, y: -8 * U, z: -2 * U }),
       legR: part("legR", legVox, { x: -2 * U, y: -8 * U, z: -2 * U }),
-      armL: part("armL", armVox, { x: -2 * U, y: -14 * U, z: -2 * U }),
+      legL: part("legL", legVox, { x: -2 * U, y: -8 * U, z: -2 * U }),
       armR: part("armR", armVox, { x: -2 * U, y: -14 * U, z: -2 * U }),
+      armL: part("armL", armVox, { x: -2 * U, y: -14 * U, z: -2 * U }),
       torso: part("torso", torsoVox, { x: -5 * U, y: 0, z: -3.5 * U }),
       head: part("head", headVox, { x: -3.5 * U, y: 0, z: -2 * U }),
       feedingHead: part("head", feedingHeadVox, { x: -3.5 * U, y: 0, z: -2 * U }),
@@ -391,10 +391,10 @@
     const clipped = (geometry, plane, overlay = false) => ({ ...geometry, clipPlane: plane,
       collisionGeometry: overlay ? EMPTY_COLLISION : geometry.collisionGeometry });
     const plain = (part) => ({ ape: clipped(part.ape, outside), code: clipped(part.code, outside) });
-    return { mouth, sr, cr, reach: 4, torso: plain(geos.torso), armL: plain(geos.armL), armR: plain(geos.armR),
+    return { mouth, sr, cr, reach: 4, torso: plain(geos.torso), armR: plain(geos.armR), armL: plain(geos.armL),
       labTorso: clipped(geos.labTorso, inside, true), labArm: clipped(geos.labArm, inside, true) };
   };
-  const PART_NAMES = ["legL", "legR", "torso", "armL", "armR", "head"];
+  const PART_NAMES = ["legR", "legL", "torso", "armR", "armL", "head"];
   const CLIMB_VERTICES = new WeakMap(), CLIMB_CONTACT_VERTICES = new WeakMap();
   const climbVertices = (geometry, contact = false) => {
     const cache = contact ? CLIMB_CONTACT_VERTICES : CLIMB_VERTICES;
@@ -435,29 +435,30 @@
     // frame: hands, head and feet keep their existing grip transforms.
     const torso = managed ? createNode() : chest;
     if (managed) addChild(chest, torso);
+    // Facing +Z, local -X is anatomical right and +X is anatomical left.
     const parts = {
-      legL: createNode({ position: { x: -3 * U, y: 0, z: 0 } }),
-      legR: createNode({ position: { x: 3 * U, y: 0, z: 0 } }),
+      legR: createNode({ position: { x: -3 * U, y: 0, z: 0 } }),
+      legL: createNode({ position: { x: 3 * U, y: 0, z: 0 } }),
       torso,
-      armL: createNode({ position: { x: -SHOULDER_X, y: SHOULDER_Y, z: 0.5 * U } }),
-      armR: createNode({ position: { x: SHOULDER_X, y: SHOULDER_Y, z: 0.5 * U } }),
+      armR: createNode({ position: { x: -SHOULDER_X, y: SHOULDER_Y, z: 0.5 * U } }),
+      armL: createNode({ position: { x: SHOULDER_X, y: SHOULDER_Y, z: 0.5 * U } }),
       head: createNode({ position: { x: 0, y: NECK_Y, z: 1.5 * U } })
     };
-    addChild(chest, parts.armL, parts.armR, parts.head);
+    addChild(chest, parts.armR, parts.armL, parts.head);
     const coatParts = coatClip ? {
       torso: createNode({ geometry: coatClip.labTorso, visible: false }),
-      armL: createNode({ geometry: coatClip.labArm, visible: false }),
-      armR: createNode({ geometry: coatClip.labArm, visible: false })
+      armR: createNode({ geometry: coatClip.labArm, visible: false }),
+      armL: createNode({ geometry: coatClip.labArm, visible: false })
     } : null;
     if (coatParts) {
       addChild(parts.torso, coatParts.torso);
-      addChild(parts.armL, coatParts.armL);
       addChild(parts.armR, coatParts.armR);
+      addChild(parts.armL, coatParts.armL);
     }
     if (managed) {
       parts.jaw = createNode({ position: { x: 0, y: U, z: 4 * U } });
       addChild(parts.head, parts.jaw);
-      parts.armL.rotation.x = parts.armR.rotation.x = -QUAD;
+      parts.armR.rotation.x = parts.armL.rotation.x = -QUAD;
       parts.head.rotation.x = -QUAD * 0.85;
     }
     const labPlaceholder = managed ? createNode({ geometry: geos.labFlask, visible: false, sightHidden: true }) : null;
@@ -466,8 +467,8 @@
     const labItemRotation = managed ? new Float32Array([0, 0, 0, 1]) : null;
     const labArmRotation = managed ? new Float32Array(4) : null, labUprightRotation = managed ? new Float32Array(4) : null;
     const labGripOffset = managed ? new Float32Array(3) : null;
-    if (labFlask) addChild(parts.armR, labFlask);
-    addChild(hips, parts.legL, parts.legR, chest);
+    if (labFlask) addChild(parts.armL, labFlask);
+    addChild(hips, parts.legR, parts.legL, chest);
     addChild(root, hips);
     const state = {
       form: null, gait: "idle", walkGait: "knuckle", phase: 0, walkPhase: NaN, speed: 0, backwards: false, pitch: QUAD, heading,
@@ -476,7 +477,7 @@
       pace: null, driven: false, walkStyle: "knuckle", inX: 0, inZ: 0, inRun: false,
       vy: 0, air: false, jumps: 0, revealFor: 0, pound: 0, chewing: 0, biped: false, lounge: "", hipHeight: HIP,
       poundCharge: 0, takeoff: 0, landing: 0, crouch: 0, roll: 0, rollBlend: 0, rollAngle: 0, rollTarget: 0, rollSide: 0,
-      smash: false, hipOffsetZ: 0, sideAngle: 0,
+      smash: false, dragging: false, throwProgress: 0, hipOffsetZ: 0, sideAngle: 0,
       climb: 0, climbBlend: 0, climbPose: NaN, climbStride: 0, climbDirection: 0, climbSide: 0,
       climbArmBaseL: 0, climbArmBaseR: 0, climbFitArms: 0,
       climbGripX: NaN, climbGripY: NaN, climbGripZ: NaN, climbGripRelease: 0,
@@ -487,7 +488,7 @@
     };
     const positionLabItem = () => {
       if (!managed || labFlask === labPlaceholder && !state.labPreviewItem) return;
-      const arm = parts.armR, inspect = state.labWork === "carry" ? 1 - Math.max(state.labReach, state.labRoll) : 0;
+      const arm = parts.armL, inspect = state.labWork === "carry" ? 1 - Math.max(state.labReach, state.labRoll) : 0;
       quat.fromEuler(labArmRotation, arm.rotation.x, arm.rotation.y, arm.rotation.z);
       quat.fromEuler(labUprightRotation, state.pitch, 0, 0);
       quat.multiply(labArmRotation, labUprightRotation, labArmRotation);
@@ -506,10 +507,10 @@
     const setForm = (next, force = false) => {
       if (state.form === next && !force) return;
       state.form = next;
-      for (const name of PART_NAMES) parts[name].geometry = state.coatSplit && (name === "torso" || name === "armL" || name === "armR")
+      for (const name of PART_NAMES) parts[name].geometry = state.coatSplit && (name === "torso" || name === "armR" || name === "armL")
         ? coatClip[name][next] : state.lab && name === "torso" ? geos.labTorso
-          : state.lab && (name === "armL" || name === "armR") ? geos.labArm : geos[managed && name === "head" ? "feedingHead" : name][next];
-      if (coatParts) coatParts.torso.visible = coatParts.armL.visible = coatParts.armR.visible = state.coatSplit;
+          : state.lab && (name === "armR" || name === "armL") ? geos.labArm : geos[managed && name === "head" ? "feedingHead" : name][next];
+      if (coatParts) coatParts.torso.visible = coatParts.armR.visible = coatParts.armL.visible = state.coatSplit;
       if (managed) parts.jaw.geometry = geos.jaw[next];
       if (refreshGeometry) refreshGeometry();
     };
@@ -614,10 +615,10 @@
       state.beat = MANAGED_BEAT_TIME;
       return true;
     };
-    const pound = () => {
-      if (!managed || state.pound > 0 || state.beat > 0 || state.air || state.crouch > 0.01 || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
-      state.pound = POUND_TIME;
-      return true;
+    const pound = (allowAir = false, charge = 0, combo = false) => {
+      if (!managed || state.pound > 0 && !combo || state.beat > 0 || state.air && !allowAir || state.crouch > 0.01 && !allowAir || state.rollBlend > 0.001 || state.roll > 0 || state.climb > 0 || state.climbBlend > 0.001) return false;
+      state.pound = POUND_TIME * (1 - (combo ? 0.46 : 0.34 * clamp(charge, 0, 1)));
+      return state.pound;
     };
     // Called with no route while idle; returns once a new walk is wanted.
     let onIdle = null;
@@ -700,10 +701,12 @@
       } else if (moving > 0) bob = 0.02 * Math.abs(wave(state.phase, 0)) * moving;
       let poundLift = 0, slamDrive = 0;
       if (managed && state.poundCharge > 0 && state.pound <= 0) {
-        poundLift = state.poundCharge * 0.8;
-        pitch = 1.02 - 0.45 * poundLift;
+        poundLift = state.poundCharge;
+        pitch = 1.02 - 0.86 * poundLift;
       }
       if (managed && state.pound > 0) {
+        // A charged smash starts partway through the raised-arm phase, where
+        // the held pose already is, instead of lifting the arms a second time.
         const t = 1 - state.pound / POUND_TIME;
         // A controlled smash rears up with both fists overhead, then folds at
         // the shoulders as the fists strike the floor. Workers keep
@@ -711,9 +714,9 @@
         poundLift = state.smash ? t < 0.34 ? t / 0.34 : t < 0.46 ? 1 : t < 0.66 ? 1 - (t - 0.46) / 0.2 : 0
           : t < 0.28 ? t / 0.28 : t < 0.58 ? 1 - (t - 0.28) / 0.3 : 0;
         if (state.smash) {
-          // Put the weight behind the downward stroke, hold it briefly at
-          // impact, then recover through the remaining gesture.
-          const drive = t < 0.46 ? 0 : t < 0.66 ? (t - 0.46) / 0.2 : t < 0.76 ? 1 : (1 - t) / 0.24;
+          // Put the weight behind the downward stroke, then recover without
+          // holding the moving body at the point of impact.
+          const drive = t < 0.46 ? 0 : t < 0.66 ? (t - 0.46) / 0.2 : (1 - t) / 0.34;
           slamDrive = drive * drive * (3 - 2 * drive);
         }
         pitch = state.smash ? 1.02 - 0.86 * poundLift + 0.46 * slamDrive : 1.02 - 0.36 * poundLift;
@@ -767,14 +770,20 @@
         if (lounge && (!onSide || (lounge === "left" ? l.side > 0 : l.side < 0)))
           legAngle += Math.sin(restTime * 0.7 + i * Math.PI) * 0.06 * restMotion;
         legAngle += (-1.2 - legAngle) * crouch;
-        legAngle -= 0.42 * slamDrive;
+        if (state.speed <= 0.1) legAngle -= 0.42 * slamDrive;
         legAngle += (-1.25 - legAngle) * rolling;
         legAngle += (-0.16 + 0.06 * climbStroke - legAngle) * climbing;
         // The pelvis follows the rectangle's front-to-back grade. Keep the
         // rear feet beneath it while the front knuckles reach the higher pad.
         legAngle -= groundPitch;
         limb(leg, legAngle, dt, managed && state.landing > 0 ? 32 : 18);
-        if (rolling > 0.001) {
+        if (managed && state.dragging && l.side > 0) {
+          // The left hand keeps its grip as it swings the Ooga from behind
+          // the body to the release point. The other three limbs keep gait.
+          const swing = state.throwProgress * state.throwProgress * (3 - 2 * state.throwProgress);
+          limb(arm, -state.pitch + 1.15 - 2.9 * swing, dt, 22);
+          arm.rotation.z = damp(arm.rotation.z, 0.12 - 0.27 * swing, 16, dt);
+        } else if (rolling > 0.001) {
           limb(arm, -state.pitch - 1.25 * rolling, dt);
           arm.rotation.z = damp(arm.rotation.z, -l.side * 0.22 * rolling, 12, dt);
         } else if (lounge) {
@@ -810,7 +819,7 @@
         } else if (managed && (state.pound > 0 || poundLift > 0)) {
           // Reach ahead of the lowered shoulders with straight arms as the
           // torso folds nearly parallel to the ground at impact.
-          limb(arm, -state.pitch - (state.smash ? 2.7 : 1.65) * poundLift - 0.9 * slamDrive, dt, slamDrive > 0 ? 28 : 18);
+          limb(arm, -state.pitch - (state.smash || state.poundCharge > 0 ? 2.7 : 1.65) * poundLift - 0.9 * slamDrive, dt, slamDrive > 0 ? 28 : 18);
           arm.rotation.z = damp(arm.rotation.z, 0, 18, dt);
         } else if (state.gait === "beat") {
           // Alternate fists on the chest, easing in and out of the pose
@@ -826,8 +835,8 @@
           // made small live steps raise the arms farther than route previews.
           if (climbSolidAt) {
             state.climbFitArms |= 1 << i;
-            if (l.side < 0) state.climbArmBaseL = armAngle;
-            else state.climbArmBaseR = armAngle;
+            if (l.side < 0) state.climbArmBaseR = armAngle;
+            else state.climbArmBaseL = armAngle;
           } else limb(arm, armAngle + (raised - armAngle) * climbing, dt);
           const rest = state.gait === "hunch" ? l.side * 0.12 : 0;
           // Transfer one grip sideways while the opposite foot follows;
@@ -842,11 +851,12 @@
         }
         if (managed && !(climbing > 0.001 && !jumping && climbSolidAt)) {
           const groomArm = lounge === "sit" && l.side === state.groomSide ? grooming : 0;
-          arm.rotation.y = damp(arm.rotation.y, l.side * 0.67 * groomArm, 12, dt);
+          arm.rotation.y = damp(arm.rotation.y, state.dragging && l.side > 0
+            ? -0.4 * Math.sin(Math.PI * state.throwProgress) : l.side * 0.67 * groomArm, 12, dt);
         }
       }
       if (managed) {
-        const arm = parts.armR, angle = arm.rotation.x;
+        const arm = parts.armL, angle = arm.rotation.x;
         const palm = labWork === "carry" ? 0.1 + 0.17 * clamp((1.32 + angle) / 0.12, 0, 1) : 0;
         state.labPalmLift = damp(state.labPalmLift, palm, 24, dt);
         const lift = laboratory ? state.labPalmLift : 0;
@@ -861,7 +871,7 @@
         state.labArmOffsetZ = Math.cos(arm.rotation.y) * Math.cos(angle) * lift;
         arm.position.x += state.labArmOffsetX; arm.position.y += state.labArmOffsetY; arm.position.z += state.labArmOffsetZ;
         if (laboratory && labWork === "touch") { state.labTouchArm = true; state.labTouchSide = state.labSide; }
-        const touchArm = state.labTouchSide < 0 ? parts.armL : parts.armR;
+        const touchArm = state.labTouchSide < 0 ? parts.armR : parts.armL;
         if (!laboratory || labWork === "carry" || labWork === "type" || Math.abs(touchArm.rotation.x + state.pitch) < 0.03) state.labTouchArm = false;
         if (state.labTouchArm) {
           const reach = clamp((-touchArm.rotation.x - 0.08) / 1.48, 0, 1);
@@ -951,7 +961,7 @@
     // Geometry bounds are cached once; seven tiny matrix products cover every arm,
     // foot and jaw through the current animation. The controller can reserve the
     // full envelope instead of colliding only the narrower torso.
-    const envelopeParts = managed ? [parts.legL, parts.legR, torso, parts.armL, parts.armR, parts.head, parts.jaw, labFlask] : null;
+    const envelopeParts = managed ? [parts.legR, parts.legL, torso, parts.armR, parts.armL, parts.head, parts.jaw, labFlask] : null;
     const envelopeBounds = managed ? envelopeParts.map((part) => boundsOf(part.geometry)) : null;
     const trunkCorners = managed ? torsoCorners(torso.geometry) : null;
     const envelopeChest = managed ? mat4.create() : null, envelopeHead = managed ? mat4.create() : null, envelopePart = managed ? mat4.create() : null, envelopeArm = managed ? mat4.create() : null;
@@ -974,7 +984,7 @@
       if (part === parts.head) return envelopeHead;
       updateLocal(part);
       if (part === labFlask) {
-        updateLocal(parts.armR); mat4.multiply(envelopeArm, envelopeChest, parts.armR.local);
+        updateLocal(parts.armL); mat4.multiply(envelopeArm, envelopeChest, parts.armL.local);
         mat4.multiply(envelopePart, envelopeArm, part.local);
       } else mat4.multiply(envelopePart, part.parent === hips ? hips.local : part.parent === chest ? envelopeChest : envelopeHead, part.local);
       return envelopePart;
@@ -1020,7 +1030,7 @@
           body.minY = Math.min(body.minY, py); body.maxY = Math.max(body.maxY, py);
           body.minZ = Math.min(body.minZ, pz); body.maxZ = Math.max(body.maxZ, pz);
           radius2 = Math.max(radius2, px * px + pz * pz);
-          if (part !== parts.armL && part !== parts.armR) {
+          if (part !== parts.armR && part !== parts.armL) {
             labBodyRadius2 = Math.max(labBodyRadius2, px * px + pz * pz);
             labBodyMinY = Math.min(labBodyMinY, py); labBodyMaxY = Math.max(labBodyMaxY, py);
           }
@@ -1035,7 +1045,7 @@
           // Grooming intentionally touches the seated partner with one hand.
           // Only that arm leaves the seated-neighbour footprint; the complete
           // body envelope above continues to include it for scenery clearance.
-          if (!(state.lounge === "sit" && state.groomBlend > 0.001 && part === (state.groomSide < 0 ? parts.armL : parts.armR))) {
+          if (!(state.lounge === "sit" && state.groomBlend > 0.001 && part === (state.groomSide < 0 ? parts.armR : parts.armL))) {
             const sitNearest = Math.min(Math.abs(pz - SIT_CENTERS[0] * scale), Math.abs(pz - SIT_CENTERS[1] * scale));
             sitRadius2 = Math.max(sitRadius2, px * px + sitNearest * sitNearest);
             sitWidth = Math.max(sitWidth, Math.abs(px));
@@ -1221,17 +1231,21 @@
       if (groomSide !== state.groomSide) {
         // A neighbour changing sides first releases the old hand. Switching the
         // side while its blend was high transferred the reach to the other arm.
-        const arm = state.groomSide < 0 ? parts.armL : parts.armR;
+        const arm = state.groomSide < 0 ? parts.armR : parts.armL;
         const restRoll = lounge === "sit" ? -state.groomSide * 0.12 : 0;
         if (state.groomBlend > 0.005 || Math.abs(arm.rotation.y) > 0.01 || Math.abs(arm.rotation.z - restRoll) > 0.01) state.groom = 0;
         else state.groomSide = groomSide;
       }
       if (motion && Number.isFinite(motion.groomPhase)) state.groomTime = motion.groomPhase;
-      state.smash = !!(motion && motion.smash && !airborne && !state.roll);
+      state.smash = !!(motion && motion.smash && !state.roll);
+      state.dragging = !!(motion && motion.dragging);
+      state.throwProgress = state.dragging ? clamp(motion.throwProgress || 0, 0, 1) : 0;
+      if (state.dragging) { state.labWork = ""; state.pound = state.beat = 0; }
       state.lounge = !airborne && state.speed <= 0.1 && (lounge === "sit" || lounge === "back" || lounge === "left" || lounge === "right"
         || lounge === "lean-left" || lounge === "lean-right" || lounge === "lean-back") ? lounge : "";
+      if (state.dragging) state.lounge = "";
       if (state.roll > 0 || airborne || state.climb > 0) state.lounge = "";
-      if (state.lounge || state.roll > 0 || airborne || state.climb > 0) state.pound = state.beat = state.chewing = 0;
+      if (state.lounge || state.roll > 0 || airborne && !state.smash || state.climb > 0) state.pound = state.beat = state.chewing = 0;
       if (state.speed > 0.1 || airborne) state.beat = 0;
       state.groundPlane = !!(groundPlaneAt && !airborne && !lab && !lounge && !state.climb && !state.roll
         && !state.beat && !state.pound && groundPlaneAt(px, py, pz, facing, state, motion));
@@ -1297,7 +1311,7 @@
     };
     const fitClimbBody = () => {
       for (let side = 0; side < 2; side++) {
-        const leg = side ? parts.legR : parts.legL;
+        const leg = side ? parts.legL : parts.legR;
         for (let step = 0; step < 15 && !climbPartClear(leg); step++) {
           leg.position.z -= 0.02; leg.position.y += 0.02;
         }
@@ -1312,11 +1326,12 @@
       updateLocal(hips); updateLocal(chest);
       mat4.multiply(envelopeChest, hips.local, chest.local);
       for (let side = 0; side < 2; side++) {
-        const leg = side ? parts.legR : parts.legL;
+        const leg = side ? parts.legL : parts.legR;
         for (let step = 0; step < 15 && !climbPartClear(leg); step++) leg.position.y += 0.02;
       }
       for (let side = 0; side < 2; side++) {
-        const arm = side ? parts.armR : parts.armL, angle = arm.rotation.x;
+        if (state.dragging && side === 1) continue;
+        const arm = side ? parts.armL : parts.armR, angle = arm.rotation.x;
         if (climbArmContact(arm, side, false, 0, 0, 0) >= 0) continue;
         let clear = false;
         for (let step = 1; step <= 20; step++) {
@@ -1337,8 +1352,8 @@
       const dx = state.climbGripX - root.position.x, dy = state.climbGripY - root.position.y, dz = state.climbGripZ - root.position.z;
       for (let side = 0; side < 2; side++) {
         if (!(state.climbFitArms & 1 << side)) continue;
-        const arm = side ? parts.armR : parts.armL, previous = arm.rotation.x, previousYaw = arm.rotation.y;
-        const base = side ? state.climbArmBaseR : state.climbArmBaseL;
+        const arm = side ? parts.armL : parts.armR, previous = arm.rotation.x, previousYaw = arm.rotation.y;
+        const base = side ? state.climbArmBaseL : state.climbArmBaseR;
         const raised = -3.2;
         const vertices = climbVertices(arm.geometry, true);
         let safe = raised, unsafe = raised, found = false;
@@ -1429,11 +1444,11 @@
       }
     };
     const climbHandContactMask = () => !climbSolidAt ? 0
-      : (climbArmContact(parts.armL, 0, false, 0, 0, 0, 0.4) === 1 ? 1 : 0)
-        | (climbArmContact(parts.armR, 1, false, 0, 0, 0, 0.4) === 1 ? 2 : 0);
+      : (climbArmContact(parts.armR, 0, false, 0, 0, 0, 0.4) === 1 ? 1 : 0)
+        | (climbArmContact(parts.armL, 1, false, 0, 0, 0, 0.4) === 1 ? 2 : 0);
     // These matrices come from the current pose, including the floor adjustment
     // and reclining hips, so projectiles never chase the previous render frame.
-    const previewNodes = managed ? [root, hips, ...envelopeParts, chest, ...(coatParts ? [coatParts.torso, coatParts.armL, coatParts.armR] : [])] : null;
+    const previewNodes = managed ? [root, hips, ...envelopeParts, chest, ...(coatParts ? [coatParts.torso, coatParts.armR, coatParts.armL] : [])] : null;
     const previewTransforms = managed ? new Float64Array(previewNodes.length * 10) : null;
     const previewQuaternions = managed ? new Array(previewNodes.length) : null;
     const previewGeometries = managed ? new Array(previewNodes.length) : null;
@@ -1453,22 +1468,22 @@
     const holdLabItem = (node) => {
       if (!managed || !node || !node.geometry || labFlask !== labPlaceholder) return false;
       if (node.parent) removeChild(node.parent, node);
-      removeChild(parts.armR, labPlaceholder);
+      removeChild(parts.armL, labPlaceholder);
       labFlask = node; envelopeParts[7] = previewNodes[9] = node;
       const bounds = boundsOf(node.geometry);
       labGripY = Number.isFinite(node.geometry.labGripY) ? node.geometry.labGripY : bounds.max[1] * 0.85;
       node.scale.x = node.scale.y = node.scale.z = 1 / scale;
       node.quaternion = labItemRotation; node.visible = true;
-      addChild(parts.armR, node); positionLabItem(); refreshGeometry(); measureBody();
+      addChild(parts.armL, node); positionLabItem(); refreshGeometry(); measureBody();
       return true;
     };
     const releaseLabItem = () => {
       if (!managed || labFlask === labPlaceholder) return null;
       const node = labFlask;
-      removeChild(parts.armR, node); node.quaternion = null;
+      removeChild(parts.armL, node); node.quaternion = null;
       labFlask = labPlaceholder; envelopeParts[7] = previewNodes[9] = labPlaceholder;
       labGripY = geos.labFlask.labGripY;
-      addChild(parts.armR, labPlaceholder); refreshGeometry(); measureBody();
+      addChild(parts.armL, labPlaceholder); refreshGeometry(); measureBody();
       return node;
     };
     let climbBlockedArm = 0, climbContactMask = 0;
@@ -1702,7 +1717,7 @@
       // a guide must keep both hands within reach of the visible stone.
       if (clear && (state.climbGripRelease || motion && motion.verifyGrip) && climbSolidAt) for (let side = 0; side < 2; side++) {
         if (!(state.climbGripRelease & 1 << side)
-          && climbArmContact(side ? parts.armR : parts.armL, side, false, 0, 0, 0, 0.4) === 1) climbContactMask |= 1 << side;
+          && climbArmContact(side ? parts.armL : parts.armR, side, false, 0, 0, 0, 0.4) === 1) climbContactMask |= 1 << side;
       }
       for (let i = 0; i < previewKeys.length; i++) state[previewKeys[i]] = previewState[i];
       for (let i = 0; i < previewNodes.length; i++) {
