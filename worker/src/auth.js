@@ -62,8 +62,10 @@ const callback = async (request, env, url) => {
         redirect_uri: `${env.SITE_ORIGIN}/auth/callback`,
       }),
     });
-    const token = tokenRes.ok ? (await tokenRes.json()).access_token : null;
-    if (!token) throw new Error(`token exchange ${tokenRes.status}`);
+    const answer = tokenRes.ok ? await tokenRes.json() : {};
+    const token = answer.access_token;
+    // GitHub answers 200 with `error` (incorrect_client_credentials, bad_verification_code, redirect_uri_mismatch).
+    if (!token) throw new Error(`token exchange ${tokenRes.status} ${answer.error || ""}`.trim());
     const userRes = await fetch(GITHUB_USER, {
       headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "user-agent": "oogaboogaland" },
     });
