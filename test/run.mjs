@@ -5191,6 +5191,35 @@ const factoryWalking = { name: "factory walking", why: "regression: Factory move
   })()`);
   record("factory rebalancer: walk onto and off the low drum; a shallow console overlap allows walking out while deeper movement stays blocked", rebalancer.onto > 0.5 && Math.abs(rebalancer.peak - (rebalancer.height + 0.56)) < 1e-5 && Math.abs(rebalancer.off - rebalancer.height) < 1e-5 && rebalancer.overlapped && rebalancer.inwardBlocked && rebalancer.escaped > 0.5 && rebalancer.clear && rebalancer.grounded, JSON.stringify(rebalancer));
 } };
+const factoryGreeter = { name: "factory greeter", why: "rule: Talk opens the foreman's tour menu, keyboard choices work, Escape dismisses it, and a tour can be ended without leaving the cave", run: async (b) => {
+  const near = await b.evaluate(`(() => {
+    const B = __ooga, a = B.cavemen.get("portlandhodl");
+    if (B.crew.player !== a) B.pilot.possess(a);
+    B.pilot.navigate({ position: { x: -2, y: 5, z: 25.5 }, yaw: 0, pitch: 0, dist: 6 });
+    B.advance(0.2, 1 / 60);
+    return { label: document.getElementById("act").textContent, scene: B.scene };
+  })()`);
+  await b.key(" ");
+  const menu = await b.evaluate(`(() => ({ open: !document.querySelector(".greeter-menu").hidden,
+    choices: document.querySelectorAll(".greeter-choice").length, phase: __ooga.factory.greeter.state.phase }))()`);
+  await b.key("ArrowDown");
+  const selected = await b.evaluate(`__ooga.factory.greeter.state.selection`);
+  await b.key("Escape");
+  const dismissed = await b.evaluate(`(() => ({ scene: __ooga.scene, hidden: document.querySelector(".greeter-menu").hidden }))()`);
+  await b.key(" ");
+  await b.key("Enter");
+  const started = await b.evaluate(`(() => ({ phase: __ooga.factory.greeter.state.phase,
+    tour: __ooga.factory.greeter.state.tour, stop: !document.querySelector(".greeter-stop").hidden }))()`);
+  const ended = await b.evaluate(`(() => {
+    document.querySelector(".greeter-stop").click(); __ooga.advance(0.5, 1 / 60);
+    return { phase: __ooga.factory.greeter.state.phase, scene: __ooga.scene };
+  })()`);
+  record("factory greeter: the act button opens four tours, arrows select, Escape closes the menu, and End tour returns Flink without leaving the cave",
+    near.scene === "factory" && near.label === "TALK TO FLINK" && menu.open && menu.choices === 4 && menu.phase === "menu"
+      && selected === 1 && dismissed.scene === "factory" && dismissed.hidden && started.phase === "walk"
+      && started.tour === "payments" && started.stop && ended.phase === "idle" && ended.scene === "factory",
+    JSON.stringify({ near, menu, selected, dismissed, started, ended }));
+} };
 const factoryLadders = { name: "factory ladders", why: "rule: Oogas must climb the rebalancer and lighthouse ladders through real controls, hold their height at rest, walk off both landings and jump away without snapping back", run: async (b) => {
   const r = await b.evaluate(`(() => {
     const B = __ooga, a = B.cavemen.get("portlandhodl"), F = BL.factoryModels, rows = [];
@@ -6968,7 +6997,7 @@ scene("drop", { steps: [dropStart, dropSteering, play("drop", "a jump lands on t
 scene("orbit", { steps: [{ name: "orbit flow", why: "regression: the spacewalk air bonus was missing from the flight log", run: orbitFlow }, orbitSteering, orbitMissed, orbitEscape, trip("orbit")] });
 scene("mine", { steps: [mineResume, trip("mine"), mineControls] });
 scene("pool", { steps: [poolLeave, trip("pool")] });
-scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryLadders, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
+scene("factory", { query: "character=portlandhodl", steps: [factoryWalking, factoryGreeter, factoryLadders, factoryRailingJump, factoryWeapons, factoryForward, factoryForge, factoryShields, trip("factory")] });
 scene("factory", { label: "entrance", url: hubPage(src, "character=portlandhodl"), steps: [factoryFloor, factoryEntrance] });
 scene("factory", { label: "canvas2d", query: "canvas2d=1", steps: [factoryCanvas] });
 scene("bifrost", { url: hubPage(src, "solo=1&character=portlandhodl"), steps: [bifrostEntrance, bifrostWalking, bifrostExit, trip("bifrost")] });
