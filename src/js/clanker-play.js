@@ -13,7 +13,8 @@
     const eye = new Float64Array(3), rayView = mat4.create(), cameraUp = { x: 0, y: 1, z: 0 };
     const ray = { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0 };
     const hit = { node: null, owner: null, x: 0, y: 0, z: 0, distance: 0, type: "object" };
-    const reticle = document.getElementById("weapon-reticle"), savedNear = camera.near;
+    const reticle = document.getElementById("weapon-reticle");
+    let savedNear = camera.near;
     const listeners = [];
     let player = null, view = "orbit", combat = false, disposed = false, jumpKey = false, jumpTap = false, run = false;
     let actPointer = -1, smashPointer = -1, smashCharge = 0, shownCharge = -1, mouseButtons = 0, blockedButtons = 0, shoulder = 0;
@@ -238,6 +239,7 @@
     const possess = (entry, atBoot = false) => {
       if (disposed || !entry || !entry.active || !entry.root.visible) return false;
       if (entry === player) return true;
+      if (!player) savedNear = camera.near;
       if (player) { blurCombat(); restoreHead(); }
       if (!clankers.possess(entry)) return false;
       pilot.release(true);

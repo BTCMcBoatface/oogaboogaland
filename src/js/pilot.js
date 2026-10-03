@@ -403,7 +403,7 @@
       if (combat && overhead && !coarse && cursorFocused && (!carryCursor.active || carryCursor.visible)) {
         const rect = canvas.getBoundingClientRect();
         carryCursor.start(rect.left + overheadX * rect.width / renderer.size.width,
-          rect.top + overheadY * rect.height / renderer.size.height, false);
+          rect.top + overheadY * rect.height / renderer.size.height, false, false);
       } else if (combat && !overhead && carryCursor.active) { carryCursor.stop(); resetPointer(); }
       if (!combat && (carryCursor.active || softAimFocused || document.pointerLockElement === canvas)) unlockAim();
       const cave = aimView() ? controlled : null;
@@ -1574,6 +1574,7 @@
       rightDownAt = rightTapAt = -Infinity;
       if (active) rightReturnFirstPerson = false;
       if (active && birdsEye() && !closeWanted) {
+        anchorOverheadPointer(cave);
         // The assisted hit may be centred on an object and refreshed on a
         // throttle. The cursor anchor is the exact rendered ray hit, including
         // its elevation, and is the only point that can cross modes unchanged.

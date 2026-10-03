@@ -178,7 +178,7 @@
   const returnHub = () => { if (phase === "entrance") { exiting = true; syncPlayer(); go(home); } else toast(`Use the Ooga Portal Dialer, then cross the active gate to return to ${HOME_NAME}.`); };
   const contextAction = () => {
     if (phase === "boat" || phase === "coaster") return "ride";
-    if (phase !== "land" || exiting || transitGate.isOpen || tv.isOpen || conversation.isOpen) return "";
+    if (phase !== "land" || exiting || transitGate.isOpen || tv.isOpen || conversation.isOpen || !document.getElementById("dsb-shop").hidden) return "";
     if (nearDialer()) return "dialer";
     if (atDock()) return boatTrip.wait > 0 ? "boat" : "boat-wait";
     if (atStation()) return trainTrip.wait > 0 ? "coaster" : "coaster-wait";
@@ -205,7 +205,7 @@
   };
   const openShop = () => {
     if (phase !== "land" || !nearLandmark("shop")) { toast("Visit the meme stand facing the Ooga Portal plaza."); return; }
-    panel.dataset.folded = "false"; document.getElementById("dsb-toggle").textContent = "Hide DSB menu"; document.getElementById("dsb-toggle").setAttribute("aria-expanded", "true"); document.getElementById("dsb-shop").hidden = false; syncPlayer();
+    panel.dataset.folded = "false"; document.getElementById("dsb-toggle").textContent = "Hide DSB menu"; document.getElementById("dsb-toggle").setAttribute("aria-expanded", "true"); document.getElementById("dsb-shop").hidden = false; syncPlayer(); syncContext();
   };
   const buy = (kind) => {
     if (phase !== "land" || !nearLandmark("shop")) { toast("Purchases happen at the meme stand."); return; }
@@ -272,7 +272,7 @@
     else if (name === "dsb-tomato") buy("tomato");
     else if (name === "dsb-eat") eat();
     else if (name === "dsb-throw") throwTomato();
-    else if (name === "dsb-close-shop") { document.getElementById("dsb-shop").hidden = true; syncPlayer(); }
+    else if (name === "dsb-close-shop") { document.getElementById("dsb-shop").hidden = true; syncPlayer(); syncContext(); }
     else if (name === "dsb-stop" && (phase === "boat" || phase === "coaster")) stopRide();
     else if (name === "act") pilot.action();
     else if (playerEnabled() && (name.startsWith("weapon-") || name === "magazine-swap")) pilot.weaponAction(name);
