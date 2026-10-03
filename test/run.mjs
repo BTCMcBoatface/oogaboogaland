@@ -7066,6 +7066,34 @@ scene("flap", { steps: [carnivalPlay("flap", 0.5), trip("flap")] });
 scene("breaker", { steps: [carnivalPlay("breaker", 0.5), trip("breaker")] });
 scene("dash", { steps: [carnivalPlay("dash", 0.5), trip("dash")] });
 scene("stacker", { steps: [carnivalPlay("stacker", 0.5), trip("stacker")] });
+// The previous play check leaves table ten running. Freeze local deals while comparing
+// visits: different community cards legitimately have different SVG element counts.
+const pokerTrip = (() => {
+  const check = trip("poker");
+  return { ...check, run: async b => {
+    const before = await b.evaluate(`(() => {
+      const P = BL.scenes.poker.debug.poker;
+      if (P.session.live) throw new Error("Poker round trip needs a local session");
+      const paused = P.session.paused;
+      if (!paused) P.action("pause");
+      if (!P.session.paused) throw new Error("Poker round trip could not pause the local session");
+      return { paused, versions: P.session.tables.map(t => t.version), title: document.querySelector('[data-poker="title"]').textContent };
+    })()`);
+    try {
+      await check.run(b);
+      const after = await b.evaluate(`(() => {
+        const P = BL.scenes.poker.debug.poker;
+        return { paused: P.session.paused, local: !P.session.live, versions: P.session.tables.map(t => t.version), title: document.querySelector('[data-poker="title"]').textContent };
+      })()`);
+      record("poker round trip: both visits compare the same paused local hand and table", after.local && after.paused && after.title === before.title && JSON.stringify(after.versions) === JSON.stringify(before.versions), JSON.stringify({ before, after }));
+    } finally {
+      await b.evaluate(`(() => {
+        const P = BL.scenes.poker.debug?.poker;
+        if (P && !P.session.live && P.session.paused !== ${before.paused}) P.action("pause");
+      })()`);
+    }
+  } };
+})();
 scene("poker", { query: "character=portlandhodl", steps: [{ name: "poker floor and play", why: "playthrough: a visitor walks the floor, fills a table, plays to settlement and stands without exposing hidden cards", run: async b => {
   await b.evaluate(`document.querySelector('[data-intro="poker"] .game-intro-go').click()`);
   const walking = await walkKeys(b, "portlandhodl", 0, 18, [0, 1.5], 0.45);
@@ -7088,7 +7116,7 @@ scene("poker", { query: "character=portlandhodl", steps: [{ name: "poker floor a
     await b.evaluate(`(() => { const P = BL.scenes.poker.debug.pilot; P.release(true); P.goPreset("entrance"); __ooga.advance(2); })()`);
     await b.screenshot(join(process.env.POKER_SHOTS, "poker-floor.png"));
   }
-} }, trip("poker")] });
+} }, pokerTrip] });
 scene("poker", { label: "canvas2d", query: "canvas2d=1", steps: [{ name: "poker canvas2d", why: "rule: the floor and table controls work on the fallback renderer", run: async b => {
   await b.evaluate(`document.querySelector('[data-intro="poker"] .game-intro-go').click()`);
   const r = await b.evaluate(`(() => { const P = BL.scenes.poker.debug.poker; P.action("join"); P.action("bots"); P.action("start"); __ooga.advance(1); return { kind: __ooga.renderer.kind, phase: P.session.tables[0].snapshot().phase, nodes: __ooga.stats().visibleNodes }; })()`);
@@ -7463,8 +7491,19 @@ for (const fallback of [false, true]) scene("dsb", { label: "dsb gameplay " + (f
   record("dsb gameplay: station payment confirmation is shown", await untilPage(b, 'document.getElementById("dsb-tv-payment-status").textContent.includes("confirmed")', 10000));
   if (process.env.DSB_CAPTURE && !fallback) await b.screenshot(join(root, "untracked", "dsb-jukebox.png"));
   await click("#dsb-tv-close"); await dsbApproach(b, "shop"); await click("#dsb-context"); await click('[data-action="dsb-banana"]'); await click('[data-action="dsb-tomato"]');
-  const bought = await b.evaluate(`__ooga.dsb.inventory`); record("dsb gameplay: real shop clicks add a banana and tomato", bought.bananas === 1 && bought.tomatoes === 1 && bought.tokens === 18, JSON.stringify(bought));
-  await click('[data-action="dsb-close-shop"]'); await click('[data-action="dsb-throw"]');
+  const bought = await b.evaluate(`__ooga.dsb.inventory`);
+  await b.evaluate(`
+    // Let the open shop publish its hint, then observe the close action before
+    // another frame could hide a delayed hint update that moves the buttons.
+    __ooga.advance(0.41); window.__dsbShopClose = null;
+    document.querySelector('[data-action="dsb-close-shop"]').addEventListener("click", () => {
+      window.__dsbShopClose = { hidden: document.getElementById("dsb-shop").hidden, prompt: document.getElementById("dsb-prompt").textContent };
+    }, { once: true });
+  `);
+  await click('[data-action="dsb-close-shop"]');
+  const closed = await b.evaluate(`window.__dsbShopClose`);
+  record("dsb gameplay: real shop clicks add a banana and tomato", bought.bananas === 1 && bought.tomatoes === 1 && bought.tokens === 18 && closed?.hidden && closed.prompt === "Visit meme shop", JSON.stringify({ bought, closed }));
+  await click('[data-action="dsb-throw"]');
   const projectile = await b.evaluate(`(() => {
     const B = __ooga, geometry = BL.dsbModels.cube("#ef4256"), node = B.dsb.land.root.children.find(n => n.geometry === geometry && n.visible);
     if (!node) return { created: false };
@@ -8443,6 +8482,35 @@ const unitChecks = async () => {
   // Scene state built directly instead of booted; seed 1 matches scene-hub.js.
   // Sealed cave guides need the hub's seal nodes, so probes reading them stay in the browser tier.
   const island = BL.terrain.island({ seed: 1 });
+
+  {
+    // #93: compare the actual weld against independent coordinates, not a fixed hash of trig-built terrain.
+    // The source includes duplicates, signed zero on every axis, adjacent doubles and a nonempty line.
+    const source = [0, -0, 2, 0, 0, 2, 1 + Number.EPSILON, 1, 3, 1, 1, 3, 0, -0, 2, -0, -0, 2, 0, -0, -0, 0, -0, 0, 1, 1, 3];
+    const fixture = { verts: source.slice(), faces: [
+      { i: [0, 2, 3, 4], color: [12, 34, 56], emissive: 0.2, matrixCave: 3, cutawayPathKey: 255 },
+      { i: [1, 6, 7], color: [78, 90, 12], headquartersWindowReveal: true },
+      { i: [5, 8, 2], color: [34, 56, 78], headquartersBasementRamp: 1 }
+    ], lines: [{ i: [4, 5, 6, 7, 1, 8], color: [90, 12, 34], width: 2 }] };
+    const metadata = item => JSON.stringify(Object.fromEntries(Object.entries(item).filter(([key]) => key !== "i")));
+    const original = [...fixture.faces, ...fixture.lines].map(item => ({
+      coordinates: item.i.flatMap(i => source.slice(i * 3, i * 3 + 3)), metadata: metadata(item)
+    }));
+    const expectedIndices = [[0, 2, 3, 0], [1, 5, 6], [4, 3, 2], [0, 4, 5, 6, 1, 3]];
+    const expectedVertices = [0, 1, 2, 3, 5, 6, 7].flatMap(i => source.slice(i * 3, i * 3 + 3));
+    BL.terrain.compactVertices(fixture);
+    const items = [...fixture.faces, ...fixture.lines];
+    const exact = fixture.verts instanceof Float64Array && fixture.verts.length === expectedVertices.length
+      && expectedVertices.every((value, i) => Object.is(value, fixture.verts[i]))
+      && fixture.faces.length === 3 && fixture.lines.length === 1 && items.every((item, n) =>
+        metadata(item) === original[n].metadata && item.i.length === expectedIndices[n].length
+        && item.i.every((index, i) => index === expectedIndices[n][i]
+          && [0, 1, 2].every(axis => Object.is(fixture.verts[index * 3 + axis], original[n].coordinates[i * 3 + axis]))));
+    const geo = island.geometry;
+    record("terrain memory: exact compaction preserves coordinates, winding, lines and metadata; the cached island stays within its byte budget",
+      exact && geo.verts instanceof Float64Array && geo.verts.byteLength < 1957458 * 4
+        && BL.terrain.island({ seed: 1 }) === island, JSON.stringify({ exact, fixtureVertices: fixture.verts.length / 3, vertices: geo.verts.length / 3, bytes: geo.verts.byteLength }));
+  }
 
   {
     const expected = {

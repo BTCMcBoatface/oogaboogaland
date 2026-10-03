@@ -192,6 +192,10 @@
     const kind = contextAction();
     if (kind === lastContext) return;
     lastContext = kind; proximity.hidden = !kind; proximity.textContent = CONTEXT_LABELS[kind] || ""; proximity.disabled = kind.endsWith("-wait");
+    // Context changes can resize this paragraph. Settle the panel now, before
+    // the next press, rather than moving its buttons on a later price refresh.
+    const hint = kind ? CONTEXT_LABELS[kind] : "WASD: move | 1/2: weapon | right-click: aim | V: fire | R: reload | T: tomato | B: snack";
+    if (lastPrompt !== hint) { prompt.textContent = hint; lastPrompt = hint; }
     hud.setAct(kind ? CONTEXT_LABELS[kind] : tomatoes ? "Throw tomato" : "USE");
   };
   const rideCamera = (position, heading, slope) => {
@@ -394,8 +398,6 @@
       const radioLabel = document.getElementById("dsb-radio-status"); if (radioLabel.textContent !== audio.radioStatus) radioLabel.textContent = audio.radioStatus;
       const text = `${s.priceStatus}: $${s.price.toFixed(2)}\n${s.skyStatus}${s.height ? ` · block ${s.height} · ${s.fee} sat/vB` : ""}\n${s.historyStatus}`;
       if (lastPrice !== text) { readout.textContent = text; lastPrice = text; }
-      const hint = lastContext ? CONTEXT_LABELS[lastContext] : "WASD: move | 1/2: weapon | right-click: aim | V: fire | R: reload | T: tomato | B: snack";
-      if (lastPrompt !== hint) { prompt.textContent = hint; lastPrompt = hint; }
     }
   };
   const drawExtra = (ctx, project, drawSpeech) => zuzu?.draw(ctx, project, drawSpeech);
