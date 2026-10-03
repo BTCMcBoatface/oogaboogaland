@@ -1690,11 +1690,12 @@
       const set = BL.dressing.set(), ground = [];
       const ok = (x, z, r) => island.surfaceAt(x, z) === 0 && free(x, z, r) && workSceneryClear(x, z, r) && !nearMouth(x, z, 7);
       const stand = (kind, x, z, turns, variant, r) => {
-        set.put(kind, x, 0, z, turns, variant);
+        if (kind) set.put(kind, x, 0, z, turns, variant);
         ground.push(x, z, r);
         claim(x, z, r);
       };
-      const CAMP = [["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["rubble", 0.8]];
+      // Keep the removed bench's clearing so the remaining camp and seeded scenery stay in place.
+      const CAMP = [[null, 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["rubble", 0.8]];
       let placed = 0;
       for (let k = 0; k < 16 && placed < CAMP.length; k++) {
         const a = k / 16 * Math.PI * 2 + 0.3, x = fire.x + Math.cos(a) * 3.1, z = fire.z + Math.sin(a) * 3.1;
