@@ -5,7 +5,7 @@ The island runs as two Cloudflare Workers in the account `1e5c1e8f7c343bf6cabced
 | Worker | Address | Config | Deploys |
 |---|---|---|---|
 | `oogaboogaland-staging` | https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev | `wrangler.staging.jsonc` | every push to `rock` (`cloudflare-staging.yml`) |
-| `oogaboogaland-production` | https://oogaboogaland-production.wickedsmartbitcoin.workers.dev | `wrangler.production.jsonc` | by hand on `rock` (`cloudflare-production.yml`) |
+| `oogaboogaland-production` | https://oogabooga.land (www redirects there; the workers.dev address serves the page signed out) | `wrangler.production.jsonc` | by hand on `rock` (`cloudflare-production.yml`) |
 
 The two share code and nothing else: each has its own D1 database, room, OAuth App, Realtime app, secrets and rate-limit counters. Everything below is done once per Worker.
 
@@ -40,6 +40,10 @@ Run from `worker/` after `npm ci`, logged in with `npx wrangler login` as a memb
 3. **Voice.** dash.cloudflare.com → Realtime → Serverless SFU → Create `oogaboogaland-<env>`; put the App ID in `vars.REALTIME_APP_ID`, then `npx wrangler secret put REALTIME_SECRET --config ../wrangler.<env>.jsonc` with the App token. Without it **Join voice** says voice is unavailable and everything else works.
 4. `npm run deploy:<env>`: builds `_site`, applies the D1 migrations and deploys.
 5. **Deploy token**, once for both: Manage Account → Account API Tokens → Create, with *Workers Scripts → Edit* and *D1 → Edit* on this account. Save it in the OogaBoogaX repo as `CLOUDFLARE_API_TOKEN`.
+
+## The oogabooga.land domain
+
+The zone `oogabooga.land` is in this account. Production serves it as two Worker Custom Domains, `oogabooga.land` and `www.oogabooga.land` (`routes` in `wrangler.production.jsonc`), and a Redirect Rule in the zone (Rules → Redirect Rules, "Redirect from WWW to root", 301, keeping the path and query) sends `www` to the apex before the Worker runs. `SITE_ORIGIN` is `https://oogabooga.land`, and the production OAuth App's homepage and callback match it (`https://oogabooga.land/auth/callback`): sign-in cookies belong to that host alone. A Custom Domain can't be created over an existing DNS record for the same name, so a record left over from another host is deleted first. A deploy that changes `routes` needs *Zone → Workers Routes → Edit* on `oogabooga.land` in the deploy token.
 
 ## Every deploy
 
