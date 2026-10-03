@@ -5,12 +5,9 @@
   "account_id": "1e5c1e8f7c343bf6cabced151b1ae2c6",
   "workers_dev": true,
   "preview_urls": false,
-  // oogabooga.land is the site; www answers too and a Redirect Rule in the zone sends it to the apex.
-  // Sign-in works only on SITE_ORIGIN, so the workers.dev address serves the page signed out.
-  "routes": [
-    { "pattern": "oogabooga.land", "custom_domain": true },
-    { "pattern": "www.oogabooga.land", "custom_domain": true }
-  ],
+  // oogabooga.land is the site. www is a proxied DNS record that a Redirect Rule in the zone sends to the
+  // apex, so it never reaches the Worker. Sign-in works only on SITE_ORIGIN; workers.dev serves the page signed out.
+  "routes": [{ "pattern": "oogabooga.land", "custom_domain": true }],
   "observability": { "enabled": true },
   "assets": {
     // `npm run build:site` stages the pages here, with worker/_headers.

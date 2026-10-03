@@ -43,7 +43,7 @@ Run from `worker/` after `npm ci`, logged in with `npx wrangler login` as a memb
 
 ## The oogabooga.land domain
 
-The zone `oogabooga.land` is in this account. Production serves it as two Worker Custom Domains, `oogabooga.land` and `www.oogabooga.land` (`routes` in `wrangler.production.jsonc`), and a Redirect Rule in the zone (Rules → Redirect Rules, "Redirect from WWW to root", 301, keeping the path and query) sends `www` to the apex before the Worker runs. `SITE_ORIGIN` is `https://oogabooga.land`, and the production OAuth App's homepage and callback match it (`https://oogabooga.land/auth/callback`): sign-in cookies belong to that host alone. A Custom Domain can't be created over an existing DNS record for the same name, so a record left over from another host is deleted first. A deploy that changes `routes` needs *Zone → Workers Routes → Edit* on `oogabooga.land` in the deploy token.
+The zone `oogabooga.land` is in this account. Production serves the apex as a Worker Custom Domain (`routes` in `wrangler.production.jsonc`). `www` is a proxied DNS record (`CNAME www → oogabooga.land`) that a Redirect Rule in the zone (Rules → Redirect Rules, "Redirect from WWW to root", 301, keeping the path and query) sends to the apex; it never reaches the Worker. `SITE_ORIGIN` is `https://oogabooga.land`, and the production OAuth App's homepage and callback match it (`https://oogabooga.land/auth/callback`): sign-in cookies belong to that host alone. A Custom Domain can't be created over an existing DNS record for the same name, so a record left over from another host is deleted first. A deploy that changes `routes` needs *Zone → Workers Routes → Edit* on `oogabooga.land` in the deploy token.
 
 ## Every deploy
 
