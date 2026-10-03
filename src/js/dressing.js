@@ -565,14 +565,13 @@
   // its edges notched into leaflets, light on top and dark beneath, with three short fronds standing up.
   const TRUNK = ["#9a7148", "#83603c", "#6f4f30"].map(hexToRgb), NUT = hexToRgb("#6b4a26");
   const FROND = ["#3f9a34", "#5fbf3f", "#86d652", "#2c6e2a"].map(hexToRgb);
-  const palms = [], coarsePalms = [];
-  const palm = (v, coarse = false) => {
-    const cache = coarse ? coarsePalms : palms;
-    if (cache[v]) return cache[v];
+  const palms = [];
+  const palm = (v) => {
+    if (palms[v]) return palms[v];
     const geo = { verts: [], faces: [], lines: [] }, rand = mulberry32(700 + v);
     const vert = (x, y, z) => (geo.verts.push(x, y, z), geo.verts.length / 3 - 1);
     const quad = (a, b, c, d, color) => geo.faces.push({ i: [a, b, c, d], color, emissive: 0 });
-    const H = 3.9 + v * 0.45, LEAN = 0.8 + v * 0.3, SEG = coarse ? 5 : 10, SIDES = coarse ? 5 : 8;
+    const H = 3.9 + v * 0.45, LEAN = 0.8 + v * 0.3, SEG = 10, SIDES = 8;
     const axis = (t) => LEAN * t * t;
     // Trunk: each segment flares at its foot and narrows to its top; a ledge joins it to the segment below.
     let below = null;
@@ -594,19 +593,19 @@
     // Coconuts: low round nuts tucked under the crown.
     for (let n = 0; n < 3; n++) {
       const a = n * 2.1 + 0.4, cx = topX + Math.cos(a) * 0.17, cz = Math.sin(a) * 0.17, cy = H - 0.16, r = 0.13;
-      const rows = [], rings = coarse ? 3 : 4, sides = coarse ? 5 : 6;
-      for (let i = 0; i <= rings; i++) {
-        const p = i / rings * Math.PI, rr = Math.sin(p) * r, y = cy - Math.cos(p) * r;
-        rows.push(Array.from({ length: sides }, (_, e) => vert(cx + Math.cos(e / sides * Math.PI * 2) * rr, y, cz + Math.sin(e / sides * Math.PI * 2) * rr)));
+      const rows = [];
+      for (let i = 0; i <= 4; i++) {
+        const p = i / 4 * Math.PI, rr = Math.sin(p) * r, y = cy - Math.cos(p) * r;
+        rows.push(Array.from({ length: 6 }, (_, e) => vert(cx + Math.cos(e / 6 * Math.PI * 2) * rr, y, cz + Math.sin(e / 6 * Math.PI * 2) * rr)));
       }
-      for (let i = 0; i < rings; i++) for (let e = 0; e < sides; e++) {
-        const f = (e + 1) % sides;
+      for (let i = 0; i < 4; i++) for (let e = 0; e < 6; e++) {
+        const f = (e + 1) % 6;
         quad(rows[i][e], rows[i + 1][e], rows[i + 1][f], rows[i][f], NUT);
       }
     }
     // A frond: a closed ribbon along an arc, V-folded across its width, notched by alternating widths.
     const frond = (a, len, rise, droop, broad) => {
-      const ca = Math.cos(a), sa = Math.sin(a), STEPS = coarse ? 3 : 11, T = 0.035;
+      const ca = Math.cos(a), sa = Math.sin(a), STEPS = 11, T = 0.035;
       let prev = null;
       for (let k = 0; k <= STEPS; k++) {
         const s = k / STEPS, d = len * s, y = H + 0.08 + rise * d - droop * d * d;
@@ -631,7 +630,7 @@
     for (let f = 0; f < 8; f++) frond(f / 8 * Math.PI * 2 + rand() * 0.35, 2.0 + rand() * 0.5, 0.6, 0.32, 0.3);
     for (let f = 0; f < 3; f++) frond(f / 3 * Math.PI * 2 + 0.5 + rand() * 0.3, 0.9 + rand() * 0.2, 1.1, 0.45, 0.2);
     geo.sway = 0.0035;
-    return cache[v] = geo;
+    return palms[v] = geo;
   };
   // The islands on the horizon: terraced sea stacks on the island's own grid mesher, two metres a cell, a sand
   // ring at the waterline, rock cliffs and grass tops; variant 1 has a sea arch through it. Built once a page.

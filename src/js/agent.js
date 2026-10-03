@@ -1570,7 +1570,7 @@
     };
     // The optional starting rest pose proves a future seat can also be left.
     // Both temporary poses share the snapshot, leaving the live rig untouched.
-    const climbPoseClear = (dt, px, py, pz, facing, motion, solidAt, clearAt = null, entry = null, speed = 0, staticPose = false, lounge = "", fromLounge = null, sequenceStep = 0, hullAt = null, fromWalk = null, supportAt = null) => {
+    const climbPoseClear = (dt, px, py, pz, facing, motion, solidAt, clearAt = null, entry = null, speed = 0, staticPose = false, lounge = "", fromLounge = null, sequenceStep = 0, hullAt = null, fromWalk = null, supportAt = null, biped = false) => {
       climbBlockedArm = climbContactMask = 0;
       if (!managed || !solidAt) return true;
       for (let i = 0; i < previewKeys.length; i++) previewState[i] = state[previewKeys[i]];
@@ -1613,7 +1613,7 @@
           facing = fromWalk.heading + walkTurn * t;
         }
         const sine = Math.sin(facing), cosine = Math.cos(facing);
-        poseManaged(step, px, py, pz, facing, speed, false, false, lounge, motion);
+        poseManaged(step, px, py, pz, facing, speed, false, biped, lounge, motion);
         if (!flexibleClimb) previewBounds(previewTo, lab);
         if (hulls) previewHulls(previewHullTo, !sceneHull);
         if (sequenceStep > 0 && clearAt && clearAt.beginPose) clearAt.beginPose(entry);
@@ -1904,6 +1904,7 @@
         get climbing() { return state.climbBlend; },
         get lounge() { return state.lounge; },
         get grooming() { return state.groomBlend; },
+        get groomTime() { return state.groomTime; },
         get lab() { return state.lab; },
         get labWork() { return state.labWork; },
         jump,

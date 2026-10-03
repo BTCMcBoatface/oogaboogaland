@@ -594,17 +594,6 @@
           if (filtered && !source.leaderboards[type].length) continue;
           c.push({ name: "leaderboard", params: multi ? { type, scope: "multi" } : { type } });
         }
-        if (!filtered && repoFilter === null && source) {
-          const reference = Date.parse(source.generatedAt) || Date.now();
-          let active = 0;
-          for (const repo of source.repos) {
-            const activity = Date.parse(repo.lastActivityAt);
-            if (!Number.isFinite(activity) || reference - activity > 7 * 24 * 3600 * 1000) continue;
-            c.push({ name: "repo", params: { name: repo.name } });
-            for (const type of types) c.push({ name: "leaderboard", params: { type, repo: repo.name } });
-            if (++active === 6) break;
-          }
-        }
       }
       return c;
     };

@@ -6701,8 +6701,10 @@
     copy.torsoStandCompact = g.torsoStandCompact; copy.torsoQuadCompact = g.torsoQuadCompact;
     copy.torsoRadius = g.torsoRadius;
     clankerPeerPoseChecked = false; clankerPeerPoseClear = true;
+    // Standing coworkers keep the same stance in this preview and the live pose.
     return g.climbPoseClear(dt, nx, ny, nz, nextHeading,
-      entry.motion, clankerPeerEmptyStone, clankerPeerPoseTransition, entry, entry.speed);
+      entry.motion, clankerPeerEmptyStone, clankerPeerPoseTransition, entry, entry.speed,
+      false, "", null, 0, null, null, null, entry.biped);
   };
   const clankerWalkCoreClear = (entry, x, y, z, toX, toY, toZ, fromHeading, toHeading) => {
     // Protect the trunk near the middle of the support rectangle, not just

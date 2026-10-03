@@ -2063,6 +2063,8 @@ const { soloDebugParsingProbe, soloDebugSnapshot, soloDebugLifecycleProbe, soloD
 })();
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Diagnostics may be written before the ledger, including on a fresh checkout.
+mkdirSync(join(root, "untracked"), { recursive: true });
 // Three, measured: cutting this to 1 and the tips to 12 saved 35 s of lane work across all seven
 // soaks - 4 s of wall - because a soak is dominated by its settle, its forced GC and two heap
 // parses, not by its round trips. Not worth a third of the leak detection.
@@ -2250,13 +2252,13 @@ const untilPage = (b, cond, ms = 6000) => b.evaluate(`new Promise((resolve) => {
 
 
 const raceTracks = ["race tracks", async (b) => {
-  const built = await b.evaluate(`(() => { const B = window.__ooga, T = window.BL.raceTrack, out = {}; for (const def of T.TRACKS) { const t0 = performance.now(); document.querySelector('[data-track="' + def.id + '"]').click(); const ms = performance.now() - t0; const t = B.track, S = t.samples, n = t.count; let maxStep = 0, gapNearCheck = false; for (let i = 0; i < n; i++) { const q = (i + 1) % n; if (S.surface[i] !== T.SURF.gap && S.surface[q] !== T.SURF.gap) maxStep = Math.max(maxStep, Math.abs(S.y[q] - S.y[i])); } for (const c of t.checkpoints) for (let k = 0; k < 30; k++) if (S.surface[(c + k) % n] === T.SURF.gap) gapNearCheck = true; const faces = t.sectors.reduce((sum, s) => sum + s.nodes.road.geometry.faces.length + s.nodes.big.geometry.faces.length + s.nodes.small.geometry.faces.length, 0); const h0 = t.heightAt(t.grid[0].x, t.grid[0].z, -1); out[def.id] = { ms: Math.round(ms), samples: n, length: Math.round(t.length), sectors: t.sectors.length, chunks: t.terrainNodes.length, checkpoints: t.checkpoints.length, first: t.checkpoints[0], gapNearCheck, maxStep: +maxStep.toFixed(2), faces, bananas: t.spawns.bananas.length, crates: t.spawns.crates.length, pads: t.spawns.pads.length, map: t.mapPts.length, grid: t.grid.length, gridHeight: Math.abs(h0 - t.grid[0].y) < 1e-6, torches: t.torches.length, spectators: t.spectators.count, records: B.renderer.stats.records, sky: !!(t.renderOpts.horizon && t.renderOpts.zenith) }; } return out; })()`);
+  const built = await b.evaluate(`(() => { const B = window.__ooga, T = window.BL.raceTrack, out = {}; for (const def of T.TRACKS) { const t0 = performance.now(); document.querySelector('[data-track="' + def.id + '"]').click(); const ms = performance.now() - t0; const t = B.track, S = t.samples, n = t.count; let maxStep = 0, gapNearCheck = false; for (let i = 0; i < n; i++) { const q = (i + 1) % n; if (S.surface[i] !== T.SURF.gap && S.surface[q] !== T.SURF.gap) maxStep = Math.max(maxStep, Math.abs(S.y[q] - S.y[i])); } for (const c of t.checkpoints) for (let k = 0; k < 30; k++) if (S.surface[(c + k) % n] === T.SURF.gap) gapNearCheck = true; const resident = new Set(); let placedFaces = 0; for (const sector of t.sectors) for (const node of sector.node.children) if (node.geometry) { resident.add(node.geometry); placedFaces += node.geometry.faces.length; } const faces = [...resident].reduce((sum, geo) => sum + geo.faces.length, 0); const h0 = t.heightAt(t.grid[0].x, t.grid[0].z, -1); out[def.id] = { ms: Math.round(ms), samples: n, length: Math.round(t.length), sectors: t.sectors.length, chunks: t.terrainNodes.length, checkpoints: t.checkpoints.length, first: t.checkpoints[0], gapNearCheck, maxStep: +maxStep.toFixed(2), faces, placedFaces, bananas: t.spawns.bananas.length, crates: t.spawns.crates.length, pads: t.spawns.pads.length, map: t.mapPts.length, grid: t.grid.length, gridHeight: Math.abs(h0 - t.grid[0].y) < 1e-6, torches: t.torches.length, spectators: t.spectators.count, records: B.renderer.stats.records, sky: !!(t.renderOpts.horizon && t.renderOpts.zenith) }; } return out; })()`);
   for (const [id, t] of Object.entries(built)) {
     record(`race tracks: ${id} builds fast into culled sectors with checkpoints clear of its gaps`, t.ms < 900 && t.samples > 300 && t.length > 600 && t.sectors >= 12 && t.chunks > 20 && t.checkpoints === 8 && t.first === 0 && !t.gapNearCheck && t.maxStep < 0.8 && t.faces > 15000 && t.faces < 120000 && t.bananas >= 30 && t.crates >= 6 && t.pads >= 2 && t.map >= 100 && t.grid === Math.max(8, CAST) && t.gridHeight && t.spectators > 12 && t.records < 320, JSON.stringify(t));
   }
   record("race tracks: the two outdoor tracks carry a sky and the gorge lights its torches", built.bay.sky && built.peak.sky && !built.gorge.sky && built.gorge.torches >= 20 && built.bay.torches === 0, JSON.stringify({ bay: built.bay.sky, gorge: [built.gorge.sky, built.gorge.torches], peak: built.peak.sky }));
-  const swapped = await b.evaluate(`(() => { const B = window.__ooga; const r0 = B.renderer.stats.records; document.querySelector('[data-track="bay"]').click(); B.housekeep(); const r1 = B.renderer.stats.records; return { r0, r1, nodes: B.stats().allNodes, pool: B.stats().pool, particles: B.stats().particles }; })()`);
-  record("race tracks: switching tracks releases the old track's GPU records", swapped.r1 <= swapped.r0 + 5 && swapped.nodes < 900, JSON.stringify(swapped));
+  const swapped = await b.evaluate(`(() => { const B = window.__ooga, track = id => { document.querySelector('[data-track="' + id + '"]').click(); B.advance(1 / 60, 1 / 60); B.housekeep(); return { records: B.renderer.stats.records, nodes: B.stats().allNodes, pool: B.stats().pool, particles: B.stats().particles }; }; const before = track("bay"); track("peak"); const after = track("bay"); return { before, after }; })()`);
+  record("race tracks: switching tracks releases the old track's GPU records", swapped.after.records <= swapped.before.records + 5 && swapped.after.nodes === swapped.before.nodes, JSON.stringify(swapped));
 }];
 
 const orbitPage = (base, query) => `${base}?debug=1&nosim=1&scene=orbit${clock(query)}`;
@@ -3641,13 +3643,10 @@ const tapKey = async (b, key) => {
   await b.send("Input.dispatchKeyEvent", { type: "keyDown", key, code, text: key });
   await b.send("Input.dispatchKeyEvent", { type: "keyUp", key, code });
 };
-// The board's rotation and ticker derive from the baked data, so the check reads its
-// expectations from the same file rather than pinning counts that move with the org.
-const hubJumbotron = { name: "hub jumbotron", why: "rule: the rotation runs recent, org totals and five org boards, then each active repo's summary and five boards, and a draft PR ticks as DRAFT PR", run: async (b) => {
+// The island board shows the org; repository pages belong to the reader's filters.
+const hubJumbotron = { name: "hub jumbotron", why: "rule: the island rotation stays on org activity, readers select repository pages, and a draft PR ticks as DRAFT PR", run: async (b) => {
   const r = await b.evaluate(`(() => {
     const B = window.__ooga, j = B.jumbotron, data = window.BL.jumbotronData;
-    const ref = Date.parse(data.meta.generated_at) || Date.now();
-    const active = data.repos.filter((repo) => repo.last_activity_at && ref - Date.parse(repo.last_activity_at) <= 7 * 24 * 3600 * 1000).slice(0, 6);
     j.goToView(0);
     const captions = [];
     for (let i = 0; i < j.count; i++) { captions.push(j.caption); j.nextView(); }
@@ -3661,10 +3660,13 @@ const hubJumbotron = { name: "hub jumbotron", why: "rule: the rotation runs rece
     const drafted = column();
     j.refreshData(data);
     j.goToView(0);
-    return { count: j.count, expected: 2 + 5 + active.length * 6, captions: captions.slice(0, 8), wrapped, differs: plain !== drafted };
+    const reader = j.createReader();
+    reader.setFilter("repos", [data.repos[0].name]); reader.go(1);
+    return { count: j.count, captions, wrapped, differs: plain !== drafted,
+      filtered: reader.view.name === "repo" && reader.view.params.name === data.repos[0].name };
   })()`);
   const orgBoards = ["commits", "prs", "reviews", "comments", "issues"].map((t) => "org · " + t);
-  record("hub jumbotron: the rotation is recent, org totals, five org leaderboards, then six slides per active repo, wrapping back to the start", r.count === r.expected && r.captions[0] === "Recent activity" && r.captions[1] === "Org totals" && orgBoards.every((c, i) => r.captions[2 + i] === c) && r.wrapped === "Recent activity", JSON.stringify(r));
+  record("hub jumbotron: the island rotates recent activity, org totals and five org leaderboards, while filtered readers show repository pages", r.count === 7 && r.captions[0] === "Recent activity" && r.captions[1] === "Org totals" && orgBoards.every((c, i) => r.captions[2 + i] === c) && r.wrapped === "Recent activity" && r.filtered, JSON.stringify(r));
   record("hub jumbotron: a draft PR draws a different ticker row than the same PR undrafted", r.differs, JSON.stringify({ differs: r.differs }));
 } };
 // The healthiest of its kind, so a prop an earlier step shot at is never the one measured.
@@ -4129,10 +4131,11 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     && falling.bird.aimDot < -0.5 && falling.carry.frames === falling.bird.frames && falling.carry.off === falling.bird.off && falling.carry.back === falling.bird.back
     && [falling.carry, falling.bird].every(r => r.off >= 0 && r.back > r.off && r.back < 600 && r.low < -50 && r.gravityFrames > 120 && r.gravityError < 1e-5 && r.ballisticError < 1e-5 && r.departure.x < -0.5 && r.departure.z < -0.5 && r.departure.vx < 0 && r.departure.vz < 0), JSON.stringify(falling));
   record("birds-eye combat: the falling character stays centered and visible above every cut plane until respawn, without a camera-height lag", falling.bird.shown && falling.bird.center < 0.02 && falling.bird.follow < 1e-5 && falling.bird.clearance > 0.06 && falling.bird.low < -50 && falling.bird.back > falling.bird.off, JSON.stringify(falling.bird));
-  // Prior view checks can leave the AK selected; start this swap check with
-  // the club. Native pointer lock needs an active tab as well as emulated focus.
+  // The abyss emptied the AK; load it so accidental fire through the HUD
+  // would actually spend ammunition. Start the swap check with the club.
+  // Native pointer lock needs an active tab as well as emulated focus.
   await b.send("Page.bringToFront");
-  await b.evaluate(`__ooga.pilot.weaponMode(1)`);
+  await b.evaluate(`__ooga.crew.configureWeapon(__ooga.pilot.player, 2, 30); __ooga.pilot.weaponMode(1)`);
   await untilPage(b, 'B.pilot.player.weapon.primaryEquipped');
   await b.click(size.x, size.y);
   await untilPage(b, 'document.pointerLockElement === document.getElementById("scene")');
@@ -4150,17 +4153,18 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
       canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerType: "mouse", pointerId: 91, isPrimary: true, button: 0, buttons: 0 }));
       return hit && hit.closest("button") === button;
     };
-    const shots = a.weapon.shotsFired, primary = a.weapon.primaryEquipped;
+    const shots = a.weapon.shotsFired, ammo = a.weapon.ammo, primary = a.weapon.primaryEquipped;
     const secondaryHit = route(document.getElementById("weapon-hud")), equipped = a.weapon.equipped;
     const primaryHit = route(document.getElementById("primary-hud")), restored = a.weapon.primaryEquipped;
     const currentX = parseFloat(reticle.style.left), currentY = parseFloat(reticle.style.top);
     P.hooks.onOrbit(B.renderer.size.width / 2 - currentX, B.renderer.size.height / 2 - currentY); B.advance(1 / 60, 1 / 60);
     return { active: P.cursor.active, visible: P.cursor.visible, locked: document.pointerLockElement === canvas,
-      secondaryHit, primaryHit, primary, equipped, restored, shots, afterShots: a.weapon.shotsFired,
+      secondaryHit, primaryHit, primary, equipped, restored, shots, afterShots: a.weapon.shotsFired, ammo, afterAmmo: a.weapon.ammo,
       reticleZ: parseInt(getComputedStyle(reticle).zIndex, 10) };
   })()`);
   record("birds-eye combat: the reticle sits above HUD buttons, routes clicks to them, and does not fire through them", hudPointer.active && !hudPointer.visible && hudPointer.locked
     && hudPointer.secondaryHit && hudPointer.primaryHit && hudPointer.primary && hudPointer.equipped && hudPointer.restored
+    && hudPointer.ammo === 30 && hudPointer.afterAmmo === hudPointer.ammo
     && hudPointer.afterShots === hudPointer.shots && hudPointer.reticleZ >= 30, JSON.stringify(hudPointer));
 } };
 
@@ -5930,12 +5934,37 @@ scene("hub", { label: "chilling", query: "status=chillin&pos=0", steps: [{ name:
     const separated = !overlaps();
     setup(2.5); let approachClear = !overlaps();
     for (let frame = 0; frame < 4 * 60; frame++) { C.update(1 / 60); approachClear &&= !overlaps(); }
-    return { count: group.length, initiallyCrowded, separated, approachClear, maxStep, airborne,
+    // Upright coworkers fit closer than walking trunks. The final-pose guard
+    // must not freeze their animation by previewing an all-fours transition.
+    setup(3);
+    const site = C.sites.findIndex(site => site.mirrorRoom);
+    group.forEach((e, i) => {
+      const x = i < 2 ? 7 : 13, z = i === 1 ? 1.5 : 0, y = B.island.surfaceAt(x, z);
+      Object.assign(e.root.position, { x, y, z });
+      e.owner.override = e.owner.state = "working";
+      e.owner.work.site = e.owner.work.plannedSite = site;
+      Object.assign(e, { mode: "working", phase: "work", site, pendingSite: -1, hasSlot: true,
+        parked: true, biped: true, stand: 1, footprintMode: "stand", goalX: x, goalY: y, goalZ: z });
+      e.motion.groomPhase = NaN;
+      e.gorilla.poseManaged(2, x, y, z, 0, 0, false, true, "", e.motion);
+      e.compact = e.gorilla.standCompact;
+    });
+    const standingClear = !overlaps(), animationStart = group[0].gorilla.debug.groomTime;
+    const standingStart = { ...group[0].root.position };
+    for (let frame = 0; frame < 18; frame++) C.update(1 / 60);
+    const standing = { initiallyClear: standingClear, clear: !overlaps(),
+      animated: group[0].gorilla.debug.groomTime - animationStart,
+      upright: group[0].gorilla.debug.gait === "upright",
+      displacement: Math.hypot(group[0].root.position.x - standingStart.x,
+        group[0].root.position.y - standingStart.y, group[0].root.position.z - standingStart.z) };
+    return { count: group.length, initiallyCrowded, separated, approachClear, maxStep, airborne, standing,
       recoveries: C.stats().recoveries - recoveries };
   })()`);
   record("gorilla crowd: three overlapping NPC trunks step apart without jumping or relocation, and converging walkers keep their trunks apart",
     crowd.count === 3 && crowd.initiallyCrowded && crowd.separated && crowd.approachClear
-    && crowd.maxStep < 0.08 && !crowd.airborne && !crowd.recoveries, JSON.stringify(crowd));
+    && crowd.maxStep < 0.08 && !crowd.airborne && !crowd.recoveries
+    && crowd.standing.initiallyClear && crowd.standing.clear && crowd.standing.upright
+    && crowd.standing.animated > 0.29 && crowd.standing.displacement < 1e-6, JSON.stringify(crowd));
 } }, { name: "Oogas walk over gorillas", why: "regression: gorilla back attachments dragged Oogas sideways and automatically launched NPC passengers", run: async (b) => {
   const state = await b.evaluate(`(() => {
     const B = __ooga, C = B.clankers, P = B.pilot, c = B.cavemen.get("portlandhodl"), e = C.list.find(e => e.owner === c);
@@ -6719,10 +6748,10 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
     e.climb.active = e.jump.active = e.fire.burning = e.fire.rolling = false; e.root.visible = true;
     e.gorilla.poseManaged(2, 7, e.root.position.y, 0, e.heading, 0, false, false, "", e.motion);
     BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
-    const originalHeadHidden = !!e.gorilla.parts.head.cameraHidden;
+    const originalHeadHidden = !!e.gorilla.parts.head.cameraHidden, near = B.camera.near;
     reticle.dataset.sight = reticle.dataset.close = reticle.dataset.occluded = "true";
     reticle.dataset.hit = "object"; reticle.style.left = "31px"; reticle.style.top = "47px"; reticle.style.setProperty("--reticle-hit", "1");
-    const possessed = P.possess(e, true), near = B.camera.near, rows = [];
+    const possessed = P.possess(e, true), rows = [];
     canvas.focus();
     const key = (type, value, code = "Key" + value.toUpperCase(), location = 0) => canvas.dispatchEvent(new KeyboardEvent(type,
       { key: value, code, location, bubbles: true, cancelable: true }));
@@ -7102,7 +7131,7 @@ const dsbClick = async (b, selector, mobile = false) => {
   // Animation callbacks precede compositor paint. Wait for the scrolled
   // surface to commit before sending physical coordinates into that surface.
   await b.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false, clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 } });
-  const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(); window.__hudPointer = []; for (const type of ["pointerdown", "click"]) document.addEventListener(type, event => { window.__hudPointer.push({ type, hits: e.contains(event.target), target: event.target.id || event.target.dataset.action || event.target.tagName }); }, { once: true, capture: true }); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
+  const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(); window.__hudPointer = []; for (const type of ["pointerdown", "click"]) document.addEventListener(type, event => { window.__hudPointer.push({ type, hits: e.contains(event.target), target: event.target.id || event.target.dataset.action || event.target.tagName, x: event.clientX, y: event.clientY, detail: event.detail, at: performance.now(), scroll: document.getElementById("dsb-panel").scrollTop }); }, { once: true, capture: true }); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
   if (!p.hits) throw Error("Blocked pointer: " + selector);
   if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
   else await b.click(p.x, p.y);
@@ -7932,6 +7961,7 @@ scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "facto
   const before = await snapshot(), visits = [];
   for (let i = 0; i < 6; i++) {
     await travel("factory");
+    // One listener belongs to the hall and one to Flink; both leave with the scene.
     const hall = await b.evaluate('__factoryLife.subscriptions');
     await travel("lab");
     const away = await b.evaluate('__factoryLife.subscriptions');
@@ -7943,7 +7973,7 @@ scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "facto
     visits.push({ ...visit, hall, away });
   }
   const after = await snapshot(), same = (key) => before.stats[key] === after.stats[key];
-  record("soak: factory cycles: one bounded node survives six round trips, the hall's subscription released, without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.hall === 1 && v.away === 0 && v.subscriptions === 1 && v.lines <= v.places)
+  record("soak: factory cycles: one bounded node survives six round trips, the hall's subscription released, without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.hall === 2 && v.away === 0 && v.subscriptions === 1 && v.lines <= v.places)
     && same("allNodes") && same("targets") && same("dom") && after.stats.tweens === 0, JSON.stringify({ visits, before: before.stats, after: after.stats }));
   record("soak: factory cycles: GPU records, listeners and retained heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
 } }] });

@@ -762,8 +762,8 @@
   // shingled over the clump, each rosette radiating from a point on the surface and lifted out of it. Every leaf
   // takes the normal pointing out of the clump, so the mass lights softly while its outline stays leafy; rosettes
   // high on the clump take the light greens and low ones the dark.
-  const leafy = (geo, cx, cy, cz, rx, ry, rz, tones, rand, count, size, coarse = false) => {
-    puff(geo, cx, cy, cz, rx * 0.84, ry * 0.84, rz * 0.84, [tones[0], tones[0], tones[0], tones[0]], rand, coarse ? 2 : 4, coarse ? 5 : 7);
+  const leafy = (geo, cx, cy, cz, rx, ry, rz, tones, rand, count, size) => {
+    puff(geo, cx, cy, cz, rx * 0.84, ry * 0.84, rz * 0.84, [tones[0], tones[0], tones[0], tones[0]], rand, 4, 7);
     const golden = Math.PI * (3 - Math.sqrt(5));
     for (let k = 0; k < count; k++) {
       const y = 1 - (k + 0.5) / count * 1.6, rr = Math.sqrt(Math.max(0, 1 - y * y)), a = k * golden + rand() * 0.5;
@@ -778,7 +778,7 @@
       tx /= tl; ty /= tl; tz /= tl;
       const bx = dy * tz - dz * ty, by = dz * tx - dx * tz, bz = dx * ty - dy * tx;
       const band = Math.min(3, Math.max(1, Math.round(1.7 + dy * 1.5 + (rand() - 0.5) * 0.8))), light = tones[band], dark = tones[band - 1];
-      const leaves = coarse ? 3 : 5 + (rand() < 0.4 ? 1 : 0), turn0 = rand() * Math.PI * 2, len = size * (0.85 + rand() * 0.3), rise = 0.35 + rand() * 0.2;
+      const leaves = 5 + (rand() < 0.4 ? 1 : 0), turn0 = rand() * Math.PI * 2, len = size * (0.85 + rand() * 0.3), rise = 0.35 + rand() * 0.2;
       for (let n = 0; n < leaves; n++) {
         const t = turn0 + n / leaves * Math.PI * 2, c = Math.cos(t), sn = Math.sin(t);
         const ux = tx * c + bx * sn, uy = ty * c + by * sn, uz = tz * c + bz * sn;
@@ -1169,11 +1169,11 @@
   ];
   // Bushes: leafy clumps on the voxel bushes' own ellipsoids. The first two flower (peach and pink, then yellow and
   // purple), the third carries round red berries.
-  const buildBush = (i, coarse) => {
+  const bush = variants((i) => {
     const rand = mulberry32(7 + i), geo = { verts: [], faces: [], lines: [], normals: [] }, tones = ["#3a6e24", "#56902f", "#6fae3a", "#8ccb4b"].map(hexToRgb);
-    for (const [cx, cy, cz, rx, ry, rz] of CLUMPS[i]) leafy(geo, cx * QUARTER, cy * 0.8 * QUARTER, cz * QUARTER, rx * 1.12 * QUARTER, ry * 0.82 * QUARTER, rz * 1.12 * QUARTER, tones, rand, coarse ? 3 : Math.round(10 + rx * rz * 3.2), 0.17, coarse);
+    for (const [cx, cy, cz, rx, ry, rz] of CLUMPS[i]) leafy(geo, cx * QUARTER, cy * 0.8 * QUARTER, cz * QUARTER, rx * 1.12 * QUARTER, ry * 0.82 * QUARTER, rz * 1.12 * QUARTER, tones, rand, Math.round(10 + rx * rz * 3.2), 0.17);
     const [cx, cy, cz, rx, ry, rz] = CLUMPS[i][0];
-    for (let n = 0; n < (coarse ? 3 : i === 2 ? 9 : 6); n++) {
+    for (let n = 0; n < (i === 2 ? 9 : 6); n++) {
       const a = rand() * Math.PI * 2, up = 0.25 + rand() * 0.6, side = Math.sqrt(1 - up * up);
       const nx = Math.cos(a) * side, ny = up, nz = Math.sin(a) * side;
       const px = (cx + nx * rx * 1.02) * QUARTER, py = (cy + ny * ry * 1.02) * QUARTER, pz = (cz + nz * rz * 1.02) * QUARTER;
@@ -1185,10 +1185,7 @@
     }
     geo.normals = Float32Array.from(geo.normals);
     return Object.assign(geo, { sway: 0.03 });
-  };
-  // Race scenery keeps the same clumps and leaf normals with a smaller distant mesh.
-  const detailedBush = variants(i => buildBush(i, false)), coarseBush = variants(i => buildBush(i, true));
-  const bush = (i = 0, coarse = false) => (coarse ? coarseBush : detailedBush)(i);
+  });
   // The voxel boulder the mine's crack rock is veined for; everywhere else takes the cartoon `rock`.
   const ROCK_SHAPES = [{ rx: 3.2, ry: 3.6, rz: 2.8 }, { rx: 5, ry: 3.8, rz: 4.2 }];
   const voxelRock = variants((i) => {

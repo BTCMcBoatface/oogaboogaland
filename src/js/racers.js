@@ -96,7 +96,11 @@
       racer.ride = ride;
       // The mount wrapper has an identity transform; keep its animated parts
       // directly under the racer rather than traversing another empty node.
-      for (const child of ride.node.children.slice()) addChild(racer.body, child);
+      while (ride.node.children.length) {
+        const child = ride.node.children[0];
+        removeChild(ride.node, child);
+        addChild(racer.body, child);
+      }
       setVec(racer.flame.position, 0, m.id === "kart" ? 0.5 : 0.9, m.id === "kart" ? -1.05 : -0.95);
       setVec(cave.root.position, 0, ride.seatY + racer.baseY * (m.id === "kart" ? 0.45 : 0.7), ride.seatZ);
       parts.legL.rotation.x = parts.legR.rotation.x = m.id === "kart" ? -1.45 : -0.55;
