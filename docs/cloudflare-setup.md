@@ -47,7 +47,7 @@ The zone `oogabooga.land` is in this account. Production serves the apex as a Wo
 
 ## Every deploy
 
-`cloudflare-staging.yml` runs on each push to `rock`; `cloudflare-production.yml` runs by hand on `rock` (Actions → Deploy Cloudflare production → Run workflow). Each takes a fresh jumbotron snapshot, runs `npm run build:site` and the Worker's checks, applies D1 migrations and deploys. Every deploy drops live sockets, and clients reconnect on their own. By hand from a laptop: `cd worker && npm run deploy:staging` (or `deploy:production`).
+`cloudflare-staging.yml` runs on each push to `rock`; `cloudflare-production.yml` runs by hand on `rock` (Actions → Deploy Cloudflare production → Run workflow). Each takes a fresh jumbotron snapshot, runs `npm run build:site` and the Worker's checks, applies D1 migrations and deploys. Every deploy drops live sockets, and clients reconnect on their own. These workflows are the only deploy path: keep Workers Builds (a Worker's Settings → Build) disconnected and don't deploy from the dashboard, or a second deploy on the same push can replace the Worker and drop its secrets. By hand from a laptop: `cd worker && npm run deploy:staging` (or `deploy:production`).
 
 ## Local development
 

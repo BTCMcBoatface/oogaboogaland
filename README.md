@@ -100,6 +100,50 @@ Writes `oogaboogaland.html`, one self-contained page with the content policy pin
 
 Two Cloudflare Workers serve the same site with GitHub sign-in, the shared island and voice: https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev deploys on every merge to `rock`, and https://oogabooga.land (production) by hand; `docs/cloudflare-setup.md` covers the setup and local development with `wrangler dev`, and `docs/auth-and-presence.md` the sign-in flow.
 
+### Deploying to Cloudflare
+
+Deploy only through GitHub Actions, and keep Cloudflare's Git connection (Workers Builds) **off** on both Workers. Two deploy systems on the same push race each other. On 2026-10-03 the Git connection deployed a static-only build next to Actions and wiped staging's secrets, which took down sign-in and voice.
+
+| Environment | URL | Deploys |
+|---|---|---|
+| Staging | https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev | automatically on every merge to `rock` (**Deploy Cloudflare staging**) |
+| Production | https://oogabooga.land | by hand once staging looks right: **Actions → Deploy Cloudflare production → Run workflow** on `rock` |
+
+Each workflow builds the site (`npm run build:site`), runs the Worker's checks, applies D1 migrations and deploys with `wrangler.<env>.jsonc`. A deploy drops live connections for a moment, and players reconnect on their own.
+
+Don't:
+- connect a Git repository under a Worker's **Settings → Build**;
+- use **Edit code**, quick edit or deploy buttons on these Workers in the dashboard;
+- run a plain `wrangler deploy` without `--config wrangler.<env>.jsonc`.
+
+After each deploy, from `worker/`:
+1. `npx wrangler deployments list --config ../wrangler.<env>.jsonc` shows one new deploy for the push.
+2. `npx wrangler secret list --config ../wrangler.<env>.jsonc` lists `GITHUB_CLIENT_SECRET` and `REALTIME_SECRET`.
+3. `curl -s https://<host>/api/me` returns `{"player":null}`, not HTML.
+4. Two players, one of them in a second browser or a private window, sign in with GitHub, see each other move, and hear each other after **Join voice**.
+
+**Emergency deploy**, only when GitHub Actions is unavailable. Run it from an up-to-date checkout of `rock`, logged in with `npx wrangler login` as a member of the Cloudflare account:
+
+```sh
+cd worker
+npm ci
+npm run deploy:staging      # or: npm run deploy:production
+```
+
+The scripts build the site, apply D1 migrations and deploy with the right config. They ship whatever is checked out, so pull `rock` first, then run the checks above.
+
+**If sign-in or voice breaks after a deploy**, `wrangler deployments list` shows what deployed. A deploy that didn't come from Actions means something else is deploying: disconnect it. Then set that environment's own secrets again from the shared password manager:
+
+```sh
+npx wrangler secret put GITHUB_CLIENT_SECRET --config ../wrangler.<env>.jsonc
+npx wrangler secret put REALTIME_SECRET --config ../wrangler.<env>.jsonc
+```
+
+Secrets take effect at once, without a redeploy.
+- **Lost secrets:** a lost OAuth secret is regenerated on its GitHub OAuth App. A lost Realtime App Secret means a new SFU app, whose App ID goes into `REALTIME_APP_ID`.
+- **"GitHub did not answer"** means a missing or wrong `GITHUB_CLIENT_SECRET`.
+- **"Voice unavailable"** means a missing `REALTIME_SECRET` or `REALTIME_APP_ID`.
+
 To add your Ooga, add one file to `src/characters/` named after your GitHub handle; click **2140data** on the island for a prompt that walks you through it.
 
 ## Privacy
