@@ -166,6 +166,8 @@
   const dressingLights = [];
   const PILE_POST_DEGREES = [315, 78, 195], pilePosts = [];
   const PILE_SCALE = 0.45;
+  // How tall a remote visitor's Ooga stands for the crew's walkers (`outsideActorHeight`).
+  const REMOTE_BODY_HEIGHT = 2.2;
   const SCENERY_CLEARANCE = 0.25;
   const MEADOW_INNER = 5, MEADOW_OUTER = MEADOW - 1.5, CLIFF_INNER = MEADOW + 1.5, CLIFF_OUTER = RADIUS - 1;
   const DOCK_DEG = 75, LADDER_Z = -3.6, LADDER_LEAN = 0.65;
@@ -220,7 +222,7 @@
   };
 
   // One visit's state: created in enter, dropped in leave.
-  let jumbotronSpot, oogatronUnsub, renderer, game, world, go, lootEnabled, testBananas, root, camera, overlayCanvas, island, terrainRampRoof, pathNode, altar, hud, hooks, input, pilot, fx, cameraCover, bananaCover, solids, rockGuides, objectGuides, sightGuides, bananaGuides, pileGuides, platformGuides, mirrorGuides, pile, crew, crates, critters, clock, presets, entering, mirrorCave, matrixCave, matrixControl, gateRain, fire, headquarters, dockStairs, jumbotron, positionDebug;
+  let jumbotronSpot, oogatronUnsub, renderer, game, world, go, lootEnabled, testBananas, root, camera, overlayCanvas, island, terrainRampRoof, pathNode, altar, hud, hooks, input, pilot, fx, cameraCover, bananaCover, solids, rockGuides, objectGuides, sightGuides, bananaGuides, pileGuides, platformGuides, mirrorGuides, pile, crew, crates, critters, clock, presets, entering, mirrorCave, matrixCave, matrixControl, gateRain, fire, headquarters, dockStairs, jumbotron, positionDebug, remotes, npcSync;
   let magazine, magazineState, breakables, clankers, clankerPlay, clankerMeshes, clankerPartOwners, entropyLab, chalkboard, factoryMouth = null, arcadeMouth = null, glCanvas = null;
   let debugSelectedGorilla = null, debugMovementTerrain = null;
   const debugGorillaHighlights = [];
@@ -356,7 +358,7 @@
   const CLANKER_CAVITY = { floor: 0, ceiling: 0, caveIndex: 0 };
   const JETPACK_HUD_STATE = { owned: false, equipped: false, fuel: 1, blocked: false };
   let enteringTween = null, factoryDeparting = false, bifrostDeparting = false;
-  let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null;
+  let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null, unsubscribeAccount = null, ownOogaClaimed = false;
   let weather = null, unsubscribeMempool = null, unsubscribeChain = null, mempoolIsland = null, timechainIsland = null, bifrostIsle = null;
   // The two boards across the hole from the vine bridge, one reading the chain and one reading the
   // weather. Each holds its canvas, its panel node and the reading it last drew, so a snapshot saying
@@ -6255,6 +6257,9 @@
       timechainIsland.show(dt);
     }
     crew.update(dt, elapsed);
+    npcSync.update(dt);
+    shareDrivenOoga();
+    remotes.update(dt);
     mempoolIsland.wildlife.update(dt, elapsed);
     dockStairs.update(dt, pilot.player);
     updateRoomSigns(dt);
@@ -6331,8 +6336,67 @@
       updateMeter();
     }
   };
+  // Whether this visitor may take an Ooga: the rules live in `net.mayDrive`; working means the Ooga's
+  // real activity, not a scene override (a return from DSB marks its Ooga working to wake it).
+  const mayDriveOoga = (cave) => cave.contributor ? BL.net.mayDrive(cave.traits.name, contributors.stateFor(cave.contributor) === "working") : null;
+  const RELEASE_WORDS = { "owner-here": "Its owner arrived and took their Ooga back", taken: "Someone else is already driving that Ooga", "not-yours": "Contributors drive only their own Ooga" };
+  // Where accounts exist, this visitor's driving counts as online (the roster's green dot) only signed in.
+  const localOnline = () => !BL.net.state.backend || !!BL.net.state.me;
+  // The account or the room changed: an Ooga driven here that is no longer this visitor's to drive is let go.
+  const onAccountChange = () => {
+    claimOwnOoga();
+    const driven = crew.player, released = BL.net.state.released;
+    if (!driven) return;
+    crew.refreshRosterRow(driven);
+    let refusal = BL.net.mayDrive(driven.traits.name, false);
+    if (!refusal && released && released.name === driven.traits.name) refusal = RELEASE_WORDS[released.reason] || "That Ooga is not yours to drive";
+    BL.net.state.released = null;
+    if (!refusal) return;
+    pilot.release(true);
+    hud.toast(refusal);
+  };
+  // A signed-in contributor drives their own Ooga: once a visit, as soon as the account is known, unless
+  // the visitor already drives another. Letting go keeps it let go until the next visit.
+  const claimOwnOoga = () => {
+    const me = BL.net.state.me;
+    if (ownOogaClaimed || !me) return;
+    const character = BL.net.ownCharacter();
+    const cave = character && crew.cavemen.get(character.handle);
+    if (!cave || pilot.player) {
+      ownOogaClaimed = true;
+      return;
+    }
+    // Another tab of this account drives it: its remote copy has sent this one away.
+    if (crew.stateOf(cave) === "away") return;
+    ownOogaClaimed = true;
+    if (!contributors.debugState && crew.stateOf(cave) !== "working") {
+      cave.override = "working";
+      crew.refreshStates(true);
+    }
+    pilot.possess(cave);
+    if (crew.player === cave) hud.toast(`Welcome back, ${BL.characters.displayOf(character.handle)}: this Ooga is yours`);
+  };
+  // The place the driven Ooga is in, as the room names it for voice: out on the island, HQ (every HQ
+  // entrance leads to the one HQ), or one cave by its mouth. Named once per opening, never per frame.
+  const zoneNames = [];
+  const zoneName = (index) => {
+    if (!index) return "outside";
+    if (!zoneNames[index]) {
+      const opening = CAMERA_OPENINGS[index - 1];
+      zoneNames[index] = opening.headquarters ? "hq" : `cave-${String(opening.id).toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 27)}`;
+    }
+    return zoneNames[index];
+  };
+  // The room sees the Ooga this visitor drives, by name, and where its feet are; none when free roaming.
+  const shareDrivenOoga = () => {
+    const driven = crew.player;
+    BL.net.setBody(driven ? driven.traits.name : null);
+    if (driven) BL.net.setZone(zoneName(playerCaveIndex));
+    if (driven) BL.net.sendPose(driven.root.position.x, driven.root.position.y - driven.baseY, driven.root.position.z, driven.root.rotation.y);
+  };
   const drawExtra = (ctx2d, project, drawBubble) => {
     crew.drawQuotes(ctx2d, project, drawBubble);
+    remotes.drawNames(ctx2d, project);
     breakables.drawOverlay(ctx2d);
     if (debugSelectedGorilla) {
       const entry = debugSelectedGorilla, move = entry.debugMove, p = entry.root.position;
@@ -7871,7 +7935,7 @@
     hooks = {};
     input = interactMod.create({ canvas: ctx.canvas, renderer, camera, hooks });
     presets = { pile: PILE_VIEW, gate: GATE_VIEW };
-    pilot = pilotMod.create({ renderer, canvas: ctx.canvas, camera, hud, presets, landing: "pile", pitch: [PITCH_MIN, PITCH_MAX], dist: [DIST_MIN, DIST_MAX], follow: FOLLOW, fly: FLY, clampTarget, clampCamera, observeOrbit: position => clampCamera(position, 0), ceilingAt, birdsEyeMin: BIRDS_EYE_MIN, birdsEyeCeiling, releaseView: releaseCameraView, enterFreeView: enterFreeCameraView, coarse: COARSE, onFreeAction: freeAction, jetpackStatus: jetpackHudStatus, close: { ...CLOSE_VIEW, maxStep: STEP_MAX, groundAt: playerSupportAt, visualGroundAt: visualSupportAt, sleepEyeFloorAt, cloudAt, zone: () => playerCaveIndex } });
+    pilot = pilotMod.create({ renderer, canvas: ctx.canvas, camera, hud, presets, landing: "pile", pitch: [PITCH_MIN, PITCH_MAX], dist: [DIST_MIN, DIST_MAX], follow: FOLLOW, fly: FLY, clampTarget, clampCamera, observeOrbit: position => clampCamera(position, 0), ceilingAt, birdsEyeMin: BIRDS_EYE_MIN, birdsEyeCeiling, releaseView: releaseCameraView, enterFreeView: enterFreeCameraView, coarse: COARSE, onFreeAction: freeAction, jetpackStatus: jetpackHudStatus, mayPossess: mayDriveOoga, close: { ...CLOSE_VIEW, maxStep: STEP_MAX, groundAt: playerSupportAt, visualGroundAt: visualSupportAt, sleepEyeFloorAt, cloudAt, zone: () => playerCaveIndex } });
     chalkboard = BL.chalkboard.create({ renderer,
       onOpen: () => { pilot.setActive(false); pilot.controls.reset(); input.reset(); hud.tooltip.hide(); },
       onClose: () => { pilot.setActive(true); pilot.controls.reset(); input.reset(); } });
@@ -8233,7 +8297,36 @@
     shared.workPlanned = (cave, site) => clankers && clankers.plan(cave, site);
     mark("pile");
     shared.residentPose = timechainResidentPose;
+    // Signed-in visitors elsewhere, as the Oogas they drive; the crew walks round them.
+    shared.outsideActors = () => remotes.actors();
+    shared.outsideActorHeight = REMOTE_BODY_HEIGHT;
+    shared.localOnline = localOnline;
     crew = shared.crew = crewMod.create(shared);
+    remotes = BL.remotePlayers.create({ root, crew });
+    // Signed-in pages keep the crew in step: one runs it for everyone, the others follow its frames. The
+    // crew's effects, shots and work hooks pass through the sync, which notes them while this page hosts;
+    // a following page replays them into the same effects and gorillas.
+    npcSync = BL.npcSync.create({
+      crew, fx,
+      onPlan: (cave, site) => clankers && clankers.plan(cave, site),
+      onHit: (cave) => clankers && clankers.hit(cave),
+      onModelChange: (cave) => {
+        refreshMirrorObject(cave.root);
+        refreshObjectGuides();
+      },
+    });
+    shared.fx = npcSync.fx;
+    const workPlanned = shared.workPlanned, workHit = shared.workHit;
+    shared.workPlanned = (cave, site) => {
+      npcSync.recordPlan(cave, site);
+      return workPlanned(cave, site);
+    };
+    shared.workHit = (cave) => {
+      npcSync.recordHit(cave);
+      return workHit(cave);
+    };
+    shared.onShot = (cave, from, to) => npcSync.recordShot(cave, from, to);
+    BL.net.setHub(true);
     for (const cave of crew.list) crew.setJetpackOwnership(cave, true, hubModels.jetpack(), hubModels.jetFlame());
     // Sani hosts the island on ordinary visits; explicit activity fixtures still exercise every state.
     const sani = crew.cavemen.get("SaniExp");
@@ -8440,6 +8533,9 @@
       if (returningCharacter && ctx.from === "factory") crew.selectWeapon(cave.weapon.selectedSlot, cave);
       if (initialCharacter) crew.configureWeapon(cave, preloadedWeapon, preloadedAmmo);
     }
+    ownOogaClaimed = false;
+    claimOwnOoga();
+    unsubscribeAccount = BL.net.subscribe(onAccountChange);
     const initialFirstPerson = ctx.from === null && preloadedFirstPerson && !initialGorilla;
     if (initialFirstPerson) pilot.enterClose(true);
     if (returningCharacter) navigate(ctx.from === "factory" || ctx.from === "bifrost" || ctx.from === "arcade" ? ctx.from : "pile");
@@ -8494,7 +8590,7 @@
         get shown() {
           return pile.shown;
         },
-        terrainSections, caveSections, cutawayPaths: CUTAWAY_PATH_STATE, terrainRampRoof, get cutawayTravelRamp() { return cutawayTravelRamp; }, get cutawayTravelChannel() { return cutawayTravelChannel; }, get cutawayTravelStation() { return cutawayTravelStation; }, island, mouths: island.mouths, labels, camera, weather, chain, beasts, pokeBeast, useProp, refreshChainSign, get chainSign() { return chainSign; }, get poolIsland() { return mempoolIsland; }, cameraPose: POSITION_POSE, crew, fx, controls: pilot.controls, props, altar, path: island.path.debug, headquarters, jumbotron, fireworks: launchFireworks, get fireworksPending() { return fireworksShells.length; }, clankers, clankerPlay,
+        terrainSections, caveSections, cutawayPaths: CUTAWAY_PATH_STATE, terrainRampRoof, get cutawayTravelRamp() { return cutawayTravelRamp; }, get cutawayTravelChannel() { return cutawayTravelChannel; }, get cutawayTravelStation() { return cutawayTravelStation; }, island, mouths: island.mouths, labels, camera, weather, chain, beasts, pokeBeast, useProp, refreshChainSign, get chainSign() { return chainSign; }, get poolIsland() { return mempoolIsland; }, cameraPose: POSITION_POSE, crew, fx, controls: pilot.controls, props, altar, path: island.path.debug, headquarters, jumbotron, fireworks: launchFireworks, get fireworksPending() { return fireworksShells.length; }, get npcSync() { return npcSync; }, clankers, clankerPlay,
         scenery: {
           get candidateCount() { return scenery.length; },
           get visibleCount() { return sceneryVisible; },
@@ -8742,6 +8838,8 @@
     window.clearInterval(stateTimer);
     unsubscribeActivity();
     unsubscribeActivity = null;
+    unsubscribeAccount();
+    unsubscribeAccount = null;
     unsubscribeMempool();
     unsubscribeMempool = null;
     unsubscribeChain();
@@ -8788,6 +8886,11 @@
       untrackMirrorObject(item.node); solids.remove(item.node); removeChild(root, item.node);
     }
     clankerEquipment.length = 0;
+    BL.net.setBody(null);
+    BL.net.setHub(false);
+    npcSync.dispose();
+    remotes.dispose();
+    remotes = npcSync = null;
     crew.dispose();
     critters.dispose();
     fx.dispose();
@@ -8879,12 +8982,13 @@
     if (bifrostIsle) bifrostIsle.phase.liveGeometry(set);
     for (const item of clankerEquipment) set.add(item.node.geometry);
     for (const cave of crew.cavemen.values()) set.add(cave.headOpen).add(cave.headClosed);
+    remotes.liveGeometry(set);
   };
   const stats = () => {
     let nodes = 0;
     traverseVisible(root, () => nodes++);
     const all = (n) => 1 + n.children.reduce((sum, c) => sum + all(c), 0);
-    return { visibleNodes: nodes, allNodes: all(root), tweens: tweenCount(), targets: input.targetCount, ...fx.stats(), ...crates.stats(), ...crew.stats(), ...pile.stats(), ...critters.stats(), ...breakables.stats(), ...weather.stats() };
+    return { visibleNodes: nodes, allNodes: all(root), tweens: tweenCount(), targets: input.targetCount, ...fx.stats(), ...crates.stats(), ...crew.stats(), ...pile.stats(), ...critters.stats(), ...breakables.stats(), ...weather.stats(), ...remotes.stats() };
   };
   const hubScene = {
     id: "hub", enter, update, overlay, onDonation, onKey, onLootCleared, renderOpts: RENDER_OPTS, leave, stats, liveGeometry,

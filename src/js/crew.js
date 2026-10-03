@@ -813,8 +813,12 @@
       cave.parts.gun.visible = false;
       cave.yawn = 0;
     };
+    // Online (the green dot) is a player driving this Ooga: a signed-in player elsewhere (`remoteControlled`,
+    // set by the hub's remote-player pool while it shows them), or this visitor, when the scene's
+    // `localOnline` says this page counts (signed in, on a page with accounts); without it, any driver does.
     const refreshRosterRow = (cave) => {
-      hud.setRosterRow(cave.traits.name, cave.state, contributors.ageLabel(cave.contributor), cave.humanControlled);
+      const local = cave.humanControlled && (!ctx.localOnline || ctx.localOnline());
+      hud.setRosterRow(cave.traits.name, cave.state, contributors.ageLabel(cave.contributor), local || !!cave.remoteControlled);
     };
     let player = null;
     const magazineCount = (cave = player) => cave ? cave.weapon.spareAmmo.length : 0;
@@ -1461,7 +1465,7 @@
     const bulletPool = Array.from({ length: Math.max(32, workBodyTarget ? crewList.length * BURST_ROUNDS : 0) }, () => {
       const node = createNode({ geometry: models.bananaGeometry(), scale: { x: models.BANANA_AMMO_SCALE, y: models.BANANA_AMMO_SCALE, z: models.BANANA_AMMO_SCALE }, visible: false, matrixLiving: !!ctx.matrixLivingPile });
       addChild(root, node);
-      return { node, life: 0, source: null, feedback: false, workShot: false, site: -1, aimSample: 0, from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 } };
+      return { node, life: 0, source: null, feedback: false, workShot: false, visual: false, site: -1, aimSample: 0, from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 } };
     });
     let bulletIdx = 0;
     const fireBullet = (cave, spot) => {
@@ -1503,7 +1507,21 @@
       setVec(node.position, from.x, from.y, from.z);
       node.visible = true;
       bullet.life = 0.22;
-      bullet.source = cave; bullet.feedback = false;
+      bullet.source = cave; bullet.feedback = false; bullet.visual = false;
+      // The room's NPC host records each shot for the pages following it (npc-sync.js).
+      if (ctx.onShot) ctx.onShot(cave, from, to);
+    };
+    // A shot replayed from the NPC host: the same flight, with no hits, no mirror crossing and no gorilla
+    // impact (the host's events carry those).
+    const showShot = (cave, fx, fy, fz, tx, ty, tz) => {
+      const bullet = bulletPool[bulletIdx++ % bulletPool.length], node = bullet.node;
+      setVec(bullet.from, fx, fy, fz);
+      setVec(bullet.to, tx, ty, tz);
+      setVec(node.rotation, 0, Math.atan2(tx - fx, tz - fz), 0.6);
+      setVec(node.position, fx, fy, fz);
+      node.visible = true;
+      bullet.life = 0.22;
+      bullet.source = cave; bullet.feedback = true; bullet.workShot = false; bullet.visual = true;
     };
     const updateBullets = (dt) => {
       for (let i = 0; i < bulletPool.length; i++) {
@@ -1512,6 +1530,12 @@
         const remaining = bullet.life, step = Math.min(dt, remaining), p = bullet.node.position, x = p.x, y = p.y, z = p.z;
         bullet.life = Math.max(0, bullet.life - dt);
         const k = 1 - bullet.life / 0.22, from = bullet.from, to = bullet.to;
+        if (bullet.visual) {
+          setVec(p, lerp(from.x, to.x, k), lerp(from.y, to.y, k), lerp(from.z, to.z, k));
+          bullet.node.rotation.x += dt * 24;
+          if (!bullet.life) bullet.node.visible = bullet.visual = false;
+          continue;
+        }
         if (bullet.workShot) {
           // Each round follows its own body anchor as the gorilla runs. Later
           // shots may aim at a different limb without redirecting this one.
@@ -4541,6 +4565,12 @@
       cave.portraitHead = tint.get(cave.portraitHead) || cave.portraitHead;
       cave.parts.head.geometry = cave.state === "sleeping" ? cave.headClosed : cave.headOpen;
     };
+    // The NPC host's colourway, on a page following it.
+    const setTint = (cave, state) => {
+      if (!cave.tint || cave.tintState === state) return;
+      swapTint(cave);
+      cave.tintState = state;
+    };
     // A hand toggle restarts the timer too, so it does not flip again seconds later.
     const toggleTint = (cave) => {
       if (!cave || !cave.tint) return false;
@@ -5834,14 +5864,16 @@
         s.attempted = false; s.targetYaw = 0;
         snapshotTraffic(cave);
       }
-      for (let i = 0; i < crewList.length; i++) spaceWalker(crewList[i]);
+      // A puppet (`cave.puppet`, set by npc-sync.js on a page following the room's NPC host) is posed from the
+      // network: no spacing and no AI of its own; everything else about it stays as it is.
+      for (let i = 0; i < crewList.length; i++) if (!crewList[i].puppet) spaceWalker(crewList[i]);
       if (dt > 0 && ctx.characterSupportAt) for (let i = 0; i < crewList.length; i++) {
         const cave = crewList[i];
         cave.riding.support = ctx.characterSupportAt(cave);
       }
       if (dt > 0) updateFireContacts();
       updateFireThreats();
-      for (let i = 0; i < crewList.length; i++) updateMember(crewList[i], dt);
+      for (let i = 0; i < crewList.length; i++) if (!crewList[i].puppet) updateMember(crewList[i], dt);
       updateStunGear(dt);
       syncMagazine();
       if (dt > 0) updateFireContacts();
@@ -5893,6 +5925,7 @@
     }
     const stats = () => ({ built: builtEquipment.length });
     return {
+      showShot, setTint,
       cavemen, list: crewList, fanSlots, stateOf, stateCounts, workingCavemen, eatingCavemen, workingCount, eatingCount, feedableCavemen, refreshStates, refreshRosterRow, updateFan, rush, headWorldOf, applyAllSwag, wornBy, renderLocker, pokeCave, idleSay, drawQuotes,
       control, release, relocatePlayer, sleepPlayer, wakePlayer, sitPlayer, standPlayer, ignite, dropRoll, damage, fireView, steer: steerPlayer, look: lookPlayer, elevate: elevatePlayer, playerAction, jumpPlayer, poseWeapon, wearJetpack, removeJetpack, setJetpackOwnership, thrust, holdRocketJump, update, dispose, stats,
       actorClear, builtInJetpack, toggleTint, twirl, toggleWeapon, selectWeapon, configureWeapon, swingWeapon, bashWeapon, releaseSwing, fireWeapon, setWeaponTrigger, canFire, weaponOrigin, meleeReach, meleePower, nearReload, canReload, startReload, stopReload, stopBurst, canSwapMagazine, swapMagazine, collectMagazine, collectGroundMagazine, collectAmmo, removeMagazines, hasMagazine, magazineCount, magazineAmmo, totalAmmo, workSites,
@@ -5902,5 +5935,5 @@
       }
     };
   };
-  BL.crew = { create, EAT_RATE, AMMO_MAX, AMMO_PER_BANANA, RELOAD_PERIOD, BURST_ROUNDS, BURST_STEP, MELEE_TAP_TIME, MELEE_CHARGE_DELAY, HEALTH_MAX, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, JUMP_SPEED, JET_SPEED, JET_RISE, JET_FUEL_SECONDS, JET_MOVE_SECONDS, JET_REFILL_SECONDS, JET_LAUNCH_FUEL };
+  BL.crew = { create, LAND_DUST, JET_SPARKS, EAT_RATE, AMMO_MAX, AMMO_PER_BANANA, RELOAD_PERIOD, BURST_ROUNDS, BURST_STEP, MELEE_TAP_TIME, MELEE_CHARGE_DELAY, HEALTH_MAX, HEALTH_REGEN_DELAY, HEALTH_REGEN_RATE, JUMP_SPEED, JET_SPEED, JET_RISE, JET_FUEL_SECONDS, JET_MOVE_SECONDS, JET_REFILL_SECONDS, JET_LAUNCH_FUEL };
 })();

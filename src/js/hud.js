@@ -1297,6 +1297,10 @@
           || (e.detail > 0 ? document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-detached-preset]") : null);
         actionHandler && actionHandler("mode-preset", dot ? dot.dataset.detachedPreset : nextDetachedView());
       }
+      else if (b.dataset.action === "account-login") BL.net.login();
+      else if (b.dataset.action === "account-logout") BL.net.logout();
+      else if (b.dataset.action === "account-rejoin") BL.net.rejoin();
+      else if (b.dataset.action === "account-voice") BL.voice.toggle();
       else actionHandler && actionHandler(b.dataset.action);
     });
     // A game's side panels fold away and come back from a tab on the screen's edge: a `data-fold`
@@ -1627,5 +1631,24 @@
     };
     return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, restoreBoards, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setDetachedView, fadeDetachedName, setAreaLabel, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
   };
-  BL.hud = { create, renderIcon, signLettering, STATE_LABELS, statusFor };
+  // The account line in the sheet's foot is page-level: shown only when a backend answered, and
+  // the director hands every change of `BL.net.state` here, whichever scene is active.
+  const ROOM_WORDS = { replaced: "open in another tab", full: "island full" };
+  const showAccount = ({ backend, me, room, online }) => {
+    $("account").hidden = !backend;
+    $("account-name").textContent = me ? me.display : "";
+    $("account-name").hidden = !me;
+    $("account-login").hidden = !!me;
+    $("account-logout").hidden = !me;
+    const words = room === "live" ? `${online} online` : ROOM_WORDS[room] || "";
+    $("account-room").textContent = words;
+    $("account-room").hidden = !me || !words;
+    $("account-rejoin").hidden = !me || !ROOM_WORDS[room];
+    // Voice: join, then mute and unmute; a failure says why on the button until the next try.
+    const voice = BL.voice.stats, voiceButton = $("account-voice");
+    voiceButton.hidden = room !== "live";
+    voiceButton.textContent = voice.joining ? "Joining voice" : voice.error && !voice.enabled ? `Voice: ${voice.error}` : !voice.enabled ? "Join voice" : voice.muted ? "Unmute" : "Mute";
+    voiceButton.setAttribute("aria-pressed", String(voice.enabled && !voice.muted));
+  };
+  BL.hud = { create, renderIcon, signLettering, showAccount, STATE_LABELS, statusFor };
 })();
