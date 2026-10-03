@@ -884,7 +884,7 @@
     factoryScene.input = input;
     factoryScene.debug = {
       hud, camera, controls: pilot.controls, pilot, crew: people, cavemen: people ? people.cavemen : null,
-      factory: { feed, mock, greeter, get scene() { return scene; }, simulate(seconds, dt = 1 / 30) { for (let t = 0; t < seconds; t += dt) shared.tick(dt); } }
+      factory: { node: shared, feed, mock, greeter, get scene() { return scene; }, simulate(seconds, dt = 1 / 30) { for (let t = 0; t < seconds; t += dt) shared.tick(dt); } }
     };
   };
 

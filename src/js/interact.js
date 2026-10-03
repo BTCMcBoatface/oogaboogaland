@@ -190,7 +190,7 @@
       }
       if (e.button !== 0 && e.pointerType === "mouse") return;
       const hit = pick(p.x, p.y);
-      gesture = { mode: "pending", start: p, last: p, at: performance.now(), hit, pointerId: e.pointerId, moved: false };
+      gesture = { mode: "pending", start: p, last: p, at: e.timeStamp, hit, pointerId: e.pointerId, moved: false };
       if (hit && hit.owner.grab) {
         if (e.pointerType === "mouse") startGrab(hit, p);
         else {
@@ -264,9 +264,10 @@
       if (g.mode === "grab") {
         const dropHit = cancelled ? null : pick(p.x, p.y);
         call("onGrabEnd", g.hit, p, dropHit && dropHit.node !== g.hit.node ? dropHit : null, cancelled);
-      } else if (g.mode === "pending" && !cancelled && performance.now() - g.at < TAP_MS) {
+      } else if (g.mode === "pending" && !cancelled && e.timeStamp - g.at < TAP_MS) {
         const node = g.hit ? g.hit.node : null;
-        const now = performance.now();
+        // Input timestamps keep a quick tap quick even when a frame delays its handlers.
+        const now = e.timeStamp;
         if (now - lastTap.at < DOUBLE_MS && sameTarget(g.hit) && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < DOUBLE_PX) {
           lastTap.at = -Infinity;
           lastTap.node = null;

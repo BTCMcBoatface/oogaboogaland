@@ -159,14 +159,14 @@
     };
     const descentWalls = ctx.descentWalls || [];
     const autonomousChill = (e) => e.mode === "chilling" && e.phase === "chill" && !e.controlled && !e.debugMove.active;
-    const descentWallAt = (e, x, y, z) => {
+    const descentWallAt = (e, x, y, z, heading = e.climb.heading) => {
       const c = e.climb;
-      if (e.controlled || e.debugMove.active || c.debugTraverse || !c.active || !c.descending) return null;
+      if (e.controlled || e.debugMove.active || c.debugTraverse || !c.active && !c.departurePlanning || !c.descending && !c.departurePlanning) return null;
       for (let i = 0; i < descentWalls.length; i++) {
         const wall = descentWalls[i], dx = x - wall.x, dz = z - wall.z;
         const across = dx * wall.cr - dz * wall.sr, along = dx * wall.sr + dz * wall.cr;
         if (Math.abs(across) <= wall.half && along >= -2.5 && along <= 2.5
-          && y > wall.floor + 0.6 && Math.sin(c.heading) * wall.sr + Math.cos(c.heading) * wall.cr < -0.5) return wall;
+          && y > wall.floor + 0.6 && Math.sin(heading) * wall.sr + Math.cos(heading) * wall.cr < -0.5) return wall;
       }
       return null;
     };
@@ -986,12 +986,13 @@
       e.motion.labGripY = equipment.node.geometry.labGripY || BL.scene.boundsOf(equipment.node.geometry).max[1] * 0.85;
       e.motion.labDie = equipment.kind === "die";
       e.motion.labBench = equipment.bench || null;
+      e.motion.labItemGeometry = equipment.node.geometry;
     };
     const reserveLab = (e, moving) => {
       if (!labStations.length) return false;
       const p = e.root.position, previous = e.lab.station;
       const radius = e.radius, height = e.height, compact = e.compact, mode = e.footprintMode;
-      const reach = e.motion.labReach, grip = e.motion.labGripY, die = e.motion.labDie, bench = e.motion.labBench;
+      const reach = e.motion.labReach, grip = e.motion.labGripY, die = e.motion.labDie, bench = e.motion.labBench, itemGeometry = e.motion.labItemGeometry;
       e.radius = BL.agent.LAB_RADIUS || 1.1; e.height = BL.agent.LAB_HEIGHT || 2.8;
       e.compact = e.planningLab = true; e.footprintMode = "lab";
       // Shuffle the available jobs with this actor's seeded random stream.
@@ -1044,6 +1045,7 @@
       }
       e.radius = radius; e.height = height; e.compact = compact; e.footprintMode = mode; e.planningLab = false; e.planningLabWork = ""; e.planningLabStation = -1;
       e.motion.labReach = reach; e.motion.labGripY = grip; e.motion.labDie = die; e.motion.labBench = bench;
+      e.motion.labItemGeometry = itemGeometry;
       if (chosen < 0) {
         if (moving) e.lab.pathPending = false;
         return false;
@@ -2070,7 +2072,7 @@
       return fits;
     };
     const climbClear = (e, x, y, z, nx = x, ny = y, nz = z, heading = e.climb.active ? e.climb.heading : e.heading, actors = true, wallTravel = false) => {
-      const departure = descentWallAt(e, x, y, z);
+      const departure = descentWallAt(e, x, y, z, heading);
       // Stay on the exterior face down to the jump height, even where its
       // entrance apron is reserved. The actual stone/prop sweep still applies.
       if (autonomousChill(e) && !(wallTravel && departure && ny > departure.floor + 0.6)
@@ -3093,7 +3095,8 @@
         // carries it. No mantle pose or precomputed arc changes the root.
         const remaining = Math.hypot(c.freeTargetX - p.x, c.freeTargetZ - p.z);
         const advance = Math.min(remaining, distance);
-        const x = p.x - sx * advance, z = p.z - sz * advance;
+        const x = remaining ? p.x + (c.freeTargetX - p.x) * advance / remaining : p.x;
+        const z = remaining ? p.z + (c.freeTargetZ - p.z) * advance / remaining : p.z;
         const y = remaining - advance < 0.45 ? Math.max(c.freeTargetY, p.y - distance) : p.y;
         if (climbClear(e, p.x, p.y, p.z, x, y, z, heading, true, true)) {
           p.x = x; p.y = y; p.z = z; c.blocked = 0;
@@ -3677,7 +3680,7 @@
       for (let side = 0; side < 2; side++) for (let reach = 0; reach < 3; reach++) {
         const sign = side ? -preferred : preferred;
         const lateral = Math.max(Math.abs(across) + 1.5, wall.half + 0.5) + reach * 0.6;
-        const outward = 3 + reach * 0.8;
+        const outward = 3.2 + reach * 0.8;
         const x = wall.x + wall.cr * sign * lateral + wall.sr * outward;
         const z = wall.z - wall.sr * sign * lateral + wall.cr * outward;
         const y = groundAt(x, z, wall.floor + STEP);
@@ -3970,6 +3973,10 @@
           }
           if (e.fromSite === labSite && e.motion.lab) {
             const across = (p.x - from.mouth.x) * from.cr - (p.z - from.mouth.z) * from.sr;
+            if (e.lab.pathFixed && Math.cos(e.lab.pathHeading - from.mouth.ry) < 0) {
+              e.lab.pathCount = e.lab.pathIndex = 0; e.lab.pathFixed = false;
+              e.lab.readyAt = e.lab.pathAt = 0;
+            }
             if (e.portal !== e.fromSite && (along < -0.6 || Math.abs(across) > 0.3)) {
               sitePoint(from, 0, -0.45, POINT);
               // Route searches reuse POINT for their roadmap nodes. Keep the
@@ -4095,7 +4102,7 @@
         || !staticClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)) {
         e.backoutLeft = 0; return false;
       }
-      setSupportY(e, y, x, z, heading); p.x = x; p.z = z; e.heading = heading; e.speed = -step / dt;
+      setSupportY(e, y, x, z, heading, dt * 3); p.x = x; p.z = z; e.heading = heading; e.speed = -step / dt;
       e.backoutLeft = Math.max(0, e.backoutLeft - step); e.blocked = e.stuckTime = e.sampleTime = 0;
       e.sampleX = x; e.sampleZ = z;
       return true;
@@ -4169,7 +4176,7 @@
         || !propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)) {
         e.speed = 0; e.blocked += dt; return;
       }
-      setSupportY(e, y, x, z, heading); p.x = x; p.z = z; e.heading = heading;
+      setSupportY(e, y, x, z, heading, dt * 3); p.x = x; p.z = z; e.heading = heading;
       e.speed = step / dt; e.blocked = 0;
     };
     const move = (e, dt, speed) => {
@@ -4293,7 +4300,7 @@
             return;
           }
         }
-        setSupportY(e, chosenY, x, z, chosenFacing); p.x = x; p.z = z; e.heading = chosenFacing;
+        setSupportY(e, chosenY, x, z, chosenFacing, dt * 3); p.x = x; p.z = z; e.heading = chosenFacing;
         e.speed = chosenStep / dt * (Math.cos(chosen - e.heading) < 0 ? -1 : 1);
         e.blocked = Math.cos(chosen - desired) > 0.3 ? Math.max(0, e.blocked - dt * 2) : e.blocked + dt;
       } else {
@@ -4473,7 +4480,7 @@
         Math.sin(facing) * CHILL_SPEED, Math.cos(facing) * CHILL_SPEED)) return;
       if (Number.isFinite(y) && Math.abs(y - p.y) <= PROP_STEP && actorLanding(e, x, y, z)
         && !occupied(e, x, y, z, true, heading) && propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)) {
-        setSupportY(e, y, x, z, heading); p.x = x; p.z = z; e.heading = heading;
+        setSupportY(e, y, x, z, heading, dt * 3); p.x = x; p.z = z; e.heading = heading;
         e.speed = step / dt * (r.index === 0 && r.reverseStart ? -1 : 1); r.blocked = 0;
       } else {
         e.speed = 0; r.blocked += dt;
@@ -4505,8 +4512,10 @@
       const currentRoof = !e.debugMove.active && e.mode === "chilling" && e.loungeRoof ? roofAt(p.x, p.y, p.z) : -1;
       const destinationRoof = currentRoof >= 0 ? roofAt(e.goalX, e.goalY, e.goalZ) : -1;
       const roofHop = destinationRoof >= 0 && destinationRoof !== currentRoof;
-      const roofGap = roofHop && !walkingRampAt(p.x, p.y, p.z, heading)
-        && ctx.surfaceAt(p.x + Math.sin(heading) * 4.5, p.z + Math.cos(heading) * 4.5) < p.y - 0.8;
+      const sx = Math.sin(heading), sz = Math.cos(heading);
+      const roofGap = roofHop && (ctx.surfaceAt(p.x + sx * 1.5, p.z + sz * 1.5) < p.y - 0.55
+        || ctx.surfaceAt(p.x + sx * 3, p.z + sz * 3) < p.y - 0.55
+        || ctx.surfaceAt(p.x + sx * 4.5, p.z + sz * 4.5) < p.y - 0.55);
       r.jumpRetry = Math.max(0, r.jumpRetry - dt);
       if (roofGap && r.runUp >= ROOF_RUN_UP && !r.jumpRetry && !e.fire.burning) {
         r.jumpRetry = 0.4;
@@ -4638,8 +4647,13 @@
       if (d.progressTime > 4) { d.status = "blocked"; d.reason = "Direct approach blocked"; e.speed = 0; }
     };
     const support = (e, x, z, y, step, heading = e.heading) => ctx.supportAt ? ctx.supportAt(e, x, z, y, step, heading) : groundAt(x, z, y);
-    const setSupportY = (e, y, x = e.root.position.x, z = e.root.position.z, heading = e.heading) => {
-      const p = e.root.position, delta = p.y - y;
+    const setSupportY = (e, y, x = e.root.position.x, z = e.root.position.z, heading = e.heading, rise = Infinity) => {
+      const p = e.root.position;
+      // Let the planted limbs fit a short terrain riser while the trunk
+      // settles onto it over successive frames instead of snapping upward.
+      if ((!e.loungeRoof || e.debugMove.active) && y > p.y && y - p.y <= STEP && !raisedSupport(e)
+        && Math.abs(y - groundAt(x, z, y)) < 0.02) y = Math.min(y, p.y + rise);
+      const delta = p.y - y;
       if (Math.abs(delta) > 1e-7) {
         const terrain = ctx.terrainSupportAt;
         const fromFloor = terrain ? terrain(e, p.x, p.z, p.y, PROP_STEP, e.heading) : groundAt(p.x, p.z, p.y);
@@ -4890,41 +4904,44 @@
       const p = e.root.position, c = e.climb, d = e.drive;
       if (d.airborne || c.active || !climbSurfaceAt
         || Math.abs(support(e, p.x, p.z, p.y, STEP) - p.y) > 0.2) return false;
-      const sx = Math.sin(outward), sz = Math.cos(outward), side = e.root.scale.x * 0.7;
-      for (let lane = 0; lane < 3; lane++) {
-        const offset = lane === 0 ? 0 : lane === 1 ? -side : side;
-        const baseX = p.x + sz * offset, baseZ = p.z - sx * offset;
-        if (Math.abs(climbSurfaceAt(baseX, baseZ) - p.y) > 0.2
-          || !cliffRiserAhead(baseX, baseZ, outward, -1, 1.6)) continue;
-        for (let edge = 0.2; edge <= 0.8; edge += 0.2) {
-          if (climbSurfaceAt(baseX + sx * edge, baseZ + sz * edge) >= p.y - 0.8) continue;
-          const distance = edge + CLIMB_STANDOFF;
-          let x = baseX + sx * distance, z = baseZ + sz * distance;
-          const y = p.y - 0.7;
-          if (!wallPanels.fit(x, y - 1.4, z, outward + Math.PI, PANEL)) continue;
-          const heading = PANEL.heading, nx = PANEL.nx, nz = PANEL.nz;
-          // Put the mount outside the fitted panel, even at a diagonal edge.
-          const correction = (PANEL.x - x) * nx + (PANEL.z - z) * nz - CLIMB_STANDOFF;
-          if (Math.abs(correction) > 0.6) continue;
-          x += nx * correction; z += nz * correction;
-          if (wallContactShare(e, x, y, z, heading) < WALL_ENTER_SHARE || !wallBodyClear(x, y, z, heading)
-            || !climbClear(e, p.x, p.y, p.z, x, p.y, z, heading, true, true)
-            || !climbClear(e, x, p.y, z, x, y, z, heading, true, true)) continue;
-          c.active = c.free = c.mountPending = c.descending = c.fromTop = true;
-          c.handoffDirection = 0; c.freeTargetX = x; c.freeTargetY = y; c.freeTargetZ = z;
-          c.handoffStartX = p.x; c.handoffStartY = p.y; c.handoffStartZ = p.z;
-          c.waitRelease = e.controlled && d.climbAxis > 0;
-          c.heading = c.topHeading = heading; c.blocked = 0; c.autoTo = -1; c.climbs++;
-          bindWallPanel(e, heading, x, y, z);
-          c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
-          d.airborne = d.passiveFall = d.grounded = false;
-          d.vx = d.vy = d.vz = 0; d.jumps = 0;
-          e.heading = heading; e.motion.climb = e.motion.mantle = 0;
-          e.lounge = ""; e.speed = 0;
-          return true;
+      const planning = c.departurePlanning; c.departurePlanning = true;
+      try {
+        const sx = Math.sin(outward), sz = Math.cos(outward), side = e.root.scale.x * 0.7;
+        for (let lane = 0; lane < 3; lane++) {
+          const offset = lane === 0 ? 0 : lane === 1 ? -side : side;
+          const baseX = p.x + sz * offset, baseZ = p.z - sx * offset;
+          if (Math.abs(climbSurfaceAt(baseX, baseZ) - p.y) > 0.2
+            || !cliffRiserAhead(baseX, baseZ, outward, -1, 3.2)) continue;
+          for (let edge = 0.2; edge <= 3.2; edge += 0.2) {
+            if (climbSurfaceAt(baseX + sx * edge, baseZ + sz * edge) >= p.y - 0.8) continue;
+            const distance = edge + CLIMB_STANDOFF;
+            let x = baseX + sx * distance, z = baseZ + sz * distance;
+            const y = p.y - (autonomousChill(e) ? 1.8 : 0.7);
+            if (!wallPanels.fit(x, y - 1.4, z, outward + Math.PI, PANEL)) continue;
+            const heading = PANEL.heading, nx = PANEL.nx, nz = PANEL.nz;
+            // Put the mount outside the fitted panel, even at a diagonal edge.
+            const correction = (PANEL.x - x) * nx + (PANEL.z - z) * nz - CLIMB_STANDOFF;
+            if (Math.abs(correction) > 0.6) continue;
+            x += nx * correction; z += nz * correction;
+            if (wallContactShare(e, x, y, z, heading) < WALL_ENTER_SHARE || !wallBodyClear(x, y, z, heading)
+              || !climbClear(e, p.x, p.y, p.z, x, p.y, z, heading, true, true)
+              || !climbClear(e, x, p.y, z, x, y, z, heading, true, true)) continue;
+            c.active = c.free = c.mountPending = c.descending = c.fromTop = true;
+            c.handoffDirection = 0; c.freeTargetX = x; c.freeTargetY = y; c.freeTargetZ = z;
+            c.handoffStartX = p.x; c.handoffStartY = p.y; c.handoffStartZ = p.z;
+            c.waitRelease = e.controlled && d.climbAxis > 0;
+            c.heading = c.topHeading = heading; c.blocked = 0; c.autoTo = -1; c.climbs++;
+            bindWallPanel(e, heading, x, y, z);
+            c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
+            d.airborne = d.passiveFall = d.grounded = false;
+            d.vx = d.vy = d.vz = 0; d.jumps = 0;
+            e.heading = heading; e.motion.climb = e.motion.mantle = 0;
+            e.lounge = ""; e.speed = 0;
+            return true;
+          }
         }
-      }
-      return false;
+        return false;
+      } finally { c.departurePlanning = planning; }
     };
     const attachContactWall = (e) => {
       const d = e.drive, c = e.climb, p = e.root.position;
@@ -4932,7 +4949,7 @@
       const speed = Math.hypot(d.vx, d.vz);
       if (speed < 0.2) return false;
       const travelHeading = Math.atan2(d.vx, d.vz);
-      if (walkingRampAt(p.x, p.y, p.z, travelHeading)
+      if (!d.airborne && walkingRampAt(p.x, p.y, p.z, travelHeading)
         && !cliffRiserAhead(p.x, p.z, travelHeading, 1)) return false;
       let heading = wallFaceHeading(e, travelHeading), descending = false;
       if (d.airborne && d.vy <= 0 && (!Number.isFinite(heading)
@@ -4943,7 +4960,7 @@
         }
       }
       if (!Number.isFinite(heading)) return false;
-      if (walkingRampAt(p.x, p.y, p.z, heading)
+      if (!d.airborne && walkingRampAt(p.x, p.y, p.z, heading)
         && !cliffRiserAhead(p.x, p.z, heading, descending ? -1 : 1)) return false;
       const sx = Math.sin(heading), sz = Math.cos(heading);
       if (!descending && (d.vx * sx + d.vz * sz < 0.2
@@ -5131,7 +5148,7 @@
       const p = e.root.position, d = e.drive;
       const ramp = walkingRampAt(x, p.y, z, heading);
       if (ramp) drop = Math.max(drop, BL.wallPanels.RAMP_STEP);
-      if (allowFall && e.controlled && !ramp
+      if (allowFall && e.controlled && !ramp && drop <= STEP
         && pointSupportAt(p.x, p.z, p.y + 0.1) >= p.y - STEP
         && pointSupportAt(x, z, p.y + 0.1) < p.y - STEP)
         return beginSupportFall(e, x, z, heading, d.vx, d.vz);
@@ -5391,6 +5408,12 @@
         e.heading = e.climb.heading = e.climb.panel.heading;
         wallPanels.coordinates(e.climb.panel, p.x, p.y, p.z);
       }
+      // Certify the final animated trunk too, after support and speed settle.
+      if (ctx.walkingPeersClear && !e.motion.lab && !e.climb.active && !e.jump.active
+        && !e.drive.airborne && !e.lounge && !ctx.walkingPeersClear(e, dt, beforeX, beforeY, beforeZ)) {
+        p.x = beforeX; p.y = beforeY; p.z = beforeZ;
+        e.heading = e.root.rotation.y; e.speed = 0; return;
+      }
       e.gorilla.poseManaged(dt, p.x, p.y, p.z, e.heading, e.speed,
         e.jump.active || e.drive.airborne && !e.drive.passiveFall, e.biped, e.lounge, e.motion);
       if (e.climb.active && !e.climb.mountPending && !e.climb.handoffDirection
@@ -5645,7 +5668,7 @@
         updateDriven(e, dt); poseEntry(e, dt, beforeX, beforeY, beforeZ); return;
       }
       if (!e.jump.active && !e.fire.rolling && Number.isFinite(liveFloor)
-        && liveFloor >= p.y - STEP && liveFloor <= p.y + PROP_STEP) setSupportY(e, liveFloor);
+        && liveFloor >= p.y - STEP && liveFloor <= p.y + PROP_STEP) setSupportY(e, liveFloor, p.x, p.z, e.heading, dt * 3);
       if (e.fire.rolling || escapeForRoll(e, dt)) { poseEntry(e, dt, beforeX, beforeY, beforeZ); return; }
       if (fleeFire(e, dt)) { poseEntry(e, dt, beforeX, beforeY, beforeZ); return; }
       if (separateSurfacePeers(e, dt)) { poseEntry(e, dt, beforeX, beforeY, beforeZ); return; }

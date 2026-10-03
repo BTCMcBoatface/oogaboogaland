@@ -2729,9 +2729,12 @@
     const inner = Math.max(MEADOW_INNER, island.path.debug.ringOuterRadius + radius);
     if (inner >= MEADOW_OUTER) return false;
     const bounds = BL.scene.boundsOf(owner.node.geometry), height = bounds.max[1] - bounds.min[1];
-    for (let attempt = 0; attempt < 80; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.sqrt(lerp(inner * inner, MEADOW_OUTER * MEADOW_OUTER, Math.random()));
+    // Random probes keep ordinary respawns varied. If they miss every safe
+    // spot, a bounded spiral covers the meadow rather than retrying clusters.
+    for (let attempt = 0; attempt < 336; attempt++) {
+      const fallback = attempt - 80;
+      const angle = fallback < 0 ? Math.random() * Math.PI * 2 : fallback * 2.399963229728653;
+      const distance = Math.sqrt(lerp(inner * inner, MEADOW_OUTER * MEADOW_OUTER, fallback < 0 ? Math.random() : (fallback + 0.5) / 256));
       const x = Math.sin(angle) * distance, z = Math.cos(angle) * distance;
       if (island.surfaceAt(x, z) !== 0 || island.path.overlaps(x, z, radius) || nearMouth(x, z, radius + 3.5) || !workSceneryClear(x, z, radius)) continue;
       let clear = true;
@@ -3660,6 +3663,9 @@
       // the stable baseline; proximity may only reveal farther ahead.
       const levelProgress = clamp(cutawayProgress - (channel >= 2 ? 1 : 0), 0, 1);
       let hi = Math.max(initial, 1 + Math.round(levelProgress * 254));
+      // Before the global scan reaches below HQ, only the travelled lower
+      // route may extend. Height progress must not open the other route early.
+      if (channel >= 2 && lowerCoverDepth <= paths.unit) hi = initial;
       if (channel === cutawayTravelChannel && lo <= 255) {
         const station = 1 + Math.round(clamp(cutawayTravelStation / paths.lengths[channel], 0, 1) * 254);
         // The globally scanned prefix remains visibly open behind the player.
@@ -3693,10 +3699,13 @@
   const updateBirdsEyeCutaway = (dt) => {
     clearCutawayHidden();
     const gorilla = clankerPlay && clankerPlay.active, player = gorilla ? clankerPlay.player : pilot.player;
-    const cameraMix = player ? gorilla ? clankerPlay.birdsEyeMix : pilot.birdsEyeMix : 0;
+    // Release stops following immediately, but the last floor must scan back
+    // into view rather than restoring all rock and weather in one frame.
+    const cameraMix = player ? gorilla ? clankerPlay.birdsEyeMix : pilot.birdsEyeMix
+      : Math.max(0, RENDER_OPTS.cutawayFade - dt / 0.3);
     const overhead = player && (gorilla ? clankerPlay.birdsEye : pilot.birdsEye);
     const subterranean = player && player.root.position.y - (gorilla ? 0 : player.baseY) < -STEP_MAX;
-    const showRampMarkers = cameraMix > 0.5;
+    const showRampMarkers = !!player && cameraMix > 0.5;
     for (const lintel of headquartersRimLintels) lintel.visible = !showRampMarkers;
     for (const marker of headquarters.rampMarkers) {
       marker.node.visible = marker.frame.visible = marker.arrow.visible = showRampMarkers;
@@ -3710,10 +3719,11 @@
       marker.node.rotation.y = Math.atan2(-x, -z);
     }
     const mix = cameraMix;
-    // A perspective handoff can finish its projection blend before the eye
-    // clears the ceiling. Keep the cut until the actual camera is inside again.
-    const active = !!player && (overhead || mix > 0
-      || subterranean && camera.position.y > birdsEyeCeiling(player, gorilla));
+    // Carry can finish its projection blend before the camera handoff ends.
+    // Restore rock only after shoulder settles with the eye inside the ceiling.
+    const active = mix > 0 || !!player && (overhead
+      || subterranean && (camera.position.y > birdsEyeCeiling(player, gorilla)
+        || !gorilla && (pilot.mode === "orbit" || pilot.shoulderEntryMix < 1)));
     // Below ground, camera interpolation must never restore upstairs rock or
     // props. Floor/ramp progress still moves the cut as the character travels.
     const rockMix = active && subterranean ? 1 : mix;
@@ -3731,7 +3741,7 @@
       return;
     }
     const hq = island.headquarters;
-    if (active) {
+    if (player) {
       const p = player.root.position, fresh = player !== cutawayPlayer || !Number.isFinite(cutawayProgress);
       // Hop is relative to the next supporting floor, including the abyss
       // sentinel. Only world-space feet describe the level actually on screen.
@@ -3762,7 +3772,7 @@
     // Scan between floor ceilings across the ramp's travel so upper levels
     // peel away progressively instead of switching in a narrow midpoint band.
     // Head clearance remains authoritative during a jump, jet flight or fall.
-    if (active) {
+    if (player) {
       let target = cutawayLevel <= 1 ? lerp(CUTAWAY_TOP, hq.ceiling - 0.06, cutawayLevel)
         : lerp(hq.ceiling - 0.06, hq.basement.ceiling - 0.06, cutawayLevel - 1);
       if (feet < hq.basement.floor - STEP_MAX) target = Math.min(target, birdsEyeCeiling(player, gorilla));
@@ -4376,7 +4386,7 @@
     const canvas = document.createElement("canvas");
     canvas.width = POOL_BOARD_W;
     canvas.height = POOL_BOARD_H;
-    const c2 = canvas.getContext("2d", { alpha: false });
+    const c2 = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
     const board = {
       title, help: "Live Bitcoin data. Arrow keys flip the pages.", canvas, count: pages.length, index: 0, version: 0, caption: "", note: "",
       go(i) {
@@ -6653,6 +6663,49 @@
     out.x = x + sine * forward + cosine * side;
     out.y = y + lift; out.z = z + cosine * forward - sine * side;
   };
+  // Ground-plane fitting can widen a trunk after its center step was admitted.
+  // Reuse the pose preview near peers, retaining the old shape for overlap escape.
+  const CLANKER_PEER_FROM = { root: { scale: { x: 1 } }, gorilla: { torsoSitCompact: false, torsoLabCompact: false, torsoStandCompact: false, torsoQuadCompact: false, torsoRadius: 0 }, height: 0, x: 0, y: 0, z: 0, heading: 0 };
+  let clankerPeerPoseChecked = false, clankerPeerPoseClear = true;
+  const clankerPeerEmptyStone = () => false;
+  const clankerPeerPoseTransition = entry => {
+    if (clankerPeerPoseChecked) return clankerPeerPoseClear;
+    clankerPeerPoseChecked = true;
+    const shape = BL.agent.torso, p = entry.root.position, from = CLANKER_PEER_FROM;
+    for (const other of clankers.list) {
+      if (other === entry || !other.active) continue;
+      const q = other.root.position;
+      if (shape.overlaps(entry, p.x, p.y, p.z, entry.root.rotation.y,
+        other, q.x, q.y, q.z, other.heading, 0.03)
+        && !shape.overlaps(from, from.x, from.y, from.z, from.heading,
+          other, q.x, q.y, q.z, other.heading, 0.03)) return clankerPeerPoseClear = false;
+      if (!shape.separates(entry, from.x, from.y, from.z, from.heading,
+        p.x, p.y, p.z, entry.root.rotation.y, other, q.x, q.y, q.z, other.heading, 0.03))
+        return clankerPeerPoseClear = false;
+    }
+    return true;
+  };
+  const clankerWalkingPeersClear = (entry, dt, x, y, z) => {
+    const p = entry.root.position, nx = p.x, ny = p.y, nz = p.z, heading = entry.root.rotation.y, nextHeading = entry.heading;
+    if (!clankers || entry.controlled || entry.planningRoam || entry.drive.airborne
+      || entry.fire.rolling || clankerEntering(entry) || clankerLabWorker(entry)) return true;
+    let near = false;
+    for (const other of clankers.list) if (other !== entry && other.active
+      && Math.hypot(other.root.position.x - nx, other.root.position.z - nz)
+        < 2 * (entry.root.scale.x + other.root.scale.x) + Math.hypot(nx - x, nz - z)) { near = true; break; }
+    if (!near) return true;
+    const from = CLANKER_PEER_FROM, g = entry.gorilla, copy = from.gorilla;
+    from.x = x; from.y = y; from.z = z; from.heading = heading;
+    from.height = entry.height; from.root.scale.x = entry.root.scale.x;
+    copy.torsoSitCompact = g.torsoSitCompact; copy.torsoLabCompact = g.torsoLabCompact;
+    copy.torsoStandCompact = g.torsoStandCompact; copy.torsoQuadCompact = g.torsoQuadCompact;
+    copy.torsoRadius = g.torsoRadius;
+    clankerPeerPoseChecked = false; clankerPeerPoseClear = true;
+    // Standing coworkers keep the same stance in this preview and the live pose.
+    return g.climbPoseClear(dt, nx, ny, nz, nextHeading,
+      entry.motion, clankerPeerEmptyStone, clankerPeerPoseTransition, entry, entry.speed,
+      false, "", null, 0, null, null, null, entry.biped);
+  };
   const clankerWalkCoreClear = (entry, x, y, z, toX, toY, toZ, fromHeading, toHeading) => {
     // Protect the trunk near the middle of the support rectangle, not just
     // the pelvis point behind it. This extra core applies to island stone;
@@ -7727,8 +7780,6 @@
     }
     context.restore();
   };
-  // Where the overlay's frame goes, a section at a time, for the profiler under ?debug=1 (`debug.overlayProfile`).
-  const OVERLAY_PROFILE = { prepare: 0, fx: 0, collect: 0, sight: 0, rock: 0, cover: 0, banana: 0 };
   // Walking recomputes the sight guides at most this often in game time; the lines are world-anchored, so a
   // frame of lag never shows, and it is the difference between 42 and 59 fps behind cave rock at 4K.
   const SIGHT_RECOMPUTE_HZ = 30;
@@ -7758,13 +7809,9 @@
     }
     const insideMirror = !!player && playerCaveIndex === matrixCave.caveIndex;
     mirrorGuides.update(insideMirror, MATRIX_WORLD.time, MATRIX_WORLD.density);
-    let tick = performance.now();
-    const lap = (key) => { const now = performance.now(); OVERLAY_PROFILE[key] = now - tick; tick = now; };
     const bananaActor = bananaCover.prepare(camera, player);
-    lap("prepare");
     uiGuideObjects = null; uiGuidesReady = true;
     try { fx.drawOverlay(dt, drawExtra); } finally { uiGuidesReady = false; }
-    lap("fx");
     let touchesRock = false, occluded = false, guides = null, exteriorRamp = false;
     if (pilot.closeMix < 1) {
       const eye = camera.position, tangent = Math.tan(camera.fov / 2), aspect = renderer.size.width / Math.max(1, renderer.size.height);
@@ -7786,16 +7833,13 @@
       const objectsEnabled = viewEligible && (exteriorRamp || rockSection || !actorVisible);
       const bananaEnabled = bananaCover.state.cameraInPile;
       occluded = objectsEnabled;
-      lap("collect");
       guides = sightGuides.update(player, null, objects, camera, aspect, dt, objectsEnabled, rockSection, SIGHT_RECOMPUTE_HZ);
-      lap("sight");
       // Keep a separate cap pass so split objects stay legible in fruit.
       // It must not change the visibility rules in the clear part of the view.
       const fruitGuides = bananaGuides.update(bananaEnabled ? player : null, null, objects, camera, aspect, dt, bananaEnabled, true);
       if (objectsEnabled || bananaEnabled) {
         const structure = ensureRockGuides().select(p.x, p.y - player.baseY, p.z, camera.position.x, camera.position.y, camera.position.z), observer = guides.observer;
         const surfaces = rockGuides.updateSurfaces(observer[19], observer[20], observer[21], camera, dt, player, objectGuides.perceptionClear, objects.occlusionVersion, objects.perceptionVersion);
-        lap("rock");
         guides.structures = objectsEnabled ? surfaces : null; guides.structure = objectsEnabled ? structure : null;
         fruitGuides.structures = bananaEnabled ? surfaces : null; fruitGuides.structure = bananaEnabled ? structure : null;
       } else { guides.structure = fruitGuides.structure = null; guides.structures = fruitGuides.structures = null; if (rockGuides) rockGuides.resetSurface(); }
@@ -7813,10 +7857,8 @@
     }
     cameraCover.state.opacity = 0.22 * (1 - pilot.closeMix);
     cameraCover.draw(camera, bananaActor ? null : player?.root, touchesRock, occluded, cameraRockAt, cameraRockMaterialAt, guides, dt, MATRIX_WORLD.active ? 1 : 0, CAMERA_GLYPHS, exteriorRamp ? guideActorVisibleAt : null);
-    lap("cover");
     bananaCover.draw(camera, player, dt, guideActorVisibleAt, bananaGuides.state, CAMERA_GLYPHS);
     drawFirstPersonFire(player);
-    lap("banana");
   };
 
   const onLootCleared = () => {
@@ -8402,6 +8444,7 @@
     }
     const labSiteIndex = shared.workSites.findIndex(site => site.mouth === entropyLab.mouth);
     clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, loungeAreas, climbRoofs, chillZones, descentWalls,
+      walkingPeersClear: clankerWalkingPeersClear,
       debugMovement: DEBUG_GORILLA_MOVE, debugMinY: ABYSS_RESPAWN_Y,
       labSite: labSiteIndex,
       labInside: entropyLab.phase.inside, labStations: entropyLab.stations,
@@ -8800,7 +8843,6 @@
       }
     });
     Object.defineProperty(hubScene.debug.matrixCave, "caves", { value: matrixInteriors });
-    hubScene.debug.overlayProfile = OVERLAY_PROFILE;
     if (world.mirrorBroken) {
       mirrorCave.damage.restore();
       syncMirrorDamage(true);

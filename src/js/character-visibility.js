@@ -432,10 +432,10 @@
       result.x = Math.max(0, Math.min(width, result.x)); result.y = Math.max(0, Math.min(height, result.y));
       return result;
     };
-    // Builds every blocker's mesh ahead in idle slices, so a view that brings many into play at once never builds them
-    // all in one frame: the same meshes `meshOf` would build then, shared across visits. A slice builds only what the
-    // idle time left can hold at the rate measured so far on this device.
-    let warming = 0, msPerTriangle = 0;
+    // Warm small meshes within the idle budget. A large synchronous BVH build
+    // cannot be interrupted, so leave it to the exact on-demand path rather than
+    // starting seconds of work in an idle callback between scene frames.
+    let warming = 0, msPerTriangle = 0.01;
     const warm = () => {
       if (warming || typeof requestIdleCallback === "undefined") return;
       const pending = [];
@@ -452,7 +452,9 @@
           if (meshes.has(geometry)) { pending.pop(); continue; }
           let triangles = 0;
           for (const face of geometry.faces) if (face.i.length > 2) triangles += face.i.length - 2;
-          if (triangles * msPerTriangle + 1 > deadline.timeRemaining()) break;
+          const estimated = triangles * msPerTriangle + 1;
+          if (estimated > 8) { pending.pop(); continue; }
+          if (estimated > deadline.timeRemaining()) break;
           const start = performance.now();
           meshOf(geometry);
           pending.pop();

@@ -6054,7 +6054,9 @@ body.orbit-dragging #tooltip {
 
 /* While a game's title card is up its board and panels wait behind it, and come back when it closes. */
 .race:has(> [data-intro]:not([hidden])) .garage,
-.race:has(> [data-intro]:not([hidden])) .panel-edge {
+.race:has(> [data-intro]:not([hidden])) .panel-edge,
+#poker:has(> [data-intro]:not([hidden])) .poker-panel,
+#poker:has(> [data-intro]:not([hidden])) .poker-focus {
   visibility: hidden;
 }
 

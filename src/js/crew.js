@@ -4015,6 +4015,9 @@
       cave.act.kind = "work";
       cave.weapon.equipped = true;
       cave.avoidance.tx = NaN;
+      // Publish an outbound trip with its surface route already planned.
+      // Reload can start this phase after the frame's walking update.
+      if (ctx.npcPaths && cave.pathing) ctx.npcPaths.target(cave, site.route[0].x, site.route[0].z);
       return true;
     };
     const walkWorkTo = (cave, target, dt, followPath = true) => {
@@ -4651,7 +4654,7 @@
       }
       if (cave.bedTravel.mode) { runBed(cave, dt); return; }
       if (cave.state !== "working" && cave.state !== "chilling") {
-        if (cave.state === "sleeping" && !cave.bedroll.hidden) {
+        if (cave.state === "sleeping" && cave.bedroll && !cave.bedroll.hidden) {
           parts.torso.scale.y = 1 + Math.sin(elapsed * 1.4 + cave.phase) * 0.03;
           cave.zzzTimer -= dt;
           if (cave.zzzTimer <= 0) {

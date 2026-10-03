@@ -191,7 +191,9 @@ const { npcPathWalkingProbe, npcCenterlineProbe, npcLowerTurnsProbe, npcStairPas
     const B = window.__ooga, scene = window.BL.scenes.hub, S = window.BL.scene;
     const nav = B.headquarters.npcPaths, path = B.island.path, actors = [...B.cavemen.values()], cave = actors.find((c) => c.state === "working") || actors[0], rows = [];
     B.pilot.release(true); B.setPileLevel(100000);
-    const update = scene.update; scene.update = () => {};
+    const update = scene.update, clankerStates = B.clankers.list.map(entry => ({ entry, active: entry.active, visible: entry.root.visible }));
+    scene.update = () => {};
+    for (const state of clankerStates) state.entry.active = state.entry.root.visible = false;
     for (const prop of B.props) prop.node.visible = false;
     for (const c of actors) { c.root.visible = false; c.override = c.state = "away"; c.work.phase = ""; B.crew.stopBurst(c); B.crew.stopReload(c, true); c.bedTravel.mode = ""; c.walk = null; c.act.kind = "idle"; c.act.until = c.nextBuildAt = 1e12; }
     cave.override = cave.state = "working";
@@ -243,7 +245,10 @@ const { npcPathWalkingProbe, npcCenterlineProbe, npcLowerTurnsProbe, npcStairPas
         }
       }
       return { rows, lines: path.centerlines.length, nodes: nav.nodes, capacity: nav.capacity };
-    } finally { scene.update = update; }
+    } finally {
+      for (const state of clankerStates) { state.entry.active = state.active; state.entry.root.visible = state.visible; }
+      scene.update = update;
+    }
   };
 
   const npcLowerTurnsProbe = () => {
@@ -1558,11 +1563,13 @@ const { autoQualityProbe } = (() => {
   const autoQualityProbe = () => {
     const source = readFileSync(new URL("../src/js/director.js", import.meta.url), "utf8");
     const controller = source.slice(source.indexOf("  const perf ="), source.indexOf("  const WARMUP"));
-    const create = (quality = "high", renderedFrames = 100) => {
+    const opening = source.slice(source.indexOf("  const COARSE ="), source.indexOf("  const $ ="));
+    const initial = (deviceMemory, coarse = false) => runInNewContext(`${opening}\nINITIAL_QUALITY`, { navigator: { deviceMemory }, window: { matchMedia: () => ({ matches: coarse }) } });
+    const create = (quality = "high", renderedFrames = 100, deviceMemory) => {
       const changes = [], state = { focused: true, now: 0 };
       const renderer = { kind: "webgl2", quality, setQuality(value) { this.quality = value; changes.push(value); } };
-      const context = { renderer, document: { hasFocus: () => state.focused }, transition: null, renderedFrames, showQuality() {} };
-      const tier = runInNewContext(`${controller}\n({ autoTier, tierFromBoot, BOOT_MEDIUM, BOOT_LOW })`, context);
+      const context = { renderer, navigator: { deviceMemory }, window: { matchMedia: () => ({ matches: false }) }, document: { hasFocus: () => state.focused }, transition: null, renderedFrames, showQuality() {} };
+      const tier = runInNewContext(`${opening}\n${controller}\n({ autoTier, tierFromBoot, BOOT_MEDIUM, BOOT_LOW })`, context);
       // The governor reads delivered intervals only, so a frame costs the probe nothing but the interval it took.
       const frames = (count, interval = 1000 / 60) => { for (let n = 0; n < count; n++) tier.autoTier(interval, state.now += interval); };
       return { changes, state, renderer, context, frames, boot: tier.tierFromBoot, medium: tier.BOOT_MEDIUM, low: tier.BOOT_LOW };
@@ -1588,13 +1595,26 @@ const { autoQualityProbe } = (() => {
     const crawling = create(); crawling.boot(crawling.low * 1.2);
     const floor = create("low"); floor.boot(floor.low * 2); floor.boot(floor.medium * 0.3);
     const phone = create("medium"); phone.boot((phone.medium + phone.low) / 2);
-    return { healthy: healthy.changes.length === 0, gpuBound: bound.changes[0] === "medium",
+    const memory = create(initial(8)); memory.boot(memory.medium * 0.5);
+    const memorySlow = create(initial(4)); memorySlow.boot(memorySlow.low * 1.2);
+    const memoryBoot = [0.25, 1, 2, 4, 8].every((gb) => {
+      const limited = create("high", 100, gb); limited.boot(0);
+      const low = create("low", 100, gb); low.boot(0);
+      const slow = create("high", 100, gb); slow.boot(slow.low * 1.2);
+      return limited.renderer.quality === "medium" && low.changes.length === 0 && slow.renderer.quality === "low";
+    }) && [undefined, 0, NaN, 16].every((gb) => { const ample = create("high", 100, gb); ample.boot(0); return ample.changes.length === 0; });
+    return { memoryBoot, healthy: healthy.changes.length === 0, gpuBound: bound.changes[0] === "medium",
       reactsIn: slowAt, reactsFast: slowAt <= 2500, ignoresSpikes: spike.changes.length === 0,
       bounded: bounded.changes.join("|") === "medium|low", warmup: warming.changes.length === 0,
       ignoresPauses: excluded.changes.length === 0, fallback: fallback.changes.length === 0,
       bootFast: fast.changes.length === 0, bootMedium: middling.changes.join("|") === "medium",
       bootLow: crawling.changes.join("|") === "low", bootOneWay: floor.changes.length === 0,
-      bootKeepsCoarse: phone.changes.length === 0 };
+      bootKeepsCoarse: phone.changes.length === 0,
+      bootMemory: [0.25, 0.5, 1, 2, 4, 8].every((gb) => initial(gb) === "medium")
+        && [undefined, 0, -1, NaN, Infinity, "8", 16, 32].every((gb) => initial(gb) === "high")
+        && initial(undefined, true) === "medium" && initial(32, true) === "medium"
+        && memory.renderer.quality === "medium" && memory.changes.length === 0
+        && memorySlow.changes.join("|") === "low" };
   };
   return { autoQualityProbe };
 })();
@@ -1839,7 +1859,8 @@ const { npcLaneSpacingProbe, npcLaneCornerProbe, npcLaneCurveProbe, npcLabLanePr
     }
     const points = trail.filter((p) => Math.hypot(p.x, p.z) > path.debug.ringCenterRadius + 1 && Math.hypot(p.x, p.z) < 15);
     const view = BL.math.mat4.create(), eye = { x: 0, y: 1, z: 0 }, ahead = { x: 0, y: 1, z: 0 }, up = { x: 0, y: 1, z: 0 };
-    const update = scene.update; scene.update = () => {}; B.pilot.release(true);
+    const update = scene.update, propVisibility = B.props.map(prop => prop.node.visible);
+    scene.update = () => {}; B.pilot.release(true);
     for (const prop of B.props) prop.node.visible = false;
     for (const c of actors) {
       c.root.visible = false; c.state = "working"; c.bedTravel.mode = ""; c.walk = null;
@@ -1882,7 +1903,10 @@ const { npcLaneSpacingProbe, npcLaneCornerProbe, npcLaneCurveProbe, npcLabLanePr
         rows.push({ direction, start, end, frames, samples, minimumRight, minimumFacingRight, laneError, maximumHop, maximumStep, arrived: !cave.walk });
       }
       return { dt, rows };
-    } finally { scene.update = update; }
+    } finally {
+      for (let i = 0; i < B.props.length; i++) B.props[i].node.visible = propVisibility[i];
+      scene.update = update;
+    }
   };
 
   // The actual lab spoke joins a circular route at a sharp angle. The offset
@@ -2054,6 +2078,8 @@ const { soloDebugParsingProbe, soloDebugSnapshot, soloDebugLifecycleProbe, soloD
 })();
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Diagnostics may be written before the ledger, including on a fresh checkout.
+mkdirSync(join(root, "untracked"), { recursive: true });
 // Three, measured: cutting this to 1 and the tips to 12 saved 35 s of lane work across all seven
 // soaks - 4 s of wall - because a soak is dominated by its settle, its forced GC and two heap
 // parses, not by its round trips. Not worth a third of the leak detection.
@@ -2241,13 +2267,13 @@ const untilPage = (b, cond, ms = 6000) => b.evaluate(`new Promise((resolve) => {
 
 
 const raceTracks = ["race tracks", async (b) => {
-  const built = await b.evaluate(`(() => { const B = window.__ooga, T = window.BL.raceTrack, out = {}; for (const def of T.TRACKS) { const t0 = performance.now(); document.querySelector('[data-track="' + def.id + '"]').click(); const ms = performance.now() - t0; const t = B.track, S = t.samples, n = t.count; let maxStep = 0, gapNearCheck = false; for (let i = 0; i < n; i++) { const q = (i + 1) % n; if (S.surface[i] !== T.SURF.gap && S.surface[q] !== T.SURF.gap) maxStep = Math.max(maxStep, Math.abs(S.y[q] - S.y[i])); } for (const c of t.checkpoints) for (let k = 0; k < 30; k++) if (S.surface[(c + k) % n] === T.SURF.gap) gapNearCheck = true; const faces = t.sectors.reduce((sum, s) => sum + s.nodes.road.geometry.faces.length + s.nodes.big.geometry.faces.length + s.nodes.small.geometry.faces.length, 0); const h0 = t.heightAt(t.grid[0].x, t.grid[0].z, -1); out[def.id] = { ms: Math.round(ms), samples: n, length: Math.round(t.length), sectors: t.sectors.length, chunks: t.terrainNodes.length, checkpoints: t.checkpoints.length, first: t.checkpoints[0], gapNearCheck, maxStep: +maxStep.toFixed(2), faces, bananas: t.spawns.bananas.length, crates: t.spawns.crates.length, pads: t.spawns.pads.length, map: t.mapPts.length, grid: t.grid.length, gridHeight: Math.abs(h0 - t.grid[0].y) < 1e-6, torches: t.torches.length, spectators: t.spectators.count, records: B.renderer.stats.records, sky: !!(t.renderOpts.horizon && t.renderOpts.zenith) }; } return out; })()`);
+  const built = await b.evaluate(`(() => { const B = window.__ooga, T = window.BL.raceTrack, out = {}; for (const def of T.TRACKS) { const t0 = performance.now(); document.querySelector('[data-track="' + def.id + '"]').click(); const ms = performance.now() - t0; const t = B.track, S = t.samples, n = t.count; let maxStep = 0, gapNearCheck = false; for (let i = 0; i < n; i++) { const q = (i + 1) % n; if (S.surface[i] !== T.SURF.gap && S.surface[q] !== T.SURF.gap) maxStep = Math.max(maxStep, Math.abs(S.y[q] - S.y[i])); } for (const c of t.checkpoints) for (let k = 0; k < 30; k++) if (S.surface[(c + k) % n] === T.SURF.gap) gapNearCheck = true; const resident = new Set(); let placedFaces = 0; for (const sector of t.sectors) for (const node of sector.node.children) if (node.geometry) { resident.add(node.geometry); placedFaces += node.geometry.faces.length; } const faces = [...resident].reduce((sum, geo) => sum + geo.faces.length, 0); const h0 = t.heightAt(t.grid[0].x, t.grid[0].z, -1); out[def.id] = { ms: Math.round(ms), samples: n, length: Math.round(t.length), sectors: t.sectors.length, chunks: t.terrainNodes.length, checkpoints: t.checkpoints.length, first: t.checkpoints[0], gapNearCheck, maxStep: +maxStep.toFixed(2), faces, placedFaces, bananas: t.spawns.bananas.length, crates: t.spawns.crates.length, pads: t.spawns.pads.length, map: t.mapPts.length, grid: t.grid.length, gridHeight: Math.abs(h0 - t.grid[0].y) < 1e-6, torches: t.torches.length, spectators: t.spectators.count, records: B.renderer.stats.records, sky: !!(t.renderOpts.horizon && t.renderOpts.zenith) }; } return out; })()`);
   for (const [id, t] of Object.entries(built)) {
     record(`race tracks: ${id} builds fast into culled sectors with checkpoints clear of its gaps`, t.ms < 900 && t.samples > 300 && t.length > 600 && t.sectors >= 12 && t.chunks > 20 && t.checkpoints === 8 && t.first === 0 && !t.gapNearCheck && t.maxStep < 0.8 && t.faces > 15000 && t.faces < 120000 && t.bananas >= 30 && t.crates >= 6 && t.pads >= 2 && t.map >= 100 && t.grid === Math.max(8, CAST) && t.gridHeight && t.spectators > 12 && t.records < 320, JSON.stringify(t));
   }
   record("race tracks: the two outdoor tracks carry a sky and the gorge lights its torches", built.bay.sky && built.peak.sky && !built.gorge.sky && built.gorge.torches >= 20 && built.bay.torches === 0, JSON.stringify({ bay: built.bay.sky, gorge: [built.gorge.sky, built.gorge.torches], peak: built.peak.sky }));
-  const swapped = await b.evaluate(`(() => { const B = window.__ooga; const r0 = B.renderer.stats.records; document.querySelector('[data-track="bay"]').click(); B.housekeep(); const r1 = B.renderer.stats.records; return { r0, r1, nodes: B.stats().allNodes }; })()`);
-  record("race tracks: switching tracks releases the old track's GPU records", swapped.r1 <= swapped.r0 + 5 && swapped.nodes < 900, JSON.stringify(swapped));
+  const swapped = await b.evaluate(`(() => { const B = window.__ooga, track = id => { document.querySelector('[data-track="' + id + '"]').click(); B.advance(1 / 60, 1 / 60); B.housekeep(); return { records: B.renderer.stats.records, nodes: B.stats().allNodes, pool: B.stats().pool, particles: B.stats().particles }; }; const before = track("bay"); track("peak"); const after = track("bay"); return { before, after }; })()`);
+  record("race tracks: switching tracks releases the old track's GPU records", swapped.after.records <= swapped.before.records + 5 && swapped.after.nodes === swapped.before.nodes, JSON.stringify(swapped));
 }];
 
 const orbitPage = (base, query) => `${base}?debug=1&nosim=1&scene=orbit${clock(query)}`;
@@ -2324,7 +2350,8 @@ const SCENES = ["hub", "lab", "race", "drop", "orbit", "mine", "pool", "dsb", "f
 const LANES = Number(process.env.LANES) || 8;
 const ARGS = process.argv.slice(2);
 for (const a of ARGS) if (!SCENES.includes(a) && !["unit", "perf", "full", "poker-protocol"].includes(a)) throw new Error(`Unknown argument "${a}" (unit | perf | full | poker-protocol | ${SCENES.join(" | ")})`);
-const ONLY = process.env.ONLY || ""; // Optional substring within the requested scenes; defaults are unchanged.
+const ONLY = process.env.ONLY || ""; // Optional comma-separated substrings within the requested scenes.
+const onlyMatches = value => ONLY.split(",").some(part => value.includes(part));
 const FULL = ARGS.includes("full");
 const PICKED = FULL ? SCENES : SCENES.filter((s) => ARGS.includes(s));
 const PERF = FULL || ARGS.includes("perf");
@@ -2336,7 +2363,7 @@ const SCENE_BUDGET_S = 25;
 const tasks = [];
 const scene = (id, { query = "", steps, perf = false, opts = {}, label = "", url = null }) => {
   for (const s of steps) if (!WHY.test(s.why || "")) throw new Error(`${id}: step "${s.name}" must say why it exists: "regression: …", "playthrough: …", "rule: …" or "contract: …"`);
-  const chosen = !ONLY || (label && label.includes(ONLY)) ? steps : steps.filter(s => s.name.includes(ONLY));
+  const chosen = !ONLY || (label && onlyMatches(label)) ? steps : steps.filter(s => onlyMatches(s.name));
   if (!chosen.length) return;
   tasks.push({ name: perf ? `${id} perf` : opts.mobile ? `${id} phone` : label ? `${id} ${label}` : id, scene: id, perf, run: async () => {
     const t0 = Date.now();
@@ -3025,10 +3052,11 @@ const wallPerformance = async (b) => {
       B.renderer.setQuality("high");
       if (B.crew.player !== actor) B.pilot.possess(actor);
       B.pilot.navigate({ position: { x: 10, y: B.island.surfaceAt(10, 0), z: 0 }, yaw: 0, pitch: 0.4, dist: ${covered ? 55 : 10} });
-      const start = performance.now(), first = B.renderedFrames, p = actor.root.position, originX = p.x, originZ = p.z, frames = [];
-      let previous = start, held = "", outlined = 0, travel = 0, donated = false, particles = 0;
+      let start = null, first = 0;
+      const p = actor.root.position, originX = p.x, originZ = p.z, frames = [];
+      let previous = 0, held = "", outlined = 0, travel = 0, donated = false, particles = 0;
       const scene = window.BL.scenes.hub, update = scene.update, overlay = scene.overlay, render = B.renderer.render;
-      let updateMs = 0, overlayMs = 0, renderMs = 0, wall = start, worst = null;
+      let updateMs = 0, overlayMs = 0, renderMs = 0, wall = 0, worst = null;
       scene.update = function(...args) {
         const t = performance.now();
         try {
@@ -3047,8 +3075,23 @@ const wallPerformance = async (b) => {
       B.renderer.render = function(...args) { const t = performance.now(); try { return render.apply(this, args); } finally { renderMs = performance.now() - t; } };
       const key = (name, down) => window.dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name }));
       try {
+        // Finish resize and view setup before holding movement. Every frame
+        // after the first key press belongs to the five-second measurement.
+        await new Promise((resolve, reject) => {
+          const first = B.renderedFrames, began = performance.now();
+          const warm = now => {
+            if (B.renderedFrames >= first + 2) resolve();
+            else if (now - began > 4000) reject(new Error("Performance setup did not draw"));
+            else requestAnimationFrame(warm);
+          };
+          requestAnimationFrame(warm);
+        });
         await new Promise(resolve => {
           const tick = now => {
+            if (start === null) {
+              start = previous = now; first = B.renderedFrames; wall = performance.now();
+              held = "d"; key(held, true); requestAnimationFrame(tick); return;
+            }
             frames.push(now - previous); previous = now;
             const completed = performance.now(), gap = completed - wall; wall = completed;
             if (!worst || gap > worst.gap) worst = { gap, at: now - start, updateMs, renderMs, overlayMs, donated };
@@ -3073,7 +3116,7 @@ const adaptiveQualityChecks = async () => {
   record("adaptive quality: a GPU-bound machine is seen through delivered frames and loses a tier within two seconds", r.healthy && r.gpuBound && r.reactsFast, JSON.stringify(r));
   record("adaptive quality: warmup, transitions, background frames and isolated spikes do not lower quality", r.warmup && r.ignoresPauses && r.ignoresSpikes && r.fallback, JSON.stringify(r));
   record("adaptive quality: steps one tier at a time and stops at the lowest", r.bounded, JSON.stringify(r));
-  record("adaptive quality: boot cost seeds the opening tier, only ever downward", r.bootFast && r.bootMedium && r.bootLow && r.bootOneWay && r.bootKeepsCoarse, JSON.stringify(r));
+  record("adaptive quality: boot cost seeds the opening tier, only ever downward", r.bootFast && r.bootMedium && r.bootLow && r.bootOneWay && r.bootKeepsCoarse && r.bootMemory && r.memoryBoot, JSON.stringify(r));
 };
 // ---- Scenes ----
 // A scene is the unit of testing: one Chrome session running that scene's steps, side by side with the
@@ -3352,7 +3395,7 @@ const hubWalking = { name: "hub walking", why: "regression: steering keys came o
     const key = (type, key, code, location = 0, shiftKey = false) => window.dispatchEvent(new KeyboardEvent(type, { key, code, location, shiftKey }));
     const move = (combat, direction, sprint) => {
       P.controls.reset(); if (P.aiming !== combat) P.modeAction("mode-toggle");
-      P.navigate({ position: { x: -8, y: B.island.surfaceAt(-8, 8), z: 8 }, yaw: 0, pitch: 0.4, dist: 10 }); B.advance(0.4, 1 / 60);
+      P.navigate({ position: { x: -5, y: B.island.surfaceAt(-5, 5), z: 5 }, yaw: 0, pitch: 0.4, dist: 10 }); B.advance(0.4, 1 / 60);
       const p = a.root.position, x = p.x, z = p.z;
       if (sprint) key("keydown", "Shift", "ShiftLeft", 1, true);
       key("keydown", direction, "Key" + direction.toUpperCase(), 0, sprint);
@@ -3615,13 +3658,10 @@ const tapKey = async (b, key) => {
   await b.send("Input.dispatchKeyEvent", { type: "keyDown", key, code, text: key });
   await b.send("Input.dispatchKeyEvent", { type: "keyUp", key, code });
 };
-// The board's rotation and ticker derive from the baked data, so the check reads its
-// expectations from the same file rather than pinning counts that move with the org.
-const hubJumbotron = { name: "hub jumbotron", why: "rule: the rotation runs recent, org totals and five org boards, then each active repo's summary and five boards, and a draft PR ticks as DRAFT PR", run: async (b) => {
+// The island board shows the org; repository pages belong to the reader's filters.
+const hubJumbotron = { name: "hub jumbotron", why: "rule: the island rotation stays on org activity, readers select repository pages, and a draft PR ticks as DRAFT PR", run: async (b) => {
   const r = await b.evaluate(`(() => {
     const B = window.__ooga, j = B.jumbotron, data = window.BL.jumbotronData;
-    const ref = Date.parse(data.meta.generated_at) || Date.now();
-    const active = data.repos.filter((repo) => repo.last_activity_at && ref - Date.parse(repo.last_activity_at) <= 7 * 24 * 3600 * 1000).slice(0, 6);
     j.goToView(0);
     const captions = [];
     for (let i = 0; i < j.count; i++) { captions.push(j.caption); j.nextView(); }
@@ -3635,14 +3675,17 @@ const hubJumbotron = { name: "hub jumbotron", why: "rule: the rotation runs rece
     const drafted = column();
     j.refreshData(data);
     j.goToView(0);
-    return { count: j.count, expected: 2 + 5 + active.length * 6, captions: captions.slice(0, 8), wrapped, differs: plain !== drafted };
+    const reader = j.createReader();
+    reader.setFilter("repos", [data.repos[0].name]); reader.go(1);
+    return { count: j.count, captions, wrapped, differs: plain !== drafted,
+      filtered: reader.view.name === "repo" && reader.view.params.name === data.repos[0].name };
   })()`);
   const orgBoards = ["commits", "prs", "reviews", "comments", "issues"].map((t) => "org · " + t);
-  record("hub jumbotron: the rotation is recent, org totals, five org leaderboards, then six slides per active repo, wrapping back to the start", r.count === r.expected && r.captions[0] === "Recent activity" && r.captions[1] === "Org totals" && orgBoards.every((c, i) => r.captions[2 + i] === c) && r.wrapped === "Recent activity", JSON.stringify(r));
+  record("hub jumbotron: the island rotates recent activity, org totals and five org leaderboards, while filtered readers show repository pages", r.count === 7 && r.captions[0] === "Recent activity" && r.captions[1] === "Org totals" && orgBoards.every((c, i) => r.captions[2 + i] === c) && r.wrapped === "Recent activity" && r.filtered, JSON.stringify(r));
   record("hub jumbotron: a draft PR draws a different ticker row than the same PR undrafted", r.differs, JSON.stringify({ differs: r.differs }));
 } };
 // The healthiest of its kind, so a prop an earlier step shot at is never the one measured.
-const nextTo = (prop, gap, yaw = "-Math.PI / 2", pitch = 0.3) => `(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const r = B.headquarters.breakables.list.filter((r) => r.owner.prop === "${prop}" && r.owner.active && !r.broken).sort((a, b) => b.health - a.health)[0]; window.__target = r; const t = r.owner.node.position; B.pilot.navigate({ position: { x: t.x - ${gap}, y: a.root.position.y, z: t.z }, yaw: ${yaw}, pitch: ${pitch}, dist: 4 }); B.advance(0.3, 1 / 60); return r.health; })()`;
+const nextTo = (prop, gap, yaw = "-Math.PI / 2", pitch = 0.3) => `(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"); if (B.crew.player !== a) B.pilot.possess(a); const r = B.headquarters.breakables.list.filter((r) => r.owner.prop === "${prop}" && r.owner.active && !r.broken && !r.reveal).sort((a, b) => b.health - a.health)[0]; window.__target = r; const t = r.owner.node.position; B.pilot.navigate({ position: { x: t.x - ${gap}, y: a.root.position.y - a.baseY, z: t.z }, yaw: ${yaw}, pitch: ${pitch}, dist: 4 }); B.advance(0.3, 1 / 60); return r.health; })()`;
 const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage, so a box breaks in one, a barrel in two and a rock in four, and the prop comes back", run: async (b) => {
   const swings = {};
   await tapKey(b, "1");
@@ -3656,11 +3699,19 @@ const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage
     }
     swings[prop] = { health, n };
   }
-  const back = await b.evaluate(`(() => { const r = window.__target, B = window.__ooga; for (let t = 0; t < 65; t++) { B.advance(1, 1 / 30); if (!r.broken) return { t: t + 1, health: r.health, active: r.owner.active }; } return null; })()`);
+  const back = await b.evaluate(`(() => { const r = window.__target, B = window.__ooga; for (let t = 0; t < 65; t++) { B.advance(1, 1 / 30); if (!r.broken && !r.reveal) return { t: t + 1, health: r.health, active: r.owner.active }; } return null; })()`);
   record("hub melee: one swing breaks a box, two a barrel and four a rock, and a broken rock is back whole within a minute", swings.crate.n === 1 && swings.barrel.n === 2 && swings.rock.n === 4 && !!back && back.t >= 30 && back.t <= 61 && back.health === swings.rock.health && back.active, JSON.stringify({ swings, back }));
   await b.evaluate(nextTo("rock", 1.175));
   const recharge = await b.evaluate(`(() => {
     const B = window.__ooga, crew = B.crew, a = crew.player, r = window.__target;
+    const center = BL.scene.boundsOf(r.owner.node.geometry).center, matrix = r.owner.node.world;
+    // The recovery check measures contacts, so aim at the prop rather than
+    // retaining the preceding free swing's camera direction.
+    const aim = () => Object.assign(B.camera.target, {
+      x: matrix[0] * center[0] + matrix[4] * center[1] + matrix[8] * center[2] + matrix[12],
+      y: matrix[1] * center[0] + matrix[5] * center[1] + matrix[9] * center[2] + matrix[13],
+      z: matrix[2] * center[0] + matrix[6] * center[1] + matrix[10] * center[2] + matrix[14]
+    });
     const rows = [], overlay = document.getElementById("overlay").getContext("2d"), labels = [];
     const fillText = overlay.fillText;
     overlay.fillText = function(text, x, y) { if (this.fillStyle === "#ff4545") labels.push(String(text)); return fillText.call(this, text, x, y); };
@@ -3670,31 +3721,33 @@ const hubMelee = { name: "hub melee", why: "rule: a ready swing does five damage
         if (wait) B.advance(wait, 0.01);
         r.health = r.maxHealth;
         const before = r.health;
-        crew.swingWeapon(a, true, true);
+        aim(); crew.swingWeapon(a, true, true);
         crew.releaseSwing(a, false, true, true);
         rows.push({ wait, damage: before - r.health, after: crew.meleePower(a) });
       }
       B.advance(0.2, 0.01);
       const recovered = crew.meleePower(a);
-      crew.selectWeapon(a, 2); crew.selectWeapon(a, 1);
+      crew.selectWeapon(2, a); crew.selectWeapon(1, a);
       r.health = r.maxHealth;
       const before = r.health;
-      crew.swingWeapon(a);
+      aim(); crew.swingWeapon(a);
       const last = before - r.health;
-      crew.selectWeapon(a, 2); crew.selectWeapon(a, 1);
+      crew.selectWeapon(2, a); crew.selectWeapon(1, a);
       const switched = crew.meleePower(a);
       r.health = r.maxHealth;
       const health = r.health;
-      crew.swingWeapon(a);
+      aim(); crew.swingWeapon(a);
       B.advance(0.01, 0.01);
       const finalDamage = health - r.health;
       B.advance(0.2, 0.01);
       r.health = r.maxHealth;
-      crew.swingWeapon(a, true, true);
+      aim(); crew.swingWeapon(a, true, true);
       a.weapon.meleeCharge = 1;
       const chargedBefore = r.health;
       crew.releaseSwing(a, false, true);
-      return { ready, recovered, rows, last, switched, finalDamage, chargedDamage: chargedBefore - r.health, labels };
+      const chargedDamage = chargedBefore - r.health;
+      B.advance(1 / 60, 1 / 60);
+      return { ready, recovered, rows, last, switched, finalDamage, chargedDamage, labels };
     } finally { overlay.fillText = fillText; }
   })()`);
   const powers = [5, 1.25, 1.25, 3.125, 5];
@@ -3842,6 +3895,9 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     && rightViews.combatFirstBack.mode === "first-person" && rightViews.combatFirstBack.combat, JSON.stringify(rightViews));
   const shoulderFraming = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, a = P.player, rows = [];
+    // The preceding gesture check intentionally ends in first-person.
+    // Return through the real zoom control before measuring shoulder framing.
+    P.hooks.onZoom(1.2); B.advance(1, 1 / 60);
     const sample = () => {
       const C = B.camera, p = a.root.position, dx = C.position.x - C.target.x, dz = C.position.z - C.target.z, length = Math.hypot(dx, dz);
       const side = ((C.position.x - p.x) * dz - (C.position.z - p.z) * dx) / length / a.traits.height;
@@ -3904,6 +3960,8 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
   const aim = await b.evaluate(`__birdsSnapshot()`);
   const turn = Math.abs(Math.atan2(Math.sin(aim.yaw - entry.after.yaw), Math.cos(aim.yaw - entry.after.yaw)));
   record("birds-eye combat: real mouse movement changes character facing without orbiting the overhead camera", turn > 0.15 && aim.horizontal < 1e-6 && aim.down > 0.999999 && aim.up.every((n, i) => Math.abs(n - entry.after.up[i]) < 1e-6), JSON.stringify({ before: entry.after, aim, turn }));
+  await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`);
+  if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the unlocked gesture probe");
   const centered = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, R = B.renderer, a = P.player, reticle = document.getElementById("weapon-reticle"), canvas = document.getElementById("scene"), rect = canvas.getBoundingClientRect(), ray = {};
     P.hooks.onZoom(60 / P.birdsEyeHeight); B.advance(1.5, 1 / 60); const before = __birdsSnapshot();
@@ -4088,7 +4146,14 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     && falling.bird.aimDot < -0.5 && falling.carry.frames === falling.bird.frames && falling.carry.off === falling.bird.off && falling.carry.back === falling.bird.back
     && [falling.carry, falling.bird].every(r => r.off >= 0 && r.back > r.off && r.back < 600 && r.low < -50 && r.gravityFrames > 120 && r.gravityError < 1e-5 && r.ballisticError < 1e-5 && r.departure.x < -0.5 && r.departure.z < -0.5 && r.departure.vx < 0 && r.departure.vz < 0), JSON.stringify(falling));
   record("birds-eye combat: the falling character stays centered and visible above every cut plane until respawn, without a camera-height lag", falling.bird.shown && falling.bird.center < 0.02 && falling.bird.follow < 1e-5 && falling.bird.clearance > 0.06 && falling.bird.low < -50 && falling.bird.back > falling.bird.off, JSON.stringify(falling.bird));
+  // The abyss emptied the AK; load it so accidental fire through the HUD
+  // would actually spend ammunition. Start the swap check with the club.
+  // Native pointer lock needs an active tab as well as emulated focus.
+  await b.send("Page.bringToFront");
+  await b.evaluate(`__ooga.crew.configureWeapon(__ooga.pilot.player, 2, 30); __ooga.pilot.weaponMode(1)`);
+  await untilPage(b, 'B.pilot.player.weapon.primaryEquipped');
   await b.click(size.x, size.y);
+  await untilPage(b, 'document.pointerLockElement === document.getElementById("scene")');
   const hudPointer = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, a = P.player, canvas = document.getElementById("scene"), reticle = document.getElementById("weapon-reticle");
     B.advance(0.1, 1 / 60);
@@ -4103,17 +4168,18 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
       canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerType: "mouse", pointerId: 91, isPrimary: true, button: 0, buttons: 0 }));
       return hit && hit.closest("button") === button;
     };
-    const shots = a.weapon.shotsFired, primary = a.weapon.primaryEquipped;
+    const shots = a.weapon.shotsFired, ammo = a.weapon.ammo, primary = a.weapon.primaryEquipped;
     const secondaryHit = route(document.getElementById("weapon-hud")), equipped = a.weapon.equipped;
     const primaryHit = route(document.getElementById("primary-hud")), restored = a.weapon.primaryEquipped;
     const currentX = parseFloat(reticle.style.left), currentY = parseFloat(reticle.style.top);
     P.hooks.onOrbit(B.renderer.size.width / 2 - currentX, B.renderer.size.height / 2 - currentY); B.advance(1 / 60, 1 / 60);
     return { active: P.cursor.active, visible: P.cursor.visible, locked: document.pointerLockElement === canvas,
-      secondaryHit, primaryHit, primary, equipped, restored, shots, afterShots: a.weapon.shotsFired,
+      secondaryHit, primaryHit, primary, equipped, restored, shots, afterShots: a.weapon.shotsFired, ammo, afterAmmo: a.weapon.ammo,
       reticleZ: parseInt(getComputedStyle(reticle).zIndex, 10) };
   })()`);
   record("birds-eye combat: the reticle sits above HUD buttons, routes clicks to them, and does not fire through them", hudPointer.active && !hudPointer.visible && hudPointer.locked
     && hudPointer.secondaryHit && hudPointer.primaryHit && hudPointer.primary && hudPointer.equipped && hudPointer.restored
+    && hudPointer.ammo === 30 && hudPointer.afterAmmo === hudPointer.ammo
     && hudPointer.afterShots === hudPointer.shots && hudPointer.reticleZ >= 30, JSON.stringify(hudPointer));
 } };
 
@@ -4129,23 +4195,30 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
     }
     const lab = B.mouths.find(m => BL.caves.slots.find(s => s.id === m.id)?.scene === "lab"), places = [
       { name: "surface", x: -8, z: 8, floor: 0 }, ...(hill ? [hill] : []),
-      { name: "cave", x: lab.x - Math.sin(lab.ry) * 3, z: lab.z - Math.cos(lab.ry) * 3, floor: lab.floorY },
+      // Keep the floor sample beside the gorilla's work lane: his live mesh
+      // is a moving support, so standing on him cannot prove zoom stability.
+      { name: "cave", x: lab.x - Math.sin(lab.ry) * 3 + Math.cos(lab.ry) * 2.5,
+        z: lab.z - Math.cos(lab.ry) * 3 - Math.sin(lab.ry) * 2.5, floor: lab.floorY },
       { name: "HQ", x: room.x, z: room.z, floor: H.floor }, { name: "basement", x: lower.x, z: lower.z, floor: H.basement.floor }];
     const geometry = I.geometry, verts = geometry.verts, originalVerts = Array.from(verts), source = I.cutawaySource, data = source.data, originalData = data.slice(), rows = [], thresholds = [];
     const entries = [...D.terrainSections, ...D.caveSections], regions = B.renderOpts.cutawayRegions;
     const paths = I.cutawayPaths, pathState = D.cutawayPaths, roof = D.terrainRampRoof;
     const rampMarkers = D.headquarters.rampMarkers.map(marker => {
-      const first = marker.ramp.samples[0], ahead = marker.ramp.samples[Math.min(3, marker.ramp.samples.length - 1)];
-      const dx = ahead.x - first.x, dz = ahead.z - first.z, length = Math.hypot(dx, dz) || 1;
-      const forwardX = Math.sin(marker.frame.rotation.y), forwardZ = Math.cos(marker.frame.rotation.y);
-      const arrowForwardX = Math.sin(marker.arrow.rotation.y), arrowForwardZ = Math.cos(marker.arrow.rotation.y);
+      // The route curves: each mark follows the segment where it stands,
+      // rather than the heading at the mouth several metres away.
+      const alignment = (node, distance) => {
+        const samples = marker.ramp.samples;
+        let i = 1; while (i < samples.length - 1 && samples[i].s < distance) i++;
+        const from = samples[i - 1], to = samples[i], dx = to.x - from.x, dz = to.z - from.z;
+        return (Math.sin(node.rotation.y) * dx + Math.cos(node.rotation.y) * dz) / Math.hypot(dx, dz);
+      };
       return { label: marker.label, channel: marker.channel, visible: marker.node.visible, arrowVisible: marker.arrow.visible,
         model: marker.node.geometry.rampMarker?.label, visual: marker.node.geometry.rampMarker?.visual, markerKind: marker.node.geometry.rampMarker?.kind, columns: marker.node.geometry.rampMarker?.columns, rows: marker.node.geometry.rampMarker?.rows,
         arrowKind: marker.arrow.geometry.rampMarker?.kind, labelDistance: marker.labelDistance, arrowDistance: marker.arrowDistance, scale: marker.frame.scale.x,
         labelSurfaceError: Math.abs(marker.frame.position.y - marker.labelPoint.y - 0.035),
         arrowSurfaceError: Math.abs(marker.arrow.position.y - marker.arrowPoint.y - 0.035),
-        aligned: forwardX * dx / length + forwardZ * dz / length,
-        arrowAligned: arrowForwardX * dx / length + arrowForwardZ * dz / length };
+        aligned: alignment(marker.frame, marker.labelDistance),
+        arrowAligned: alignment(marker.arrow, marker.arrowDistance) };
     });
     // Project the actual label transform through a full camera turn, including
     // the side-on and reversed views that used to mirror or invert the words.
@@ -4231,16 +4304,33 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
           && Math.abs(paths.bottoms[cell] - upperColumn.ceiling) < 1e-6;
       }
     }
-    for (const face of geometry.faces) if (face.cutawayPathKey && face.i.some(index => verts[index * 3 + 1] < face.cutawayPathBottom - 1e-7)) {
+    for (const face of geometry.faces) {
+      if (!face.cutawayPathKey || !face.i.some(index => verts[index * 3 + 1] < face.cutawayPathBottom - 1e-7)) continue;
+      // Floors are horizontal, upward-facing surfaces. Walls above a basement
+      // window can sit below an unrelated upper ramp's ceiling and are roofs.
+      const a = face.i[0] * 3, b = face.i[1] * 3, c = face.i[2] * 3;
+      const normalY = (verts[b + 2] - verts[a + 2]) * (verts[c] - verts[a]) - (verts[b] - verts[a]) * (verts[c + 2] - verts[a + 2]);
+      if (normalY <= 0 || face.i.some(index => verts[index * 3 + 1] !== verts[a + 1])) continue;
       retainedFloors++; floorsPreserved = floorsPreserved && baseFaces.has(face);
     }
     let rampWindowFaces = 0, rampWindowBaseFaces = 0, rampWindowCrossingFaces = 0, rampWindowFacesPreserved = true, rampWindowFaceOwnership = true;
     for (const face of geometry.faces) {
-      if (!face.headquartersWindowReveal || !face.cutawayPathKey) continue;
+      const window = H.windows[face.windowIndex];
+      // Room windows can overlap a ramp column without belonging to its route.
+      if (!face.headquartersWindowReveal || !face.cutawayPathKey || window?.kind !== "ramp") continue;
       rampWindowFaces++;
-      const decoded = decodePath(face.cutawayPathKey), window = H.windows[face.windowIndex];
-      rampWindowFaceOwnership = rampWindowFaceOwnership && decoded.owners === 1 && window?.kind === "ramp"
-        && decoded.channel === window.cutawayChannel && windowStations[decoded.channel].has(decoded.station);
+      const decoded = decodePath(face.cutawayPathKey);
+      // Inside a corridor, the fragment inherits that column's station; an
+      // overlapping upper route keeps ownership over a basement window.
+      // The extended columns above separately prove authored window stations.
+      let x = 0, z = 0;
+      for (const index of face.i) { x += verts[index * 3]; z += verts[index * 3 + 2]; }
+      x /= face.i.length; z /= face.i.length;
+      const gx = Math.floor((x - paths.origin.x) / paths.unit), gz = Math.floor((z - paths.origin.z) / paths.unit);
+      const column = gx * paths.height + gz;
+      rampWindowFaceOwnership = rampWindowFaceOwnership && decoded.owners === 1
+        && gx >= 0 && gx < paths.width && gz >= 0 && gz < paths.height
+        && face.cutawayPathKey === paths.keys[column];
       let below = false, above = false;
       for (const index of face.i) {
         const y = verts[index * 3 + 1];
@@ -4366,7 +4456,7 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
             }
           }
           lowerFloorsOrdered = lowerFloorsOrdered && lowerFloorOrdered();
-          structureHidden ||= !!H.node.cutawayWholeHidden || H.entrances.some(entry => entry.node.cutawayWholeHidden);
+          structureHidden ||= !!D.headquarters.node.cutawayWholeHidden || D.headquarters.entrances.some(entry => entry.node.cutawayWholeHidden);
           if (!a.root.cutawayWholeHidden) visibleFrames++;
           wholeHidden = Math.max(wholeHidden, B.crew.list.filter(cave => cave.root.cutawayWholeHidden).length + D.props.filter(prop => prop.node.cutawayWholeHidden).length);
           wholeBarrels = Math.max(wholeBarrels, D.props.filter(prop => prop.prop === "barrel" && prop.node.cutawayWholeHidden).length);
@@ -4465,6 +4555,7 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
     // Restore the basement before exercising the existing camera handoffs.
     P.navigate({ position: { x: lower.x, y: H.basement.floor, z: lower.z }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(2, 1 / 60);
     const cutState = () => ({ mode: P.mode, player: !!P.player, mix: P.birdsEyeMix, fade: B.renderOpts.cutawayFade, rock: B.renderOpts.cutawayRockMix,
+      eyeY: B.camera.position.y, ceiling: H.basement.ceiling,
       markers: D.headquarters.rampMarkers.reduce((count, marker) => count + (marker.node.visible ? 1 : 0), 0),
       cuts: B.renderOpts.cutawayMaxY < 1e5 ? [B.renderOpts.cutawayMaxY] : regions.slice(0, B.renderOpts.cutawayRegionCount).map(r => r.y) });
     const transition = (name, action, frames = 60) => {
@@ -4509,11 +4600,17 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
       carryRoofs.hiddenMarkers = carryRoofs.hiddenMarkers && D.headquarters.rampMarkers.every(marker => !marker.node.visible);
     }
     P.hooks.onZoom(0.99);
+    let carryEntryFrames = 0;
     for (let i = 0; i < 120 && P.shoulderEntryMix < 1; i++) {
       B.advance(1 / 60, 1 / 60);
+      // The terminal frame is settled shoulder, where the next check requires
+      // restoration. Measure the handoff only while it is still in progress.
+      if (P.shoulderEntryMix === 1) break;
+      carryEntryFrames++;
       carryRoofs.in = carryRoofs.in && P.mode === "shoulder" && B.renderOpts.cutawayFade === 1
         && B.renderOpts.cutawayMaxY < H.ceiling - 0.5;
     }
+    carryRoofs.in = carryRoofs.in && carryEntryFrames >= 10;
     B.advance(1, 1 / 60);
     carryRoofs.settled = P.mode === "shoulder" && P.shoulderEntryMix === 1 && B.renderOpts.cutawayFade === 0;
     toggle(); P.hooks.onZoom(1.2); B.advance(1, 1 / 60);
@@ -4529,7 +4626,10 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
     const restored = P.player === a && P.mode === "birds-eye" && P.birdsEyeMix === 1 && Math.abs(a.root.position.y - a.baseY - H.basement.floor) < 0.2;
     const landmarks = [B.altar.node.position, B.headquarters.firepit.position, H.basement.hole].map(p => [p.x, p.z]);
     const clouds = [], weather = [];
-    const visit = n => { if (n.geometry?.cutawayPreserve) clouds.push(n); if (n.geometry?.cutawayHide) weather.push(n); for (const child of n.children) visit(child); };
+    // Relief windows include an ordinary front mesh as well as projective
+    // batches. Neither is part of the weather deck.
+    const reliefRoots = [D.factory?.batches.hall.parent, D.bifrost?.window?.root];
+    const visit = n => { if (reliefRoots.includes(n)) return; if (n.geometry?.cutawayPreserve) clouds.push(n); if (n.geometry?.cutawayHide) weather.push(n); for (const child of n.children) visit(child); };
     visit(BL.scenes.hub.root);
     const immutable = I.geometry === geometry && I.geometry.verts === verts && verts.every((v, i) => v === originalVerts[i]) && source.data === data && data.every((v, i) => v === originalData[i]);
     const cache = entries.map(e => ({ ...e.cap.stats }));
@@ -4621,12 +4721,15 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
   record("birds-eye combat: the pile, HQ hearth and basement center align on screen at every selected floor despite their different elevations", rows.every(r => r.orthoMix === 1 && r.centerError < 0.001), JSON.stringify(rows.map(({ name, centerError, orthoMix }) => ({ name, centerError, orthoMix }))));
   record("birds-eye combat: cave roofs, underground cuts and weather follow the full camera blend through carry and shoulder handoffs, including reversal without a reset", state.transitions.length === 8
     && state.transitions.every(r => r.immediate < 1e-6 && r.mixStep < 0.08 && r.cutStep < 5 && r.rockError < 1e-6 && r.capError < 1e-5 && r.maxRegions <= 8)
-    && state.transitions.slice(0, 4).every(r => r.after.fade === 1 && r.after.cuts.length > 0)
-    && state.transitions.slice(4).every(r => r.fadeError < 1e-6 && r.span > 1 && r.changed >= 10 && r.direction && r.blended >= 10)
+    // The straight-down shoulder eye stays above the basement ceiling. Its
+    // chosen view still needs the same cut; the later low shoulder restores it.
+    && state.transitions.slice(0, 6).every(r => r.after.fade === 1 && r.after.cuts.length > 0 && r.fadeStep === 0 && r.span === 0)
+    && state.transitions[4].after.eyeY > state.transitions[4].after.ceiling
+    && state.transitions.slice(6).every(r => r.fadeError < 1e-6 && r.span > 1 && r.changed >= 10 && r.direction && r.blended >= 10)
     && state.transitions[1].after.mix > 0 && state.transitions[1].after.mix < 1
     && state.transitions[2].before.mix === state.transitions[1].after.mix
-    && [0, 2].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 1 && state.transitions[i].after.cuts.length > 0)
-    && [4, 6].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 0 && !state.transitions[i].after.cuts.length)
+    && [0, 2, 4].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 1 && state.transitions[i].after.cuts.length > 0)
+    && [6].every(i => state.transitions[i].after.mix === 0 && state.transitions[i].after.fade === 0 && !state.transitions[i].after.cuts.length)
     && [3, 5, 7].every(i => state.transitions[i].after.mix === 1 && state.transitions[i].after.fade === 1 && state.transitions[i].after.cuts.length > 0)
     && state.transitions[4].after.mode === "shoulder" && state.transitions[5].after.mode === "birds-eye", JSON.stringify(state.transitions));
   record("carry orbit: upper floors stay hidden in both lower-level camera handoffs and return after shoulder settles", Object.values(state.carryRoofs).every(Boolean), JSON.stringify(state.carryRoofs));
@@ -4695,12 +4798,13 @@ const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ra
         const loweredPoint = [cloudPoint[0], cloudPoint[1] - 8, cloudPoint[2]];
         const cloudLowered = read({ cutawayCloudY: 0, cutawayCloudMix: 1 }, [loweredPoint])[0];
         const cloudWorldUnchanged = top.world.every((v, i) => v === cloudWorld[i]) && Object.keys(cloudPosition).every(k => top.position[k] === cloudPosition[k]);
-        top.matrixCloud = false; top.position.y = 0;
+        // Keep cloud shading in both samples; only the translation differs.
+        top.position.y = 0;
         const cloudReference = read({}, [loweredPoint])[0];
         top.position.y = 8; top.matrixCloud = true; camera.position.y = 12;
         const middlePoint = [cloudPoint[0], cloudPoint[1] - 4, cloudPoint[2]];
         const cloudMiddle = read({ cutawayCloudY: 0, cutawayCloudMix: 0.5 }, [middlePoint])[0];
-        top.matrixCloud = false; top.position.y = 4;
+        top.position.y = 4;
         const cloudMiddleReference = read({}, [middlePoint])[0];
         ground.visible = true; camera.position.y = 20; camera.target.y = 0;
         top.geometry = roof; top.position.y = 5;
@@ -4897,11 +5001,16 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
       pointAtLower(); B.advance(0.4, 1 / 60);
       const target = P.assistedTarget, reticle = document.getElementById("weapon-reticle"), dot = getComputedStyle(reticle.querySelector("span"));
       return { target: target?.owner === lower ? "lower" : target?.owner === upper ? "upper" : "other", feedback: reticle.dataset.target,
-        dot: dot.backgroundColor, visibility: dot.visibility, x: target?.x, y: target?.y, z: target?.z, ceiling: P.birdsEyeCeiling };
+        dot: dot.backgroundColor, visibility: dot.visibility, x: target?.x, y: target?.y, z: target?.z, ceiling: P.birdsEyeCeiling,
+        distance: P.assistedTargetDistance, reach: B.crew.meleeReach(a) };
     };
+    // This fixture exercises both owned weapons, with rounds for both firing checks.
+    B.crew.configureWeapon(a, 2, 12);
+    if (!P.birdsEye) { P.hooks.onZoom(100); B.advance(1, 1 / 60); }
     try {
-      P.navigate({ position: { x: 6, y: H.basement.floor, z: -3 }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
-      P.weaponAction("weapon-primary"); B.advance(0.5, 1 / 60); const far = aim();
+      P.navigate({ position: { x: 6, y: H.basement.floor, z: -Math.max(6, B.crew.meleeReach(a) + 2) }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
+      P.weaponAction("weapon-primary"); B.advance(0.5, 1 / 60); const far = aim(), farBefore = lower.breakable.health;
+      P.weaponAction("weapon-fire"); B.advance(0.65, 1 / 60); const farAfter = lower.breakable.health;
       P.navigate({ position: { x: 6, y: H.basement.floor, z: -0.95 }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
       const near = aim(), beforeMelee = lower.breakable.health;
       P.weaponAction("weapon-fire"); B.advance(0.65, 1 / 60); const afterMelee = lower.breakable.health;
@@ -4959,7 +5068,7 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
         closeAim.push({ fresh, found, mode, error, exitFound, exitMode: P.mode, exitError });
       }
       P.hooks.onZoom(1.2); B.advance(1, 1 / 60);
-      return { far, near, firearm, jump, handoff, closeAim, floor: H.basement.floor, beforeMelee, afterMelee, afterShot,
+      return { far, farBefore, farAfter, near, firearm, jump, handoff, closeAim, floor: H.basement.floor, beforeMelee, afterMelee, afterShot,
         upperHealth: upper.breakable.health, shots, mode };
     } finally {
       B.crew.stopBurst(a); B.crew.selectWeapon(1, a);
@@ -4967,7 +5076,7 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
       B.advance(0.2, 1 / 60);
     }
   })()`);
-  record("birds-eye combat: basement aim ignores upstairs geometry, hides the distant melee dot and shows orange in range, then melee and secondary fire damage that same target", result.mode === "birds-eye" && result.far.target === "lower" && result.far.feedback === "out-of-range" && result.far.visibility === "hidden" && result.near.target === "lower" && result.near.feedback === "object" && result.near.dot === "rgb(255, 157, 66)" && result.near.visibility === "visible" && Math.abs(result.near.y - result.floor - 0.5) < 1e-5 && result.afterMelee < result.beforeMelee && result.firearm.target === "lower" && result.shots > 0 && result.afterShot < result.afterMelee && result.upperHealth === 100, JSON.stringify(result));
+  record("birds-eye combat: basement aim ignores upstairs geometry, identifies distant and reachable objects, then melee and secondary fire damage that same target", result.mode === "birds-eye" && result.far.target === "lower" && result.far.feedback === "object" && result.far.visibility === "visible" && result.far.distance > result.far.reach && result.farAfter === result.farBefore && result.near.target === "lower" && result.near.feedback === "object" && result.near.dot === "rgb(255, 157, 66)" && result.near.visibility === "visible" && Math.abs(result.near.y - result.floor - 0.5) < 1e-5 && result.afterMelee < result.beforeMelee && result.firearm.target === "lower" && result.shots > 0 && result.afterShot < result.afterMelee && result.upperHealth === 100, JSON.stringify(result));
   record("birds-eye combat: a jump retains same-floor targeting through its apex and orange feedback while melee remains within reach", result.jump.peak > 0.9 && result.jump.peakTarget && result.jump.orangeFrames > 2, JSON.stringify(result.jump));
   record("birds-eye combat: a full-height zoom reaches shoulder promptly, retains the exact elevated world anchor through the swoop, and fires into the same target", result.handoff.mode === "shoulder" && result.handoff.mix > 0 && result.handoff.mix < 1 && result.handoff.offset > 20
     && result.handoff.fromHeight > 60 && result.handoff.frames > 0 && result.handoff.frames < 45 && result.handoff.anchor && result.handoff.anchor.y > result.floor + 0.05
@@ -5089,7 +5198,8 @@ const factoryWalking = { name: "factory walking", why: "regression: Factory move
     key("s", true); B.advance(0.65, 1 / 60); key("s", false);
     const off = a.root.position.y - a.baseY;
     // Recreate a shallow overlap left by a landing or relocation, then leave it with ordinary input.
-    const x = d.x + F.REB.console[0] + 0.78 + a.bodyRadius - 0.08, z = d.z + F.REB.console[1];
+    // Stay beside the console without also moving into the crate behind its right corner.
+    const x = d.x + F.REB.console[0] + 0.78 + a.bodyRadius - 0.08, z = d.z + F.REB.console[1] + 0.3;
     B.pilot.navigate({ position: { x, y: d.y, z }, yaw: 0, pitch: 0, dist: 6 }); B.advance(0.1, 1 / 60);
     const overlapped = !F.clearAt(x, z, d.y, a.bodyRadius);
     const inwardBlocked = !F.walkable(x, z, x - 0.05, z, d.y, a.bodyRadius, a.bodyHeight);
@@ -5646,8 +5756,23 @@ for (const fallback of [false, true]) scene("hub", { label: "timechain " + (fall
       }
     }
     const edgeX = p.x + dir.x * (BL.timechainModels.SITE.radius + 2), edgeZ = p.z + dir.z * (BL.timechainModels.SITE.radius + 2);
-    let path = true;
-    for (let r = B.path.ringOuterRadius + 1; r < p.rim; r += 0.25) path = path && B.island.isPath(dir.x * r, dir.z * r);
+    // Follow the terrain's painted centreline, including its stair bends.
+    let route = null, nearest = Infinity;
+    for (const line of B.island.path.centerlines) {
+      const end = line[line.length - 1];
+      if (!end) continue;
+      const distance = Math.hypot(end.x - dir.x * p.rim, end.z - dir.z * p.rim);
+      if (distance < nearest) { nearest = distance; route = line; }
+    }
+    let path = !!route && nearest < 2, samples = 0;
+    for (let i = 0; route && i < route.length; i++) {
+      const point = route[i], radius = Math.hypot(point.x, point.z);
+      if (i) path &&= Math.hypot(point.x - route[i - 1].x, point.z - route[i - 1].z) < 0.5;
+      if (radius >= B.path.ringOuterRadius + 1 && radius < p.rim) {
+        path &&= B.island.isPath(point.x, point.z); samples++;
+      }
+    }
+    path &&= samples > 20 && Math.hypot(route[0].x, route[0].z) < B.path.ringOuterRadius;
     return { name: c.traits.name, display: c.contributor.display, distance: Math.hypot(c.root.position.x - p.x, c.root.position.z - p.z), feet: c.root.position.y - c.baseY, floor: p.y, failures, path, edge: S.supportAt(edgeX, edgeZ, p.y, p.y, c), x: c.root.position.x, z: c.root.position.z };
   })()`);
   record("timechain: Sani arrives safely, both shores are walkable and the edge has no invisible floor", result.name === "SaniExp" && result.display === "Sani" && result.distance < 5 && Math.abs(result.feet - result.floor) < 0.1 && !result.failures.length && result.edge < -50, JSON.stringify(result));
@@ -5721,7 +5846,7 @@ scene("hub", { label: "timechain resident", steps: [{ name: "timechain resident"
   })()`);
   record("timechain: Sani types in his recliner, spins with his laptop independently of frame rate, and beer gear hugs the sphere wall", result.centered && result.sideStations && result.before.facingScreen && result.controlled && result.released && result.typing && result.stopped && result.slow.together && result.fast.together && result.slow.angle > 1 && Math.abs(result.slow.angle - result.fast.angle) < 1e-7 && [result.before, result.sitting, result.after].every(s => s.visible && s.seated && s.distance < 0.001 && s.lean < -0.1 && s.leg < -0.5), JSON.stringify(result));
   const beer = await b.evaluate(`(() => {
-    const B = __ooga, T = BL.scenes.hub.debug.timechainIsland, c = B.cavemen.get('SaniExp'), beer = T.beer;
+    const B = __ooga, D = BL.scenes.hub.debug, T = D.timechainIsland, c = B.cavemen.get('SaniExp'), beer = T.beer;
     const cycle = rate => {
       beer.pause(); Object.assign(beer.state, { litres: 0.5, sips: 0, refills: 0 });
       let empty = false, filling = false, walked = false, previous = 0, increasing = true, drinkArm = 0;
@@ -5790,6 +5915,7 @@ scene("hub", { label: "chilling", query: "status=chillin&pos=0", steps: [{ name:
       e.owner.override = e.owner.state = group.includes(e) ? "chilling" : "away";
       e.active = e.root.visible = group.includes(e);
     }
+    BL.scene.updateWorld(BL.scenes.hub.root); B.headquarters.solids.props.sync();
     const setup = spacing => group.forEach((e, i) => {
       const x = 7 + i * spacing, z = 0, y = B.island.surfaceAt(x, z);
       Object.assign(e.root.position, { x, y, z });
@@ -5823,12 +5949,37 @@ scene("hub", { label: "chilling", query: "status=chillin&pos=0", steps: [{ name:
     const separated = !overlaps();
     setup(2.5); let approachClear = !overlaps();
     for (let frame = 0; frame < 4 * 60; frame++) { C.update(1 / 60); approachClear &&= !overlaps(); }
-    return { count: group.length, initiallyCrowded, separated, approachClear, maxStep, airborne,
+    // Upright coworkers fit closer than walking trunks. The final-pose guard
+    // must not freeze their animation by previewing an all-fours transition.
+    setup(3);
+    const site = C.sites.findIndex(site => site.mirrorRoom);
+    group.forEach((e, i) => {
+      const x = i < 2 ? 7 : 13, z = i === 1 ? 1.5 : 0, y = B.island.surfaceAt(x, z);
+      Object.assign(e.root.position, { x, y, z });
+      e.owner.override = e.owner.state = "working";
+      e.owner.work.site = e.owner.work.plannedSite = site;
+      Object.assign(e, { mode: "working", phase: "work", site, pendingSite: -1, hasSlot: true,
+        parked: true, biped: true, stand: 1, footprintMode: "stand", goalX: x, goalY: y, goalZ: z });
+      e.motion.groomPhase = NaN;
+      e.gorilla.poseManaged(2, x, y, z, 0, 0, false, true, "", e.motion);
+      e.compact = e.gorilla.standCompact;
+    });
+    const standingClear = !overlaps(), animationStart = group[0].gorilla.debug.groomTime;
+    const standingStart = { ...group[0].root.position };
+    for (let frame = 0; frame < 18; frame++) C.update(1 / 60);
+    const standing = { initiallyClear: standingClear, clear: !overlaps(),
+      animated: group[0].gorilla.debug.groomTime - animationStart,
+      upright: group[0].gorilla.debug.gait === "upright",
+      displacement: Math.hypot(group[0].root.position.x - standingStart.x,
+        group[0].root.position.y - standingStart.y, group[0].root.position.z - standingStart.z) };
+    return { count: group.length, initiallyCrowded, separated, approachClear, maxStep, airborne, standing,
       recoveries: C.stats().recoveries - recoveries };
   })()`);
   record("gorilla crowd: three overlapping NPC trunks step apart without jumping or relocation, and converging walkers keep their trunks apart",
     crowd.count === 3 && crowd.initiallyCrowded && crowd.separated && crowd.approachClear
-    && crowd.maxStep < 0.08 && !crowd.airborne && !crowd.recoveries, JSON.stringify(crowd));
+    && crowd.maxStep < 0.08 && !crowd.airborne && !crowd.recoveries
+    && crowd.standing.initiallyClear && crowd.standing.clear && crowd.standing.upright
+    && crowd.standing.animated > 0.29 && crowd.standing.displacement < 1e-6, JSON.stringify(crowd));
 } }, { name: "Oogas walk over gorillas", why: "regression: gorilla back attachments dragged Oogas sideways and automatically launched NPC passengers", run: async (b) => {
   const state = await b.evaluate(`(() => {
     const B = __ooga, C = B.clankers, P = B.pilot, c = B.cavemen.get("portlandhodl"), e = C.list.find(e => e.owner === c);
@@ -6091,7 +6242,10 @@ scene("hub", { label: "lab work rotation", query: "status=clankin", steps: [{ na
     lab.updateScreens(0.25, 1 << middle, 1 << middle);
     const scroll = display.work.strips[0].position.y !== before;
     const seventh = workers.find(e => e.lab.station === middle);
-    if (seventh) seventh.owner.override = seventh.owner.state = "sleeping";
+    // Let the crew perform the sleep transition and claim its bed; assigning
+    // the settled state directly leaves a sleeping Ooga with no bedroll.
+    if (seventh) seventh.owner.override = "sleeping";
+    B.crew.refreshStates();
     C.update(1 / 30); B.advance(1 / 60, 1 / 60);
     const restored = display.node.visible && !display.work.node.visible;
     const next = C.sites.findIndex((value, i) => i !== site && value.mirrorRoom);
@@ -6126,12 +6280,13 @@ scene("hub", { label: "lab work rotation", query: "status=clankin", steps: [{ na
         turnedAt = (frame + 1) / 60;
       if ((solo.root.position.x - m.x) * sx + (solo.root.position.z - m.z) * sz > 2.4) { soloLeft = true; break; }
     }
-    // Three touching trunks reproduce the doorway pose expansion. Retained
-    // fixed-facing routes must be retired when each claims the final crossing.
+    // Three touching trunks within the final doorway crossing reproduce its
+    // pose expansion. Retained fixed-facing routes must retire on portal claim;
+    // a worker behind -0.6 still has an interior route to finish first.
     const bunch = workers.slice(0, 3); prepare(bunch);
     const recoveries = bunch.reduce((sum, e) => sum + e.stuck.recoveries, 0), cleared = new Set();
     for (let i = 0; i < bunch.length; i++) {
-      const e = bunch[i], along = -0.1 - i * 0.3;
+      const e = bunch[i], along = -0.05 - i * 0.25;
       Object.assign(e.root.position, { x: m.x + sx * along, y: m.floorY, z: m.z + sz * along });
       e.heading = m.ry; e.mode = "working";
       e.gorilla.poseManaged(2, e.root.position.x, e.root.position.y, e.root.position.z, e.heading, 0, false, true, "", e.motion);
@@ -6169,7 +6324,7 @@ scene("hub", { label: "gorilla inactive roofs", query: "status=chillin", steps: 
         const d = (x - roof.x) ** 2 + (z - roof.z) ** 2;
         if (y >= roof.y - 0.55 && d < distance && Math.abs(B.island.surfaceAt(x, z) - y) <= 0.1) { distance = d; nearest = roof; }
       }
-      if (nearest?.status === "dark") inactive++;
+      if (nearest?.status === "dark" || nearest?.status === "headquarters") inactive++;
       else if (nearest) violations.push({ name: e.owner.traits.name, kind, cave: nearest.id, x, y, z });
       else if (!inactiveMouths.some(m => Math.hypot(x - m.x, z - m.z) < 16))
         violations.push({ name: e.owner.traits.name, kind, cave: "outside inactive frontage", x, y, z });
@@ -6183,7 +6338,7 @@ scene("hub", { label: "gorilla inactive roofs", query: "status=chillin", steps: 
     }
     return { goals, inactive, violations };
   })()`);
-  record("gorilla lounging: resting goals and settled poses stay on inactive cave roofs or their nearby frontage", r.goals > 0 && r.violations.length === 0, JSON.stringify(r));
+  record("gorilla lounging: resting goals and settled poses stay on inactive cave or HQ roofs, or nearby inactive frontage", r.goals > 0 && r.violations.length === 0, JSON.stringify(r));
 } }] });
 scene("hub", { label: "gorilla rooftop hop", query: "status=chillin", steps: [{ name: "gorilla rooftop hop", why: "rule: a neighbouring rooftop outing uses a supported jump across the saddle and stays on the upper level", run: async (b) => {
   const rows = await b.evaluate(`(() => {
@@ -6355,7 +6510,7 @@ scene("hub", { label: "gorilla edge first descent", query: "status=chillin", ste
     B.pilot.release(true); C.release(); C.cancelDebugMove(e);
     for (const other of C.list) if (other !== e) { other.owner.override = other.owner.state = "away"; other.active = other.root.visible = false; }
     for (const cave of B.cavemen.values()) cave.root.visible = false;
-    for (const id of ["c1", "c9"]) {
+    for (const id of ["c1", "c11"]) {
       const along = id === "c1" ? 2.4 : 0.15;
       const m = B.mouths.find(m => m.id === id), sx = Math.sin(m.ry), sz = Math.cos(m.ry);
       const x = m.x - sx * along, z = m.z - sz * along, roof = B.island.surfaceAt(x, z);
@@ -6502,7 +6657,7 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
     escapeRock.visible = false; S.updateWorld(root); solids.sync();
     advance(null, 3.5);
     const raisedProp = { rockY, assignedExit, x: e.root.position.x, y: e.root.position.y, z: e.root.position.z,
-      airborne: e.drive.airborne, stuck: e.stuck.time, reason: e.stuck.reason };
+      airborne: e.drive.airborne, groundError: Math.abs(e.root.position.y - C.supportAt(e, e.root.position.x, e.root.position.z, e.root.position.y, BL.clankers.PROP_STEP, e.heading)), stuck: e.stuck.time, reason: e.stuck.reason };
     solids.remove(escapeRock); S.removeChild(root, escapeRock); solids.sync();
     const jumps = [];
     for (const run of [false, true]) {
@@ -6549,48 +6704,50 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
     }
     const tree = B.props.find(prop => prop.prop === "tree"); tree.node.visible = true; S.updateWorld(root); solids.sync();
     const q = tree.node.position; setup(q.x - 2.8, q.z, Math.PI / 2);
+    e.drive.motionEnvelope = true; e.drive.motionRecover = 0.6;
     let lowFrames = 0, bipedFrames = 0, movingFrames = 0, previous = e.root.position.x;
     advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.5, () => {
-      if (e.lowCover) lowFrames++; if (e.biped) bipedFrames++;
+      if (e.gorilla.debug.gait === "knuckle" && !e.drive.airborne) lowFrames++; if (e.biped) bipedFrames++;
       if (Math.abs(e.root.position.x - previous) > 1e-5) movingFrames++;
       previous = e.root.position.x;
     });
-    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames };
+    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames, envelopeCleared: !e.drive.motionEnvelope && !e.drive.motionRecover };
     tree.node.visible = false;
+    // Keep the identical obstacle outside the arcade's reserved entrance apron.
     const screen = S.createNode({ geometry: BL.models.box({ w: 0.5, h: 4, d: 4, color: BL.math.hexToRgb("#454545") }),
-      position: { x: 12, y: B.island.surfaceAt(12, 0) + 2, z: 0 } });
-    S.addChild(root, screen); solids.add(screen); S.updateWorld(root); solids.sync(); setup(7, 0);
+      position: { x: 12, y: B.island.surfaceAt(12, 10) + 2, z: 10 } });
+    S.addChild(root, screen); solids.add(screen); S.updateWorld(root); solids.sync(); setup(7, 10);
     C.release();
     e.owner.override = e.owner.state = "chilling";
     Object.assign(e, { controlled: false, mode: "chilling", phase: "chill", route: "", lounge: "", loungeDepart: false,
-      loungeRoof: false, loungeHeading: NaN, rest: 120, goalX: 17, goalY: B.island.surfaceAt(17, 0), goalZ: 0 });
+      loungeRoof: false, loungeHeading: NaN, rest: 120, goalX: 17, goalY: B.island.surfaceAt(17, 10), goalZ: 10 });
     Object.assign(e.roam, { count: 0, index: 0, wall: false, detour: false, pose: "", departPending: false,
-      targetX: 17, targetY: e.goalY, targetZ: 0, progressTime: 0.9, progressDistance: 0, planAt: 0, nextChoice: Infinity });
+      targetX: 17, targetY: e.goalY, targetZ: 10, progressTime: 0.9, progressDistance: 0, planAt: 0, nextChoice: Infinity });
     const recoveries = e.stuck.recoveries;
     let detoured = false, crossed = false;
     for (let frame = 0; frame < 24 * 60; frame++) {
       C.update(1 / 60);
       detoured ||= e.roam.detour && e.roam.count > 1;
-      crossed ||= Math.abs(e.root.position.x - 12) < 0.25 && Math.abs(e.root.position.z) < 2;
-      if (Math.hypot(e.root.position.x - 17, e.root.position.z) < 0.18) break;
+      crossed ||= Math.abs(e.root.position.x - 12) < 0.25 && Math.abs(e.root.position.z - 10) < 2;
+      if (Math.hypot(e.root.position.x - 17, e.root.position.z - 10) < 0.18) break;
     }
-    const detour = { detoured, crossed, arrived: Math.hypot(e.root.position.x - 17, e.root.position.z) < 0.18,
+    const detour = { detoured, crossed, arrived: Math.hypot(e.root.position.x - 17, e.root.position.z - 10) < 0.18,
       recoveries: e.stuck.recoveries - recoveries, grounded: !e.climb.active && !e.jump.active && !e.drive.airborne };
     solids.remove(screen); S.removeChild(root, screen); solids.sync();
     return { traversals, raisedProp, jumps, canopy, detour };
   })()`);
   const props = state.traversals.every(row => row.x > 16 && row.maxY >= 0.75 && row.maxY <= 1.05 && !row.airborne && !row.stopped && row.maxVisibleStep < 0.25);
-  const raisedProp = state.raisedProp.rockY > 0.8 && state.raisedProp.assignedExit && state.raisedProp.y < 0.05
-    && Math.abs(state.raisedProp.x - 12) > 1.5 && !state.raisedProp.airborne && state.raisedProp.stuck < 0.65;
+  const raisedProp = state.raisedProp.rockY > 0.8 && state.raisedProp.assignedExit && state.raisedProp.groundError < 0.05
+    && Math.hypot(state.raisedProp.x - 12, state.raisedProp.z) > 1.5 && !state.raisedProp.airborne && state.raisedProp.stuck < 0.65;
   const jump = state.jumps.every(row => {
-    const speed = row.run ? 2.7 : 0.9, travel = speed * 39 / 60;
+    const speed = row.run ? 5.4 : 1.8, travel = speed * 39 / 60;
     return row.gait === (row.run ? "gallop" : "knuckle") && row.firstAir && !row.stopped
-      && Math.abs(row.startSpeed - speed) < 1e-5 && Math.abs(row.switchSpeed - (row.run ? 0.9 : 2.7)) < 1e-5
+      && Math.abs(row.startSpeed - speed) < 1e-5 && Math.abs(row.switchSpeed - (row.run ? 1.8 : 5.4)) < 1e-5
       && Math.abs(row.heldTravel - travel) < travel * 0.01 && Math.abs(row.vx - speed) < speed * 0.01
       && row.heldJumps === 1 && row.heldLanded && row.releaseJumps === 1 && row.secondCount === 2 && row.thirdCount === 2
       && row.thirdVelocity < row.secondVelocity && row.secondLift > row.peak * 0.98 && row.secondLift < row.peak * 1.02 && row.landed && row.nextJump;
   });
-  const canopy = state.canopy.lowFrames > 0 && !state.canopy.bipedFrames && state.canopy.movingFrames > 10 && state.canopy.endX < state.canopy.startX - 1;
+  const canopy = state.canopy.lowFrames > 0 && state.canopy.envelopeCleared && !state.canopy.bipedFrames && state.canopy.movingFrames > 10 && state.canopy.endX < state.canopy.startX - 1;
   const detour = state.detour.detoured && state.detour.arrived && !state.detour.crossed && !state.detour.recoveries && state.detour.grounded;
   record("gorilla traversal: crates, barrels and rocks keep a continuous grounded gallop, an autonomous gorilla leaves a destroyed raised prop, fresh presses jump immediately and once more in air without held repeats or cancellation exploits, low cover permits an all-fours retreat, and a stalled stroller walks around tall scenery", props && raisedProp && jump && canopy && detour, JSON.stringify(state));
 } }, { name: "gorilla camera modes", why: "regression: controlled gorillas lacked first-person and birds-eye cameras, carry/combat camera controls, and a combat crosshair", run: async (b) => {
@@ -6611,7 +6768,7 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
     reticle.dataset.hit = "object"; reticle.style.left = "31px"; reticle.style.top = "47px"; reticle.style.setProperty("--reticle-hit", "1");
     const possessed = P.possess(e, true), rows = [];
     canvas.focus();
-    const key = (type, value, code = "Key" + value.toUpperCase(), location = 0) => window.dispatchEvent(new KeyboardEvent(type,
+    const key = (type, value, code = "Key" + value.toUpperCase(), location = 0) => canvas.dispatchEvent(new KeyboardEvent(type,
       { key: value, code, location, bubbles: true, cancelable: true }));
     const tap = (value, code, location) => { key("keydown", value, code, location); key("keyup", value, code, location); };
     const wheel = deltaY => canvas.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
@@ -6874,8 +7031,8 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
         : row.gait === "knuckle" && row.after - row.before > 0.65)), JSON.stringify(labTransition));
 } }] });
 scene("hub", { label: "mirror clanker", query: "solo=1&character=portlandhodl&status=clankin", steps: [{ name: "mirror clanker stays inside", why: "regression: a clanker turned around after crossing the mirror, poked its head back out, and worked beside a glowing generic box", run: async (b) => {
-  const state = await b.evaluate(`(() => { const B = __ooga, C = B.clankers, siteIndex = C.sites.findIndex(s => s.mirrorRoom), site = C.sites[siteIndex], m = site.mouth, e = C.list[0], localX = p => (p.x - m.x) * site.cr - (p.z - m.z) * site.sr, localZ = p => (p.x - m.x) * site.sr + (p.z - m.z) * site.cr, place = (x, z) => ({ x: m.x + site.cr * x + site.sr * z, y: m.floorY, z: m.z - site.sr * x + site.cr * z }); e.owner.state = "working"; e.owner.work.site = e.owner.work.plannedSite = e.site = siteIndex; e.pendingSite = -1; e.hasSlot = true; e.slotIndex = 0; Object.assign(e, { slotX: place(0, -4.92).x, slotY: m.floorY, slotZ: place(0, -4.92).z, phase: "travel", route: "enter", fromSite: -1, entryTurn: false, blocked: 0, retry: 0 }); Object.assign(e.root.position, place(0, 0)); e.heading = m.ry + Math.PI; B.advance(0.25, 1 / 60); const entry = { turn: e.entryTurn, goal: localZ({ x: e.goalX, z: e.goalZ }) }; Object.assign(e.root.position, place(0, -4.92)); e.phase = "work"; e.route = ""; e.goalX = e.slotX; e.goalY = e.slotY; e.goalZ = e.slotZ; let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, distance = 0, lastX = e.root.position.x, lastZ = e.root.position.z; for (let t = 0; t < 18; t += 1 / 30) { B.advance(1 / 30, 1 / 30); const x = localX(e.root.position), z = localZ(e.root.position); minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); distance += Math.hypot(e.root.position.x - lastX, e.root.position.z - lastZ); lastX = e.root.position.x; lastZ = e.root.position.z; } const control = B.matrixGate.button, lever = B.matrixGate.lever; return { room: m.room, entry, minX, maxX, minZ, maxZ, distance, recoveries: e.stuck.recoveries, equipment: C.equipment.filter(item => item.site === siteIndex).length, leverY: control.position.y, leverScale: control.scale.y, leverZ: control.position.z, leverTagged: control.geometry.matrixCave !== undefined && control.children.every(node => node.geometry.matrixCave !== undefined) && lever.children.every(node => node.geometry.matrixCave !== undefined), leverNative: !!control.matrixNative, leverParts: control.children.length, gripParts: lever.children.length }; })()`);
-  record("mirror clanker: the safe chamber expands, entry continues straight inward, runs cross from side to side at varied depths behind the glass, and a compact glyphed lever is mounted within reach on the back wall", state.room.w > 6 && state.room.to > 6.5 && Math.abs(state.entry.goal + 3.5) < 0.01 && state.maxZ <= -1.85 + 1e-6 && state.minX < -0.8 && state.maxX > 0.8 && state.maxZ - state.minZ > 1 && state.distance > 8 && state.equipment === 0 && state.leverY >= 1 && state.leverY < 1.5 && state.leverScale < 1 && state.leverZ < -state.room.to + 0.3 && state.leverTagged && !state.leverNative && state.leverParts === 3 && state.gripParts === 1, JSON.stringify(state));
+  const state = await b.evaluate(`(() => { const B = __ooga, C = B.clankers, siteIndex = C.sites.findIndex(s => s.mirrorRoom), site = C.sites[siteIndex], m = site.mouth, e = C.list[0], localX = p => (p.x - m.x) * site.cr - (p.z - m.z) * site.sr, localZ = p => (p.x - m.x) * site.sr + (p.z - m.z) * site.cr, place = (x, z) => ({ x: m.x + site.cr * x + site.sr * z, y: m.floorY, z: m.z - site.sr * x + site.cr * z }); e.owner.state = "working"; e.owner.work.site = e.owner.work.plannedSite = e.site = siteIndex; e.pendingSite = -1; e.hasSlot = true; e.slotIndex = 0; Object.assign(e, { slotX: place(0, -4.92).x, slotY: m.floorY, slotZ: place(0, -4.92).z, phase: "travel", route: "enter", fromSite: -1, entryTurn: false, blocked: 0, retry: 0 }); Object.assign(e.root.position, place(0, 0)); e.heading = m.ry + Math.PI; B.advance(0.25, 1 / 60); const entry = { turn: e.entryTurn, goal: localZ({ x: e.goalX, z: e.goalZ }) }; Object.assign(e.root.position, place(0, -4.92)); e.phase = "work"; e.route = ""; e.goalX = e.slotX; e.goalY = e.slotY; e.goalZ = e.slotZ; let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, distance = 0, lastX = e.root.position.x, lastZ = e.root.position.z; for (let t = 0; t < 18; t += 1 / 30) { B.advance(1 / 30, 1 / 30); const x = localX(e.root.position), z = localZ(e.root.position); minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); distance += Math.hypot(e.root.position.x - lastX, e.root.position.z - lastZ); lastX = e.root.position.x; lastZ = e.root.position.z; } const control = B.matrixGate.button, lever = B.matrixGate.lever; return { room: m.room, entry, minX, maxX, minZ, maxZ, distance, recoveries: e.stuck.recoveries, equipment: C.equipment.filter(item => item.site === siteIndex).length, leverY: control.position.y, leverScale: control.scale.y, leverZ: control.position.z, leverTagged: control.geometry.matrixCave !== undefined && control.children.every(node => node.geometry.matrixCave !== undefined) && lever.children.every(node => node.geometry.matrixCave !== undefined), leverNative: !!control.matrixNative, leverParts: control.children.filter(node => !node.matrixLiving).length, leverLabels: control.children.filter(node => node.matrixLiving && node.geometry.verts === BL.hubModels.matrixLeverLabels().verts).length, gripParts: lever.children.length }; })()`);
+  record("mirror clanker: the safe chamber expands, entry continues straight inward, runs cross from side to side at varied depths behind the glass, and a compact glyphed lever is mounted within reach on the back wall", state.room.w > 6 && state.room.to > 6.5 && Math.abs(state.entry.goal + 3.5) < 0.01 && state.maxZ <= -1.85 + 1e-6 && state.minX < -0.8 && state.maxX > 0.8 && state.maxZ - state.minZ > 1 && state.distance > 8 && state.equipment === 0 && state.leverY >= 1 && state.leverY < 1.5 && state.leverScale < 1 && state.leverZ < -state.room.to + 0.3 && state.leverTagged && !state.leverNative && state.leverParts === 3 && state.leverLabels === 1 && state.gripParts === 1, JSON.stringify(state));
 } }] });
 scene("hub", { perf: true, query: "bananas=1000", opts: { w: 1920, h: 1080, perf: true, motion: true }, steps: [{ name: "wall movement performance", why: "regression: frame rate fell moving behind cave walls during a donation", run: wallPerformance }] });
 scene("lab", { steps: [donation("lab"), labWalking, labKeys, trip("lab")] });
@@ -6915,7 +7072,10 @@ scene("poker", { query: "character=portlandhodl", steps: [{ name: "poker floor a
   record("poker walking: spectators move with WASD from two camera angles", allWalk(walking), JSON.stringify(walking));
   const r = await b.evaluate(`(() => {
     const B = __ooga, P = BL.scenes.poker.debug.poker, click = a => document.querySelector('[data-poker-action="' + a + '"]').click();
-    const count = P.room.tables.length, seats = P.room.tables.every(t => t.chairs.length === 9), dealers = P.room.tables.every(t => t.agent.parts.torso.children.length >= 4);
+    const suit = BL.pokerModels.geometry(P.session.theme);
+    const count = P.room.tables.length, seats = P.room.tables.every(t => t.chairs.length === 9), dealers = P.room.tables.every(t =>
+      t.agent.parts.torso.children.some(n => n.geometry === suit.jacket)
+      && [t.agent.parts.armL, t.agent.parts.armR].every(arm => [suit.sleeve, suit.cuff].every(g => arm.children.some(n => n.geometry === g))));
     P.select(0); click("join"); for (let i = 0; i < 4; i++) click("bots"); click("start");
     const t = P.session.tables[0], privateCards = t.snapshot().seats.every(s => s.cards.every(c => c === null));
     let guard = 0; while (t.playing && guard++ < 500) { if (t.snapshot("local-player").legal) click("call"); B.advance(0.81, 1 / 30); }
@@ -6940,10 +7100,12 @@ scene("poker", { opts: PHONE_SIZE, steps: [phone("poker", { card: '[data-intro="
   if (process.env.POKER_SHOTS) await b.screenshot(join(process.env.POKER_SHOTS, "poker-phone.png"));
 } }] });
 scene("hub", { label: "weapons", query: "character=portlandhodl&weapon=2&mag=1&ammo=6&jetpack=1", steps: [hubAk, hubMelee, hubJetpack] });
-scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye, hubBirdsEyeFloors, hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
+scene("hub", { label: "birds-eye combat", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEye] });
+scene("hub", { label: "birds-eye combat projection and targets", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEyeProjection, hubBirdsEyeTargets, hubCombatReplay] });
+scene("hub", { label: "birds-eye lower floors", query: "solo=1&character=portlandhodl&weapon=1&mode=shoulder&combat=1", steps: [hubBirdsEyeFloors] });
 scene("hub", { label: "mirror", steps: [hubJumbotron, hubMatrix, hubMirror] });
 scene("hub", { label: "side panel", query: "pos=0", steps: [hubSheetPersistence] });
-scene("hub", { label: "clock and block height", query: "pos=0&hour=9", steps: [hubBlockHeight] });
+scene("hub", { label: "clock and block height", query: "pos=0&time=0900", steps: [hubBlockHeight] });
 scene("hub", { label: "canvas2d", query: "canvas2d=1", steps: [canvasTour] });
 scene("hub", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("hub", { required: ["#joy-move", "#joy-look", "#sheet-toggle", "#sheet-bananas"], sheet: true })] });
 scene("lab", { query: "pos=0", opts: PHONE_SIZE, steps: [phone("lab", { required: ["#joy-move", "#joy-look", ".leave"] })] });
@@ -6968,10 +7130,29 @@ const dsbEnter = async (b) => {
     B.go("dsb"); B.advance(0.6);
   })()`);
 };
-const dsbApproach = async (b, name) => b.evaluate(`(() => {
-  const B = __ooga, landmark = B.dsb.land.landmarks[${JSON.stringify(name)}], p = landmark.point();
-  B.pilot.navigate({ yaw: landmark.node.rotation.y, pitch: 0.2, dist: 7, position: p, target: { x: p.x, y: 1.7, z: p.z } }); B.advance(0.1);
-})()`);
+const dsbApproach = async (b, name) => {
+  await b.evaluate(`(() => {
+    const B = __ooga, landmark = B.dsb.land.landmarks[${JSON.stringify(name)}], p = landmark.point();
+    B.pilot.navigate({ yaw: landmark.node.rotation.y, pitch: 0.2, dist: 7, position: p, target: { x: p.x, y: 1.7, z: p.z } }); B.advance(0.1);
+  })()`);
+  // Projection uses the last drawn camera; advance alone does not paint it.
+  if (!await untilPage(b, 'B.dsb.phase === "land"')) throw Error("DSB approach did not draw");
+};
+const dsbClick = async (b, selector, mobile = false) => {
+  await b.focus(true); await b.send("Page.bringToFront");
+  await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`);
+  if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the native HUD click");
+  await b.evaluate(`(async () => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center", behavior: "instant" }); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); })()`);
+  // Animation callbacks precede compositor paint. Wait for the scrolled
+  // surface to commit before sending physical coordinates into that surface.
+  await b.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false, clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 } });
+  const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(); window.__hudPointer = []; for (const type of ["pointerdown", "click"]) document.addEventListener(type, event => { window.__hudPointer.push({ type, hits: e.contains(event.target), target: event.target.id || event.target.dataset.action || event.target.tagName, x: event.clientX, y: event.clientY, detail: event.detail, at: performance.now(), scroll: document.getElementById("dsb-panel").scrollTop }); }, { once: true, capture: true }); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
+  if (!p.hits) throw Error("Blocked pointer: " + selector);
+  if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
+  else await b.click(p.x, p.y);
+  const delivered = await b.evaluate(`window.__hudPointer`);
+  if (delivered?.length !== 2 || !delivered.every(event => event.hits)) throw Error("Native pointer missed " + selector + ": " + JSON.stringify(delivered));
+};
 const dsbExit = async (b, home = "bifrost") => {
   await b.evaluate(`__ooga.dsb.gate.activate(0); if (typeof __gateClock === "number") { __gateClock += 2000; __ooga.dsb.gate.update(); }`);
   await untilPage(b, 'B.dsb.gate.state === "ACTIVE"', 5000);
@@ -6981,11 +7162,7 @@ const dsbExit = async (b, home = "bifrost") => {
 // Placement contract exercises the moved landmarks without changing travel fixtures.
 for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (mobile ? "&canvas2d=1" : "")), opts: mobile ? { ...PHONE_SIZE, motion: false } : { motion: true }, steps: [{ name: "Ooga Portal dsb plaza " + (mobile ? "canvas2d" : "webgl2"), why: "regression: moved Shop and TV keep collision, interactions, radio and cat navigation attached to their fronts", run: async b => {
   const check = (name, ok, detail = "") => record("DSB plaza " + (mobile ? "canvas2d: " : "webgl2: ") + name, ok, detail);
-  const press = async selector => {
-    const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "nearest" }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
-    if (mobile) { await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
-    else await b.click(p.x, p.y);
-  };
+  const press = selector => dsbClick(b, selector, mobile);
   check("landmark geometry and services absent during transit", await b.evaluate(`!__ooga.dsb.land && !__ooga.dsb.resources.shop && !__ooga.dsb.resources.tv && __gateDormancy.land === 0 && __gateDormancy.tv === 0 && __gateDormancy.radio === 0 && __gateDormancy.fetch === 0`));
   await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); document.querySelector('[data-action="dsb-skip"]').click();`);
   const placement = await b.evaluate(`(() => { const d = __ooga.dsb, a = d.land.landmarks, centre = { x: 0, z: 18 }; return { shop: a.shop.node.position, tv: a.tv.node.position, shopYaw: a.shop.node.rotation.y, tvYaw: a.tv.node.rotation.y, gate: d.gate.root.position, dialer: d.gate.dialer.position, land: __gateDormancy.land, tvCount: __gateDormancy.tv, inward: Object.values(a).every(l => { const p = l.point(); return Math.hypot(p.x-centre.x,p.z-centre.z) < Math.hypot(l.node.position.x-centre.x,l.node.position.z-centre.z); }) }; })()`);
@@ -7003,7 +7180,7 @@ for (const mobile of [false, true]) scene("dsb", { label: "Ooga Portal dsb plaza
     await dsbApproach(b, name);
     check(name + " prompt follows transformed front", await b.evaluate(`document.getElementById("dsb-context").textContent === ${JSON.stringify(name === "shop" ? "Visit meme shop" : "Use TV")}`));
     await press("#dsb-context");
-    if (name === "shop") { await press('[data-action="dsb-bread"]'); check("Shop purchases still work", await b.evaluate(`!document.getElementById("dsb-shop").hidden && __ooga.dsb.inventory.bread === 1 && __ooga.dsb.inventory.tokens === 17`)); await press('[data-action="dsb-close-shop"]'); }
+    if (name === "shop") { await press('[data-action="dsb-bread"]'); check("Shop purchases still work", await b.evaluate(`!document.getElementById("dsb-shop").hidden && __ooga.dsb.inventory.bread === 1 && __ooga.dsb.inventory.tokens === 17`), JSON.stringify(await b.evaluate(`({ inventory:__ooga.dsb.inventory, phase:__ooga.dsb.phase, hidden:document.getElementById("dsb-shop").hidden })`))); await press('[data-action="dsb-close-shop"]'); }
     else { check("TV opens through native interaction", await b.evaluate(`__ooga.dsb.tv.isOpen`)); await press("#dsb-tv-close"); }
   }
   const audio = await b.evaluate(`(() => { const B=__ooga, d=B.dsb, source=d.land.landmarks.tv.point(-0.55,3.3,1.63), boat=d.land.boats[0].position; B.audio.environment({...B.camera,position:source},boat,5,source); const near=B.audio.radioVolume; B.audio.environment({...B.camera,position:{x:-10,y:3.3,z:14.6}},boat,5,source); const old=B.audio.radioVolume; BL.scene.updateWorld(d.land.root); const w=d.land.tvScreen.world; return { near,old,source,matches:Math.hypot(source.x-w[12],source.y-w[13],source.z-w[14])<1e-5 }; })()`);
@@ -7079,10 +7256,14 @@ scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ nam
     } finally { window.fetch = saved; }
   })()`);
   record("dsb chat: fixed HTTP transport rejects unsafe responses and defaults to mock", transport);
+  const approachTalk = async () => { await b.evaluate(`      (() => { const B = __ooga, z = B.dsb.zuzu.root.position;
+      for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8, x = z.x + Math.cos(a) * 2, q = z.z + Math.sin(a) * 2; if (!B.dsb.clearAt(x, q, B.dsb.avatar.bodyRadius)) continue; B.pilot.navigate({ yaw: 0, pitch: 0.2, dist: 7, target: { x, y: 1.7, z: q }, position: { x, y: 0, z: q } }); B.advance(1 / 60, 1 / 60); const e = document.getElementById("dsb-context"); if (!e.hidden && e.textContent === "Talk to Zuzu") break; }
+      if (document.getElementById("dsb-context").textContent !== "Talk to Zuzu") throw Error("No eligible Talk position near Zuzu"); })();`); };
   const settle = async () => {
-    await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); __ooga.advance(__ooga.audio.duration + 1, 0.1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); __ooga.pilot.navigate({ yaw: 0, pitch: 0.2, dist: 7, target: { x: -4, y: 1.7, z: 26 }, position: { x: -4, y: 0, z: 26 } }); __ooga.advance(0.2);`);
+    await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); __ooga.advance(__ooga.audio.duration + 1, 0.1); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));`);
+    await approachTalk();
   };
-  const click = async selector => { const p = await b.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`); await b.click(p.x, p.y); };
+  const click = async selector => { await b.focus(true); await b.send("Page.bringToFront"); await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`); await untilPage(b, "!document.pointerLockElement", 3000); const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; if (!e.contains(document.elementFromPoint(x, y))) throw Error("Blocked pointer: " + ${JSON.stringify(selector)}); return { x, y }; })()`); await b.click(p.x, p.y); };
   const send = async message => { await b.evaluate(`document.getElementById("zuzu-message").value = ${JSON.stringify(message)}; document.getElementById("zuzu-form").requestSubmit();`); if (!await untilPage(b, "!B.dsb.conversation.busy", 3000)) throw Error("Conversation did not settle"); };
   await settle(); await b.key("2");
   await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
@@ -7111,8 +7292,11 @@ scene("dsb", { label: "dsb zuzu conversation", url: hubPage(dist), steps: [{ nam
   record("dsb chat: closing restores movement", move > 0.1, String(move));
   await b.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 740, deviceScaleFactor: 1, mobile: true });
   await b.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-  await b.evaluate(`document.getElementById("zuzu-message").value = ""; document.getElementById("dsb-context").click();`);
+  await approachTalk();
+  await b.evaluate(`document.getElementById("zuzu-message").value = "";`);
   const tap = async selector => { const p = await b.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`); await b.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p] }); await b.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); };
+  await tap("#dsb-context");
+  if (!await untilPage(b, "B.dsb.conversation.isOpen", 3000)) throw Error("Touch Talk did not open the conversation");
   await tap("#zuzu-message");
   await b.send("Input.insertText", { text: "こんにちは 🐈" });
   await b.evaluate(`document.getElementById("zuzu-message").dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));`);
@@ -7200,8 +7384,7 @@ scene("dsb", { label: "dsb zuzu agent", url: hubPage(dist, "scene=dsb"), steps: 
   await b.evaluate(`__ooga.go("dsb");`);
   if (!await untilPage(b, 'B.scene === "dsb" && !B.transitioning', 10000)) throw Error("DSB reentry failed");
   record("dsb zuzu: transit reentry has no agent", await b.evaluate("!__ooga.dsb.zuzu"));
-  await b.evaluate(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 0); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" }));`);
-  const reset = await b.evaluate(`(() => { const s = __ooga.dsb.zuzu.snapshot(); return { events: s.events.length, hits: s.self.tomatoHits }; })()`);
+  const reset = await b.evaluate(`(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); BL.scenes.dsb.update(__ooga.audio.duration + 1, 0); window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); const s = __ooga.dsb.zuzu.snapshot(); return { events: s.events.length, hits: s.self.tomatoHits }; })()`);
   record("dsb zuzu: new visit resets session memory", reset.events === 0 && reset.hits === 0, JSON.stringify(reset));
 } }] });
 for (const ready of [false, true]) scene("dsb", { label: "entrance audio " + ready, url: hubPage(dist, "scene=dsb"), steps: [{ name: "dsb entrance " + (ready ? "audio enabled" : "audio blocked"), why: "regression: blocked audio must not block entrance movement", run: async (b) => {
@@ -7250,7 +7433,7 @@ for (const ready of [false, true]) scene("dsb", { label: "entrance audio " + rea
 
   } }] });
 for (const fallback of [false, true]) scene("dsb", { label: "dsb gameplay " + (fallback ? "canvas2d" : "webgl2"), url: hubPage(dist, "scene=dsb" + (fallback ? "&canvas2d=1" : "")), steps: [{ name: "dsb gameplay " + (fallback ? "canvas2d" : "webgl2"), why: "contract: preserve DSB scene behavior independently of the hub entrance", run: async (b) => {
-  const click = async (selector) => { const p = await b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: "center" }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, hits: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`); if (!p.hits) throw Error("Blocked pointer: " + selector); await b.click(p.x, p.y); };
+  const click = selector => dsbClick(b, selector);
   const walkTo = async (x, z) => b.evaluate(`__ooga.pilot.navigate({ yaw: 0, pitch: 0.2, dist: 7, target: { x: ${x}, y: 1.7, z: ${z} }, position: { x: ${x}, y: 0, z: ${z} } }); __ooga.advance(0.15);`);
   await b.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await b.key("m"); await untilPage(b, "B.audio.ready", 10000);
@@ -7285,10 +7468,19 @@ for (const fallback of [false, true]) scene("dsb", { label: "dsb gameplay " + (f
   const projectile = await b.evaluate(`(() => {
     const B = __ooga, geometry = BL.dsbModels.cube("#ef4256"), node = B.dsb.land.root.children.find(n => n.geometry === geometry && n.visible);
     if (!node) return { created: false };
-    const start = { ...node.position }, screen = B.project(start.x, start.y, start.z), inventory = B.dsb.inventory.tomatoes;
+    const start = { ...node.position }, inventory = B.dsb.inventory.tomatoes;
+    // Measure flight after the projectile has left the player's hand.
     B.advance(0.12); const moved = Math.hypot(node.position.x - start.x, node.position.z - start.z);
-    B.advance(0.8); const splat = node.visible && node.position.y === 0.04 && node.scale.y === 0.06;
-    B.advance(1.5); return { created: true, inventory, visibleInView: screen.x >= 0 && screen.x <= innerWidth && screen.y >= 0 && screen.y <= innerHeight, moved, splat, expired: !node.visible && B.dsb.shots === 0 };
+    let visibleInView = false, flightFrames = 0;
+    // A side shoulder starts the shot outside its frustum. It must enter the
+    // view during early flight, while moving and before its floor splat.
+    for (; flightFrames < 18; flightFrames++) {
+      const screen = B.project(node.position.x, node.position.y, node.position.z);
+      if (node.visible && node.position.y > 0.12 && screen && screen.x >= 0 && screen.x <= innerWidth && screen.y >= 0 && screen.y <= innerHeight) { visibleInView = true; break; }
+      B.advance(1 / 60);
+    }
+    B.advance(0.8 - flightFrames / 60); const splat = node.visible && node.position.y === 0.04 && node.scale.y === 0.06;
+    B.advance(1.5); return { created: true, inventory, visibleInView, flightFrames, moved, splat, expired: !node.visible && B.dsb.shots === 0 };
   })()`);
   record("dsb gameplay: throwing consumes inventory and creates a visible moving tomato that splats and expires", projectile.created && projectile.inventory === 0 && projectile.visibleInView && projectile.moved > 1 && projectile.splat && projectile.expired, JSON.stringify(projectile));
   await b.key("b"); record("dsb gameplay: banana can be eaten", await b.evaluate(`__ooga.dsb.inventory.bananas === 0`));
@@ -7468,16 +7660,11 @@ scene("dsb", { label: "dsb feeds and audio", url: hubPage(src, "scene=dsb"), ste
 scene("dsb", { label: "dsb arrival camera", url: hubPage(src, "scene=dsb"), steps: [{ name: "dsb arrival camera", why: "contract: preserve DSB scene behavior independently of the hub entrance", run: async (b) => {
   await b.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   await b.key("w"); await untilPage(b, "B.audio.ready", 10000);
-  await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
-  await b.evaluate(`__ooga.advance(2.6, 1 / 60)`);
-  await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "w" });
-  const left = await b.evaluate(`({ cue: __ooga.audio.cue, glance: __ooga.dsb.glance, behind: __ooga.camera.position.z - __ooga.dsb.avatar.root.position.z })`);
+  const glanceAtCue = async cue => b.evaluate(`(() => { const B = __ooga; window.dispatchEvent(new KeyboardEvent("keydown", { key: "w" })); try { for (let i = 0; i < 1200 && B.audio.cue < ${cue}; i++) B.advance(1 / 60, 1 / 60); B.advance(0.5, 1 / 60); return { cue: B.audio.cue, glance: B.dsb.glance, behind: B.camera.position.z - B.dsb.avatar.root.position.z }; } finally { window.dispatchEvent(new KeyboardEvent("keyup", { key: "w" })); } })()`);
+  const left = await glanceAtCue(0);
   if (process.env.DSB_CAPTURE) await b.screenshot(join(root, "untracked", "dsb-passage.png"));
   await untilPage(b, "!B.audio.pending", 12000);
-  await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
-  await b.evaluate(`__ooga.advance(8.7, 1 / 60)`);
-  await b.send("Input.dispatchKeyEvent", { type: "keyUp", key: "w" });
-  const right = await b.evaluate(`({ cue: __ooga.audio.cue, glance: __ooga.dsb.glance })`);
+  const right = await glanceAtCue(1);
   record("dsb passage camera: real voice starts alternate gentle glances while staying behind the Ooga", left.cue === 0 && left.glance < -0.03 && left.behind > 3.9 && right.cue === 1 && right.glance > 0.03 && Math.abs(left.glance) <= 0.16 && Math.abs(right.glance) <= 0.16, JSON.stringify({ left, right }));
   await b.key("m");
   await b.send("Input.dispatchKeyEvent", { type: "keyDown", key: "w" });
@@ -7589,7 +7776,8 @@ scene("dsb", { label: "dsb shared player", url: hubPage(dist), steps: [{ name: "
   await b.key("v");
   record("dsb shared player: TV opens with weapons suspended", await b.evaluate('__ooga.dsb.tv.isOpen && !__ooga.dsb.avatar.weapon.triggerHeld'));
   await b.evaluate('document.getElementById("dsb-tv-close").click(); __ooga.advance(0.1)');
-  await place(-7, 30.5); await b.evaluate('document.getElementById("dsb-context").click()');
+  await dsbExit(b);
+  await b.evaluate('__ooga.go("hub"); __ooga.advance(0.6)');
   await untilPage(b, 'B.scene === "hub" && !B.transitioning', 15000);
   const back = await b.evaluate(`({ name: __ooga.pilot.player?.traits.name, ammo: __ooga.pilot.player?.weapon.ammo, spare: __ooga.pilot.player?.weapon.spareAmmo.join(), original: __hubAmmo })`);
   record("dsb shared player: return restores identity and leaves hub ammunition untouched", back.name === "rules-without-rulers" && back.ammo === back.original.ammo && back.spare === back.original.spare, JSON.stringify(back));
@@ -7613,6 +7801,8 @@ scene("dsb", { label: "dsb character continuity", url: hubPage(dist), steps: [{ 
     })()`);
     record("dsb character: " + name + " enters with the canonical model", avatar.name === name && avatar.rebuilt && avatar.canonical, JSON.stringify(avatar));
     await b.key("Escape");
+    await untilPage(b, 'B.scene === "bifrost" && !B.transitioning', 15000);
+    await b.evaluate('__ooga.go("hub"); __ooga.advance(0.6)');
     await untilPage(b, 'B.scene === "hub" && !B.transitioning', 15000);
     const returned = await b.evaluate(`({ name: __ooga.pilot.player?.traits.name, rebuilt: __ooga.pilot.player?.root !== __dsbPreviousRoot })`);
     record("dsb character: " + name + " returns possessed", returned.name === name && returned.rebuilt, JSON.stringify(returned));
@@ -7699,18 +7889,39 @@ const dsbSoak = async (b) => {
     await b.send("HeapProfiler.collectGarbage");
     // Count the page before Chrome's heap-snapshot machinery can add an inspector node.
     const dom = (await b.send("Memory.getDOMCounters")).result;
-    const chunks = [];
-    b.on("HeapProfiler.addHeapSnapshotChunk", (p) => chunks.push(p.chunk));
-    await b.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false });
-    b.on("HeapProfiler.addHeapSnapshotChunk", null);
-    const snap = JSON.parse(chunks.join(""));
-    const { node_fields: fields, node_types: [types] } = snap.snapshot.meta;
-    const iType = fields.indexOf("type"), iSize = fields.indexOf("self_size"), code = types.indexOf("code");
+    // Heap snapshots can exceed Node's string limit. Count the same node
+    // records as chunks arrive, retaining only the header and one number.
+    let header = "", token = "", fields = null, types = null, done = false;
+    let iType = -1, iSize = -1, code = -1, expected = 0, values = 0, type = -1;
     let total = 0, compiled = 0;
-    for (let i = 0; i < snap.nodes.length; i += fields.length) {
-      total += snap.nodes[i + iSize];
-      if (snap.nodes[i + iType] === code) compiled += snap.nodes[i + iSize];
-    }
+    b.on("HeapProfiler.addHeapSnapshotChunk", ({ chunk }) => {
+      if (done) return;
+      if (!fields) {
+        header += chunk;
+        const match = /"nodes"\s*:\s*\[/.exec(header);
+        if (!match) return;
+        const meta = JSON.parse(header.slice(0, match.index) + '"nodes":[]}').snapshot;
+        fields = meta.meta.node_fields; types = meta.meta.node_types[0];
+        iType = fields.indexOf("type"); iSize = fields.indexOf("self_size"); code = types.indexOf("code");
+        expected = meta.node_count * fields.length;
+        chunk = header.slice(match.index + match[0].length); header = "";
+      }
+      for (let i = 0; i < chunk.length; i++) {
+        const ch = chunk[i];
+        if (ch >= "0" && ch <= "9") { token += ch; continue; }
+        if (token) {
+          const value = Number(token), field = values++ % fields.length;
+          if (field === iType) type = value;
+          if (field === iSize) { total += value; if (type === code) compiled += value; }
+          token = "";
+        }
+        if (ch === "]") { done = true; break; }
+      }
+    });
+    try { await b.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false }); }
+    finally { b.on("HeapProfiler.addHeapSnapshotChunk", null); }
+    if (!done || values !== expected || iType < 0 || iSize <= iType || code < 0)
+      throw new Error("Incomplete heap node accounting");
     return { used: (await b.send("Runtime.getHeapUsage")).result.usedSize, objects: total - compiled, code: compiled, nodes: dom.nodes, listeners: dom.jsEventListeners };
   };
   const snapshot = async (stats = null) => {
@@ -7726,7 +7937,7 @@ const dsbSoak = async (b) => {
     }
   };
   // A go() during a running transition is ignored: wait for swap, frames, animations and the fade first.
-  const travel = (id) => b.evaluate(`new Promise((resolve) => { const B = window.__ooga; const T = window.BL.scene.tweenCount; const t0 = performance.now(); let last = t0, swap = 0, swapFrame = 0, swapGap = 0; B.go(${JSON.stringify(id)}); const tick = () => { const now = performance.now(); if (!swap && B.scene === ${JSON.stringify(id)}) { swap = now - t0; swapGap = now - last; swapFrame = B.renderedFrames; } last = now; if (swap && B.renderedFrames >= swapFrame + 3 && T() === 0 && !B.transitioning) resolve({ swap, swapGap, settled: now - t0 }); else if (now - t0 > 8000) resolve({ stuck: { scene: B.scene, tweens: T(), framesSinceSwap: swap ? B.renderedFrames - swapFrame : -1, swap: Math.round(swap) } }); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`);
+  const travel = (id) => b.evaluate(`new Promise((resolve, reject) => { const B = window.__ooga; const T = window.BL.scene.tweenCount; const t0 = performance.now(); let last = t0, requested = false, swap = 0, swapFrame = 0, swapGap = 0, accepted = false; const startFrames = B.renderedFrames, trail = []; const tick = () => { const now = performance.now(); const state=B.scene+":"+B.transitioning; if (!trail.length || trail[trail.length-1].state!==state) { if(trail.length<20)trail.push({state,at:now-t0,frames:B.renderedFrames}); } if (!requested && !B.transitioning && T() === 0) { accepted = B.go(${JSON.stringify(id)}); requested = true; } if (requested && !swap && B.scene === ${JSON.stringify(id)}) { swap = now - t0; swapGap = now - last; swapFrame = B.renderedFrames; } last = now; if (swap && B.renderedFrames >= swapFrame + 3 && T() === 0 && !B.transitioning) resolve({ swap, swapGap, settled: now - t0 }); else if (now - t0 > 8000) reject(new Error("Scene travel did not settle: " + JSON.stringify({ wanted: ${JSON.stringify(id)}, scene: B.scene, accepted, trail, framesTotal: B.renderedFrames-startFrames, hidden: document.hidden, focus: document.hasFocus(), requested, tweens: T(), framesSinceSwap: swap ? B.renderedFrames - swapFrame : -1, swap: Math.round(swap) }))); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`);
   const heapDetail = (a, z) => `objects ${mb(a.objects)} -> ${mb(z.objects)} MB (used ${mb(a.used)} -> ${mb(z.used)} MB, code ${mb(a.code)} -> ${mb(z.code)} MB)`;
   const within = (a, z, share) => Math.abs(z.objects - a.objects) <= a.objects * share;
   return { until, rendered, settled, snapshot, travel, heapDetail, within };
@@ -7734,6 +7945,9 @@ const dsbSoak = async (b) => {
 
 scene("dsb", { label: "lifecycle", url: hubPage(src), steps: [{ name: "dsb lifecycle", why: "contract: repeated DSB visits release nodes, listeners and GPU resources", run: async (b) => {
   const { rendered, settled, snapshot, travel, heapDetail, within } = await dsbSoak(b);
+  // The weather deck is sized by tier on each visit. Compare the same tier;
+  // low is terminal, so the governor cannot change capacity during the soak.
+  await b.evaluate('window.__ooga.renderer.setQuality("low")');
   // Warm the new cached model builders before comparing retained memory.
   await travel("dsb"); await travel("hub"); await settled(); await rendered(2);
   const before = await snapshot();
@@ -7746,6 +7960,8 @@ scene("dsb", { label: "lifecycle", url: hubPage(src), steps: [{ name: "dsb lifec
 
 scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "factory lifecycle", why: "contract: repeated factory visits release the hall's listeners, nodes and GPU resources while retaining one bounded shared node", run: async (b) => {
   const { rendered, settled, snapshot, travel, heapDetail, within } = await dsbSoak(b);
+  // Keep resource comparisons at one tier, as in the other lifecycle soaks.
+  await b.evaluate('__ooga.renderer.setQuality("low")');
   await b.evaluate(`(() => {
     const node = __ooga.factory.node, feed = node.feed, subscribe = feed.subscribe;
     window.__factoryLife = { node, subscriptions: 0 };
@@ -7756,17 +7972,23 @@ scene("factory", { label: "lifecycle", url: hubPage(src), steps: [{ name: "facto
     };
   })()`);
   // Warm both scenes, so the counts below start from a visit made after the instrumenting.
-  await travel("factory"); await travel("hub"); await settled(); await rendered(2);
+  await travel("factory"); await travel("lab"); await travel("hub"); await settled(); await rendered(2);
   const before = await snapshot(), visits = [];
   for (let i = 0; i < 6; i++) {
-    await travel("factory"); await travel("hub"); await settled(); await rendered(2);
-    visits.push(await b.evaluate(`(() => {
+    await travel("factory");
+    // One listener belongs to the hall and one to Flink; both leave with the scene.
+    const hall = await b.evaluate('__factoryLife.subscriptions');
+    await travel("lab");
+    const away = await b.evaluate('__factoryLife.subscriptions');
+    await travel("hub"); await settled(); await rendered(2);
+    const visit = await b.evaluate(`(() => {
       const n = __ooga.factory.node;
       return { same: n === __factoryLife.node, subscriptions: __factoryLife.subscriptions, lines: n.placeOf.size, places: n.bays.length + n.stands.length };
-    })()`));
+    })()`);
+    visits.push({ ...visit, hall, away });
   }
   const after = await snapshot(), same = (key) => before.stats[key] === after.stats[key];
-  record("soak: factory cycles: one bounded node survives six round trips, the hall's subscription released, without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.subscriptions === 0 && v.lines <= v.places)
+  record("soak: factory cycles: one bounded node survives six round trips, the hall's subscription released, without retaining scene nodes, targets or DOM", visits.every((v) => v.same && v.hall === 2 && v.away === 0 && v.subscriptions === 1 && v.lines <= v.places)
     && same("allNodes") && same("targets") && same("dom") && after.stats.tweens === 0, JSON.stringify({ visits, before: before.stats, after: after.stats }));
   record("soak: factory cycles: GPU records, listeners and retained heap remain bounded", Math.abs(after.stats.gl.records - before.stats.gl.records) <= 3 && before.nodes === after.nodes && before.listeners === after.listeners && within(before, after, 0.1), heapDetail(before, after));
 } }] });
@@ -8221,6 +8443,7 @@ const unitChecks = async () => {
   // Scene state built directly instead of booted; seed 1 matches scene-hub.js.
   // Sealed cave guides need the hub's seal nodes, so probes reading them stay in the browser tier.
   const island = BL.terrain.island({ seed: 1 });
+
   {
     // #93: compare the actual weld against independent coordinates, not a fixed hash of trig-built terrain.
     // The source includes duplicates, signed zero on every axis, adjacent doubles and a nonempty line.
@@ -8253,7 +8476,7 @@ const unitChecks = async () => {
   {
     const expected = {
       c11: [6.25, 0.75, 6.75], c10: [6.25, 0.75, 6.75], c9: [7, 0.5, 6.75],
-      c1: [6.25, 0.75, 6.75], c2: [6.25, 0.75, 6.75], c3: [7, 0.5, 6.75]
+      c1: [6.25, 0.75, 6.75], c2: [6.25, 0.75, 6.75], c3: [6.5, 0.5, 6.75]
     };
     const column = { caveIndex: 0, floor: 0, ceiling: 0 }, rows = [];
     for (let caveIndex = 0; caveIndex < island.mouths.length; caveIndex++) {
@@ -8453,7 +8676,7 @@ const unitChecks = async () => {
       scattered.push({ x: aim.x, y: aim.y, present: health.damage.contains(aim.x, aim.y), stable: aim.x === repeated.x && aim.y === repeated.y && aim.z === repeated.z });
     }
     health.damage.hit(BL.mirrorDamage.PANEL_DAMAGE, 0.2, 0.1, 0);
-    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === 80 && !health.damage.holes && healthArray.every(value => value === 8);
+    const crackedVertices = Array.from(health.panel.geometry.verts), allCracked = health.damage.crackDamage === BL.mirrorDamage.PANEL_DAMAGE && !health.damage.holes && healthArray.every(value => value === 8);
     health.damage.hit(2, 0.2, 0.1, 0);
     const halfHealth = Array.from(healthArray), halfIntact = !health.damage.holes && !health.damage.active && crackedVertices.every((value, i) => value === health.panel.geometry.verts[i]);
     health.damage.hit(6, 0.2, 0.1, 0);
@@ -8610,7 +8833,7 @@ const unitChecks = async () => {
     record("mirror damage: subsequent impacts choose nearby panes and interrupted repair spends proportional health while dropping only present glass", locality[0].mean < -0.8 && locality[1].mean > 0.8 && locality.every(row => row.count === 4) && wasMissing && regrownCenter && Math.abs(spent - 8) < 1e-9 && shards.length > 0 && shards.length <= maxFragments && samples > 0 && removed > 0 && !overHole && !remoteRemoved && !holeFilled, JSON.stringify({ locality, wasMissing, regrownCenter, spent, maxFragments, shards: shards.length, samples, removed, overHole, remoteRemoved, holeFilled }));
   }
   {
-    const S = BL.scene, root = S.createNode(), owners = [], damage = [], player = {}, system = BL.breakables.create({ root, renderer: {}, fx: { burst() {}, damageNumber(x, y, z, amount) { damage.push({ x, y, z, amount }); } }, crew: { player },
+    const S = BL.scene, root = S.createNode(), owners = [], damage = [], player = { root: S.createNode(), baseY: 0, bodyRadius: 0.3, bodyHeight: 1.7 }, system = BL.breakables.create({ root, renderer: {}, fx: { burst() {}, damageNumber(x, y, z, amount) { damage.push({ x, y, z, amount }); } }, crew: { player, collectGroundMagazine: amount => amount },
       deactivate(owner) { owner.active = owner.node.visible = false; }, relocate: () => false, collectReward: () => false });
     for (let i = 0; i < 26; i++) {
       const owner = { kind: "prop", prop: "crate", node: S.createNode({ geometry: BL.models.box({ w: 1, h: 1, d: 1, color: "#888888" }) }), active: true };
@@ -8720,7 +8943,7 @@ const unitChecks = async () => {
   }
   {
     const meshes = solidPropsProbe();
-    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings across tree crowns while preserving the gate's openings`, meshes.length === 14 && meshes.every((row) => row.ok), JSON.stringify(meshes));
+    for (const backend of backends) record(`solid props ${backend}: actual prop meshes block bodies and support landings across tree crowns while preserving the gate's openings`, meshes.length === 13 && new Set(meshes.map((row) => row.name)).size === 13 && meshes.every((row) => row.ok), JSON.stringify(meshes));
   }
   {
     const r = windowFlareProbe();
@@ -8843,7 +9066,13 @@ try {
   // No ledger yet.
 }
 const now = new Date().toISOString();
+// A check can run in both renderers. Any failure wins over another instance's pass.
+const ledgerResults = new Map();
 for (const r of results) {
+  const prior = ledgerResults.get(r.name);
+  if (!prior || !r.ok && !r.open) ledgerResults.set(r.name, r);
+}
+for (const r of ledgerResults.values()) {
   if (r.ok || r.open) delete ledger[r.name];
   else ledger[r.name] = { streak: (ledger[r.name]?.streak || 0) + 1, first: ledger[r.name]?.first || now, last: now, detail: r.detail.slice(0, 600) };
 }

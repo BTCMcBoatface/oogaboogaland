@@ -752,7 +752,7 @@
       createReader(state = null) {
         const canvas = document.createElement("canvas");
         canvas.width = BOARD_W; canvas.height = BOARD_H;
-        const context = canvas.getContext("2d", { alpha: false });
+        const context = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
         let filters = { repos: state?.filters?.repos ?? null, users: state?.filters?.users ?? null, types: state?.filters?.types ?? null };
         let rollup = state?.rollup === true;
         let source = filteredModel(model, filters), pages = buildCycle(source, source !== model, filters.repos);
