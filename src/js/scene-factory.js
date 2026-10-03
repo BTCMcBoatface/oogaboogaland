@@ -121,7 +121,7 @@
   let shared = null, feed = null, mock = null, unsubscribe = null, leaving = false, dust = null;
   // The Ooga the visitor walked in as: one playable actor from the shared crew, and the world it carries.
   let people = null, avatar = null, playerWorld = null;
-  let scene = null, greeter = null;
+  let scene = null, greeter = null, greeterPrompt = false;
   const targets = [];
   const SAT_POS = { x: 0, y: 0, z: 0 }, SAT_ROT = { x: 0, y: 0, z: 0 }, SAT_SCALE = { x: 1, y: 1, z: 1 };
   const SAT_M = mat4.create();
@@ -395,6 +395,8 @@
     if (e.key === "g" || e.key === "G") return pilot.weaponAction("weapon-toggle");
     if (e.key === "v" || e.key === "V") return pilot.weaponAction("weapon-fire");
     if (e.key === "Escape") {
+      // The foreman's open menu swallows Escape first; only with none up does Escape leave the cave.
+      if (greeter && greeter.escape()) return true;
       leaveCave();
       return true;
     }
@@ -780,8 +782,7 @@
     });
     const tipFor = (hit) => {
       const o = hit.owner, tip = TIPS[o.kind];
-      if (o.kind === "greeter") return COARSE ? "Factory foreman · tap to talk" : "Factory foreman · Space to talk";
-      if (o.kind === "greeter-choice") return "Factory tour · tap to choose";
+      if (o.kind === "greeter") return COARSE ? `${BL.factoryGreeter.NAME} the foreman · tap to talk` : `${BL.factoryGreeter.NAME} the foreman · Space to talk`;
       if (o.kind === "line" || o.kind === "tunnel") {
         const b = o.place, c = b.line && mock.snapshot.channels.find((ch) => ch.id === b.line);
         return o.kind === "line" ? `Channel ${b.letter}${c ? ` · peer ${c.peer}` : ""}` : `Peer tunnel${c ? ` · ${c.peer}` : ""}`;
@@ -799,7 +800,6 @@
         const o = hit.owner;
         if (o.kind === "exit") return leaveCave();
         if (o.kind === "greeter") return greeter.greet();
-        if (o.kind === "greeter-choice") return greeter.choose(o.choice);
         if (o.preset) pilot.goPreset(o.preset);
         const tip = TIPS[o.kind];
         if (tip) hud.toast(tip[1]);
@@ -872,10 +872,12 @@
     unsubscribe = feed.subscribe(onEvent);
     refreshBoards(scene);
     leaving = false;
+    greeterPrompt = false;
     greeter = BL.factoryGreeter.create({ parent: root, input, fx, feed,
       visitor: () => people && people.player === avatar ? avatar : null,
-      demoRunning: () => feed.reading.contract === "obl.factory.demo.v1" || feed.reading.contract === null && !!shared.mock, leaveCave, coarse: COARSE });
-    if (!avatar) greeter.greet(false);
+      demoRunning: () => feed.reading.contract === "obl.factory.demo.v1" || feed.reading.contract === null && !!shared.mock, coarse: COARSE });
+    // With no Ooga the visitor cannot talk to the foreman: a hint points them to the island to pick one.
+    if (!avatar) hud.hint(`${BL.factoryGreeter.NAME} the foreman gives tours here — pick an Ooga on the island first`);
 
     factoryScene.root = root;
     factoryScene.camera = camera;
@@ -1239,6 +1241,11 @@
       refreshBoards(s);
     }
     greeter.update(dt, elapsed);
+    // The act button talks to the foreman in reach, starts the picked tour or skips a line ahead, the way the
+    // hub shows ENTER ARCADE by its door; the pilot's own label returns once the offer is gone.
+    const actLabel = avatar && greeter.actLabel();
+    if (actLabel) { hud.setAct(actLabel); greeterPrompt = true; }
+    else if (greeterPrompt) { greeterPrompt = false; pilot.showAct(); }
     stepTweens(dt);
     fx.update(dt, elapsed);
   };

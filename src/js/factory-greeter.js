@@ -1,4 +1,4 @@
-// The factory's scripted foreman. One visit owns the rig, pickable world signs and feed subscription.
+// The factory's foreman, Flink. One visit owns the rig, the on-screen tour menu and the feed subscription.
 // Dialogue is data for later speech. The tour observes events; it never drives the node or the visitor.
 (() => {
   "use strict";
@@ -6,65 +6,65 @@
   const { models, contributors, factoryModels: FM } = BL;
   const { createNode, addChild, removeChild } = BL.scene;
   const DEMO = "obl.factory.demo.v1", HEIGHT = 1.05, BASE = HEIGHT * 5 / 16;
+  // His name sits with the dialogue: the act button reads TALK TO FLINK in his reach, the menu heads itself with it.
+  const NAME = "Flink";
   const LINES = {
-    greeting: "Want a factory tour? Press Space.",
-    greetingTouch: "Want a factory tour? Tap me.",
-    demo: "Demo node. Want a tour? Press Space.",
-    demoTouch: "Demo node. Want a tour? Tap me.",
-    noOogaDemo: "Demo node. Pick an Ooga on the island.",
-    noOoga: "Pick an Ooga on the island for a tour.",
-    follow: "Follow me: channels, core, switchboard.",
-    channels: "Channels connect this node to its peers. A payment can pass through several nodes on its journey.",
-    core: "The core represents this node. Forwarding passes a payment onward; it does not mine a Bitcoin block.",
-    outcomes: "The switchboard shows reported activity. Settled means the forward succeeded. Failed tells us the outcome, not its cause.",
-    privacy: "The public feed leaves routes and fees private. We cannot reconstruct a payment's journey from an outcome.",
-    quiet: "No forward has arrived for this tour. We can still explain the machinery without making up an event.",
-    settled: "A forward was reported settled. That report does not tell us its complete route or fee.",
-    failed: "A forward was reported failed. The report does not tell us why it failed.",
-    demoReport: "This report comes from the simulated demo node, not a real node's activity.",
-    replayReport: "This is replayed earlier activity. It is not a new event happening now.",
-    menu: "Tap a tour. Arrows choose; Enter starts it.",
-    followChannels: "Follow me to the forge and a channel.",
-    followRebalancing: "Follow me to the rebalancer.",
-    followHealth: "Follow me upstairs to the watchtower.",
-    forge: "The forge represents the channel's connection to Bitcoin. Opening and closing channels involves on-chain transactions.",
-    opening: "Opening commits funds to a channel. The carts represent that process; their number is a size category, not an exact amount.",
-    closing: "Closing settles the channel back on-chain. The minted coin is the factory's illustration, not a coin we create for this tour.",
-    channelStatus: "Each occupied station represents a channel. Its status can change as opening, active, closing and closed reports arrive.",
-    slots: "Public channel slots are temporary labels for this day. They do not reveal a peer's lasting identity or a payment route.",
-    fundsPrivate: "A channel's public capacity is not its spendable balance in either direction. We cannot infer private liquidity here.",
-    channelQuiet: "No channel event has arrived during this tour. We can explain the station without guessing its next change.",
-    channelOpeningReport: "A channel opening was reported. That alone does not mean the channel is already active.",
-    channelActiveReport: "An active channel was reported. This report does not disclose its private balances.",
-    channelClosingReport: "A channel closing was reported. We should not call it closed before a closed report arrives.",
-    channelClosedReport: "A closed channel was reported. That tells us its reported state, not a payment route or a private balance.",
-    channelDone: "That is how the forge and channels fit together. I will return to the entrance for your next tour.",
-    liquidity: "Channels need usable liquidity to keep forwarding. Public capacity alone does not tell us how much can move each way.",
-    rebalancer: "The rebalancer represents shifting liquidity so channels can keep working. Its rings respond to reported activity.",
-    rebalanceHour: "Rebalance reports are grouped by the hour. The animation is an illustration, not an exact timestamp for the movement.",
-    rebalancePrivate: "These reports deliberately do not name a channel or reveal its balance. A failed rebalance does not give us a cause.",
-    rebalanceQuiet: "No rebalance report has arrived during this tour. We do not need to trigger one to explain this machine.",
-    rebalanceSucceededReport: "A successful rebalance was reported. It does not tell us which channels were involved or their balances.",
-    rebalanceFailedReport: "A failed rebalance was reported. No failure reason or channel balance is supplied.",
-    rebalanceDone: "That is rebalancing. The machine shows reported activity; the channels' private balances stay private.",
-    healthCore: "The core represents the node's reported state. It lights as the node starts or becomes ready, and darkens on a stopped report.",
-    unknownNode: "We have no reported node state. Missing information is not evidence that the node has stopped.",
-    startingNode: "The last reported node state is starting. That is a report, not a guarantee about every function of the node.",
-    readyNode: "The last reported node state is ready. It is not a fresh health check or a guarantee that every forward will succeed.",
-    stoppedNode: "The last reported node state is stopped. This is different from merely losing the feed's signal.",
-    watchtower: "Look up at the watchtower. Its beam follows incoming feed activity, not a complete health diagnosis of the node.",
-    waitingSignal: "The feed has not received an event yet. We are waiting for information; the node's health is unknown.",
-    silentSignal: "The feed is quiet. The beam can go dark even if the node is fine. Silence is not a stopped report.",
-    liveSignal: "Events are arriving. That shows an active feed, not proof that every part of the node is healthy.",
-    replaySignal: "Earlier events are being replayed. The beam shows incoming signal, not fresh evidence of the node's health now.",
-    summary: "Activity summaries are derived reports. They describe activity, not a diagnosis or private channel balances.",
-    noSummary: "No activity summary has been supplied. We will not fill in counts or a success rate ourselves.",
-    healthDone: "A reported state and a feed signal answer different questions. That is our node health tour; I will head back to my post.",
-    done: "That is forwarding. Explore at your own pace. I will be back at the entrance if you want another tour.",
-    warning: "Still coming? I will wait here a moment.",
-    abandoned: "Lost my visitor! Back to my post.",
-    cancelled: "All right. Back to my post.",
-    blocked: "Path blocked. Back to my post."
+    greeting: "Ooga! Me Flink, the foreman. Want a look round?",
+    greetingDemo: "Ooga! Me Flink. Mind — this node is a demo one.",
+    noOogaDemo: "Demo node today! Pick an Ooga on the island.",
+    noOoga: "No Ooga, no tour! Pick one on the island.",
+    menu: "Four tours! Pick one.",
+    follow: "Come come! Lines, the core, the switchboard.",
+    channels: "Lines are channels to peers. A payment can hop node to node.",
+    core: "The core is this node. It forwards payments; it mines nothing.",
+    outcomes: "Settled means it went through. Failed means it did not — never why.",
+    privacy: "Routes and fees stay private. We see outcomes, not journeys.",
+    quiet: "Quiet shift — no forward came by. The machines explain themselves.",
+    settled: "A forward just settled. Its route and fee stay private.",
+    failed: "A forward just failed. The report never says why.",
+    demoReport: "That report came from the demo node — practice, not real.",
+    replayReport: "That was an old report replayed, not fresh news.",
+    followChannels: "Come! Forge first, then the lines.",
+    followRebalancing: "This way! The rebalancer waits.",
+    followHealth: "Up we go! The watchtower sees far.",
+    forge: "The forge ties lines to the chain. Opens and closes happen on-chain.",
+    opening: "Opening parks funds in a channel. The carts show a size bucket, not an amount.",
+    closing: "Closing settles back on-chain. The coin is our picture of it.",
+    channelStatus: "Each station is one channel: opening, active, closing, closed.",
+    slots: "Today's slots are temporary labels. They name no peer, no route.",
+    fundsPrivate: "Public capacity is not spendable balance. Liquidity stays private.",
+    channelQuiet: "No channel news this leg. The station explains itself anyway.",
+    channelOpeningReport: "An opening was reported. That is not active yet.",
+    channelActiveReport: "An active channel was reported. Balances stay private.",
+    channelClosingReport: "A closing was reported. Not closed until closed arrives.",
+    channelClosedReport: "A closed channel was reported. That is all it says.",
+    channelDone: "Forge plus lines — that is the dance. Back to my post!",
+    liquidity: "Channels need liquidity that moves. Capacity alone says little.",
+    rebalancer: "The rebalancer shifts liquidity so lines keep working.",
+    rebalanceHour: "Reports group by the hour. The spin is a picture, not a timestamp.",
+    rebalancePrivate: "Reports name no channel and no balance. A fail gives no cause.",
+    rebalanceQuiet: "No rebalance came by. No need to poke the machine.",
+    rebalanceSucceededReport: "A rebalance worked. Which channels? Not said.",
+    rebalanceFailedReport: "A rebalance failed. Why? The report does not say.",
+    rebalanceDone: "That is rebalancing! Private balances stay private.",
+    healthCore: "The core lights on starting or ready reports, dark on stopped.",
+    unknownNode: "No node state reported. Missing news is not bad news.",
+    startingNode: "Node says starting. A report, not a promise.",
+    readyNode: "Node says ready. Not a guarantee every forward lands.",
+    stoppedNode: "Node says stopped. A report — not the same as a quiet feed.",
+    watchtower: "The beam follows feed activity. Signal, not diagnosis.",
+    waitingSignal: "No event yet. We wait; health unknown.",
+    silentSignal: "Feed quiet. The beam can sleep while the node is fine.",
+    liveSignal: "Events arriving! An active feed, not a clean bill of health.",
+    replaySignal: "Old events replaying. Signal yes, fresh health no.",
+    summary: "Summaries describe activity. Not diagnosis, not balances.",
+    noSummary: "No summary supplied. We invent no counts.",
+    healthDone: "State and signal answer different questions. Tour done!",
+    done: "That is forwarding! Wander free — me wait by the stairs.",
+    warning: "Still coming? Me wait here.",
+    abandoned: "Lost my visitor! Back to post.",
+    cancelled: "All good. Me head back!",
+    blocked: "Path blocked. Back to post."
   };
   // The shared bubble is single-line. Bake short speech beats once, preserving full voice-ready lines.
   const SPEECH = {};
@@ -78,10 +78,12 @@
     if (beat) beats.push(beat);
     SPEECH[id] = beats;
   }
-  // Explicit waypoints use the broad arrival stairs and the left pit-to-core stairs, not ladders.
-  // y is the expected support at the waypoint; the actual step uses the hall's collision functions.
+  // His post stands on the balcony's left at the head of the grand stairway, clear of its lantern post and the
+  // arrival path, so the visitor walks up to him. Explicit waypoints use the broad arrival stairs and the left
+  // pit-to-core stairs, not ladders. y is the expected support at the waypoint; the actual step uses the hall's
+  // collision functions.
   const ROUTE = [
-    [-1.55, 5, 26], [0, 5, 25], [0, 5, 22], [0, 0, 13],
+    [-2, 5, 23.6], [-0.8, 5, 22.9], [0, 5, 22], [0, 0, 13],
     [-4.8, 0, 9], [-6.5, 0, 8.5], [-4.8, 0, 9], [-4.8, 0, 7.5],
     [-4.8, 5, 1.3], [-4.8, 5, 0.1], [-4.8, 5, 1.3], [-4.8, 0, 7.5], [-7, 0, 8.5]
   ];
@@ -133,48 +135,48 @@
       addChild(k.parts.head, createNode({ position: { x: 0, y: 0.53 * k.h, z: 0 }, scale: { x: 0.75, y: 0.75, z: 0.75 }, geometry: FM.hardHat() }));
     }
   };
-  const TRAITS = models.cached(() => ({ ...contributors.traitsFor("foreman/factory"), display: "Factory foreman", height: HEIGHT,
+  const TRAITS = models.cached(() => ({ ...contributors.traitsFor("foreman/factory"), display: NAME, height: HEIGHT,
     belly: 1, skin: "#bf855d", hair: "#35251a", fur: "#795333", face: "beard", dress: DRESS }));
 
-  const create = ({ parent, input, fx, feed, visitor, demoRunning, leaveCave, coarse }) => {
+  const create = ({ parent, input, fx, feed, visitor, demoRunning, coarse }) => {
     const figure = models.caveman(TRAITS()), body = figure.root, parts = figure.parts;
     body.position.x = ROUTE[0][0]; body.position.y = ROUTE[0][1] + BASE; body.position.z = ROUTE[0][2];
     parts.club.visible = parts.snack.visible = parts.hat.visible = false;
-    const signs = createNode(), picks = [];
-    addChild(parent, body, signs);
-    // Signs stay in the world, with no modal, camera takeover or shared HUD wiring.
-    const buttons = {};
-    const button = (id, title, y) => {
-      const label = FM.label(title, "", { height: 0.45 });
-      const node = createNode({ position: { x: 0.9, y, z: 0.2 }, visible: false });
-      const face = createNode({ geometry: label.face });
-      addChild(node, face, createNode({ geometry: label.back }));
-      addChild(signs, node);
-      // Refine the sphere to the actual sign: adjacent tour cards must not steal each other's taps.
-      const inverse = BL.math.mat4.create(), halfW = label.width / 2 + 0.07, halfH = label.height / 2 + 0.07;
-      const pickRay = (ray) => {
-        const m = BL.math.mat4.invert(inverse, face.world);
-        const ox = m[0] * ray.ox + m[4] * ray.oy + m[8] * ray.oz + m[12];
-        const oy = m[1] * ray.ox + m[5] * ray.oy + m[9] * ray.oz + m[13];
-        const oz = m[2] * ray.ox + m[6] * ray.oy + m[10] * ray.oz + m[14];
-        const dx = m[0] * ray.dx + m[4] * ray.dy + m[8] * ray.dz;
-        const dy = m[1] * ray.dx + m[5] * ray.dy + m[9] * ray.dz;
-        const dz = m[2] * ray.dx + m[6] * ray.dy + m[10] * ray.dz;
-        if (dz >= -1e-8) return Infinity;
-        const t = (0.03 - oz) / dz;
-        return t >= 0 && Math.abs(ox + dx * t) <= halfW && Math.abs(oy + dy * t) <= halfH ? t : Infinity;
-      };
-      input.add(face, { kind: "greeter-choice", choice: id, priority: 3, pickRay }, { radius: Math.hypot(halfW, halfH) });
-      picks.push(face); buttons[id] = node;
-    };
-    for (let i = 0; i < TOUR_ORDER.length; i++) button(TOUR_ORDER[i], TOURS[TOUR_ORDER[i]].title, 2.35 - i * 0.5);
-    button("next", "CONTINUE", 1.75);
-    button("island", "PICK AN OOGA", 1.75); button("stop", "END TOUR", 1.35);
+    addChild(parent, body);
     input.add(parts.torso, { kind: "greeter" }, { radius: 0.65 });
-    picks.push(parts.torso);
+    // The tour menu lives on screen, in the HUD's wood, built for the visit and removed on leave.
+    const panel = document.createElement("div");
+    panel.className = "greeter-menu";
+    panel.hidden = true;
+    const heading = document.createElement("p");
+    heading.className = "greeter-menu-title";
+    heading.textContent = `${NAME}'s tours`;
+    panel.append(heading);
+    const options = [];
+    for (let i = 0; i < TOUR_ORDER.length; i++) {
+      const id = TOUR_ORDER[i], option = document.createElement("button");
+      option.type = "button";
+      option.className = "greeter-choice";
+      option.textContent = TOURS[id].title;
+      option.addEventListener("click", () => choose(id));
+      option.addEventListener("pointerenter", () => { if (state.phase === "menu") select(i); });
+      panel.append(option);
+      options.push(option);
+    }
+    const help = document.createElement("p");
+    help.className = "greeter-menu-help";
+    help.textContent = coarse ? "Tap a tour" : "Arrows choose · Enter starts · Esc closes";
+    panel.append(help);
+    const stop = document.createElement("button");
+    stop.type = "button";
+    stop.className = "greeter-stop";
+    stop.textContent = "End tour";
+    stop.hidden = true;
+    stop.addEventListener("click", () => endTour());
+    document.body.append(panel, stop);
     let tour = TOURS.payments;
     const state = { tour: null, selection: 0, phase: "idle", waypoint: 0, line: 0, away: 0, blocked: 0, greeted: false, cooldown: 0,
-      spoken: null, utterance: 0, lastEvent: null, replay: false, demo: false, observation: "quiet", snapshotDemo: false, snapshotReplay: false,
+      advance: 0, spoken: null, utterance: 0, lastEvent: null, replay: false, demo: false, observation: "quiet", snapshotDemo: false, snapshotReplay: false,
       node: feed.reading.node, nodeDemo: false, nodeReplay: false, nodeReported: false };
     const position = body.position;
     const near = (range = 3.5) => {
@@ -185,35 +187,39 @@
     };
     const show = (phase) => {
       state.phase = phase;
-      for (const id in buttons) buttons[id].visible = phase === "menu" ? TOUR_ORDER.includes(id)
-        : phase === "no-ooga" ? id === "island"
-        : phase === "talk" ? id === "next" || id === "stop" : false;
+      panel.hidden = phase !== "menu";
+      stop.hidden = phase !== "walk" && phase !== "talk";
     };
     const select = (index) => {
-      state.selection = (index + TOUR_ORDER.length) % TOUR_ORDER.length;
-      for (let i = 0; i < TOUR_ORDER.length; i++) {
-        const node = buttons[TOUR_ORDER[i]], scale = i === state.selection ? 1.12 : 1;
-        node.scale.x = node.scale.y = node.scale.z = scale;
-      }
+      state.selection = (index + options.length) % options.length;
+      for (let i = 0; i < options.length; i++) options[i].classList.toggle("sel", i === state.selection);
     };
-    // One anchored bubble replaces the previous line and follows the foreman, including his return.
+    // One anchored bubble replaces the previous line and follows the foreman, including his return. Each spoken
+    // beat also arms the tour's auto-advance: after a readable pause the next line comes on its own.
     const say = (id, repeat = false) => {
       if (!repeat || state.spoken !== id) state.utterance = 0;
       state.spoken = id;
-      fx.say(figure, SPEECH[id][state.utterance], 8);
+      const beat = SPEECH[id][state.utterance];
+      state.advance = 1.6 + beat.length * 0.06;
+      fx.say(figure, beat, 8);
     };
     const greet = (interacting = true) => {
       if (state.phase === "return" || state.phase === "walk") return;
       if (state.phase === "talk") { say(state.spoken, true); return; }
       if (interacting && visitor() && !near()) return;
       state.greeted = true;
-      if (interacting) {
-        if (visitor()) { select(0); show("menu"); say("menu"); }
-        else { show("no-ooga"); say(demoRunning() ? "noOogaDemo" : "noOoga"); }
-      } else {
+      if (!interacting) {
         show("greeting");
-        say(demoRunning() ? coarse ? "demoTouch" : "demo" : coarse ? "greetingTouch" : "greeting");
+        say(demoRunning() ? "greetingDemo" : "greeting");
+        return;
       }
+      const actor = visitor();
+      if (!actor) { say(demoRunning() ? "noOogaDemo" : "noOoga"); return; }
+      // Talking turns the visitor's Ooga to face him, and the menu opens on screen.
+      actor.root.rotation.y = Math.atan2(position.x - actor.root.position.x, position.z - actor.root.position.z);
+      select(0);
+      show("menu");
+      say("menu");
     };
     const end = (line) => {
       show("return"); state.away = state.blocked = 0; if (line) say(line);
@@ -235,16 +241,9 @@
       state.snapshotReplay = state.tour === "health" ? nodeMetadata && state.nodeReplay : !!state.lastEvent && state.replay;
       show("talk"); say(tour.stops[state.waypoint][0]);
     };
-    const choose = (id) => {
-      if (id === "island" && state.phase === "no-ooga") { leaveCave(); return; }
-      if (!near()) { if (!visitor()) greet(); return; }
-      if (Object.hasOwn(TOURS, id) && state.phase === "menu") {
-        tour = TOURS[id]; state.tour = id;
-        state.waypoint = 0; state.away = state.blocked = 0; state.lastEvent = null;
-        show("walk"); say(tour.follow); return;
-      }
-      if (id === "stop" && state.phase === "talk") { end("cancelled"); return; }
-      if (id !== "next" || state.phase !== "talk") return;
+    // One beat further, then one line, then the leg: NEXT on the act button and the readable pause both come here.
+    const next = () => {
+      if (state.phase !== "talk") return;
       if (state.utterance + 1 < SPEECH[state.spoken].length) {
         state.utterance++; say(state.spoken, true); return;
       }
@@ -255,6 +254,21 @@
       }
       if (state.waypoint === tour.route.length - 1) end();
       else show("walk");
+    };
+    const choose = (id) => {
+      if (!Object.hasOwn(TOURS, id) || state.phase !== "menu" || !near()) return;
+      tour = TOURS[id]; state.tour = id;
+      state.waypoint = 0; state.away = state.blocked = 0; state.lastEvent = null;
+      show("walk"); say(tour.follow);
+    };
+    const endTour = () => {
+      if (state.phase === "talk" || state.phase === "walk") end("cancelled");
+    };
+    // An open menu swallows Escape first; the cave's own Escape leaves only when no menu is up.
+    const escape = () => {
+      if (state.phase !== "menu") return false;
+      show("idle");
+      return true;
     };
     const unsubscribe = feed.subscribe((e) => {
       if (e.type === "node.started" || e.type === "node.ready" || e.type === "node.stopped") {
@@ -306,7 +320,11 @@
       const actor = visitor();
       if (state.phase === "idle" && !state.greeted && !state.cooldown && near(4)) greet(false);
       if (state.phase === "greeting" || state.phase === "menu") {
-        if (actor && !near() || !actor && state.phase === "menu") show("idle");
+        if (!actor || !near()) show("idle");
+      }
+      if (state.phase === "talk") {
+        state.advance -= dt;
+        if (state.advance <= 0) next();
       }
       const touring = state.phase === "walk" || state.phase === "talk";
       if (touring) {
@@ -338,15 +356,26 @@
         parts.head.rotation.x = 0;
         if (!walking && actor) body.rotation.y = Math.atan2(actor.root.position.x - position.x, actor.root.position.z - position.z);
       }
-      signs.position.x = position.x; signs.position.y = position.y - BASE; signs.position.z = position.z;
-      signs.rotation.y = actor ? Math.atan2(actor.root.position.x - position.x, actor.root.position.z - position.z) : body.rotation.y;
     };
     const act = () => {
-      if (!near() || state.phase === "walk" || state.phase === "return") return false;
-      if (state.phase === "talk") choose("next");
-      else if (state.phase === "menu") choose(TOUR_ORDER[state.selection]);
+      if (state.phase === "walk" || state.phase === "return") return false;
+      if (state.phase === "talk") {
+        if (!near(6)) return false;
+        next();
+        return true;
+      }
+      if (!near()) return false;
+      if (state.phase === "menu") choose(TOUR_ORDER[state.selection]);
       else greet();
       return true;
+    };
+    // What the act button offers right now, the hub's ENTER ARCADE pattern: a label only while the act works.
+    const actLabel = () => {
+      if (!visitor()) return null;
+      if (state.phase === "talk") return near(6) ? "NEXT" : null;
+      if (state.phase === "menu") return "START TOUR";
+      if (state.phase === "walk" || state.phase === "return") return null;
+      return near() ? `TALK TO ${NAME.toUpperCase()}` : null;
     };
     const menuKey = (e) => {
       if (state.phase !== "menu" || e.metaKey || e.ctrlKey || e.altKey) return false;
@@ -369,12 +398,13 @@
     const dispose = () => {
       window.removeEventListener("keydown", captureMenuKey, true);
       unsubscribe();
-      for (const pick of picks) input.remove(pick);
-      removeChild(parent, body); removeChild(parent, signs);
+      input.remove(parts.torso);
+      removeChild(parent, body);
+      panel.remove(); stop.remove();
       state.lastEvent = null;
     };
-    return { root: body, state, update, greet, choose, act, dispose,
+    return { root: body, state, update, greet, act, actLabel, escape, dispose,
       liveGeometry(set) { set.add(figure.headOpen).add(figure.headClosed); } };
   };
-  BL.factoryGreeter = { create, LINES, TOURS };
+  BL.factoryGreeter = { create, LINES, TOURS, NAME };
 })();
