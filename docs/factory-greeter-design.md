@@ -42,7 +42,7 @@ factory-greeter.js owns a visit's rig, fixed waypoints, the on-screen menu (DOM 
 
 ## Validation and next review
 
-Build, the factory browser suite and the unit checks are the repository's validation. Please play-test:
+Build, the factory browser suite and the unit checks are the repository's validation. The factory suite now checks Talk, menu selection, Escape and End tour. Please play-test:
 
 - Arrival with an Ooga versus a direct /lightning arrival without one (the hint).
 - TALK TO FLINK in reach, Space beyond it staying a jump; each of the four tours running start to finish hands-free, NEXT skipping, End tour, cancellation and repeat visits.
