@@ -1269,6 +1269,29 @@ body[data-active-scene="arcade"] .magazine-hud {
   flex: none;
 }
 
+.account {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.account-name {
+  color: var(--paper);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.account-room {
+  color: var(--accent-text);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .quality {
   margin: 0;
   color: rgba(243, 239, 228, 0.6);
@@ -2230,6 +2253,74 @@ body[data-active-scene="arcade"] .magazine-hud {
 .act:focus-visible {
   background: linear-gradient(#f0b05a, #e2a04a);
   outline: none;
+}
+
+/* The factory foreman's on-screen tour menu and its End tour button, in the HUD's wood. */
+.greeter-menu {
+  position: fixed;
+  z-index: 13;
+  left: 50%;
+  bottom: calc(122px + var(--safe-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 210px;
+  padding: 10px 12px;
+  background: linear-gradient(var(--plank), var(--wood));
+  border: 2px solid var(--wood-edge);
+  border-radius: 6px;
+  box-shadow: 0 3px 0 var(--nail);
+  text-align: center;
+}
+
+.greeter-menu-title,
+.greeter-menu-help {
+  margin: 0;
+  color: var(--ink);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.greeter-menu-help {
+  opacity: 0.7;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.greeter-choice,
+.greeter-stop {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 2px solid var(--wood-edge);
+  border-radius: 6px;
+  background: linear-gradient(#e2a04a, var(--accent));
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow: 0 2px 0 var(--nail);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.greeter-choice.sel,
+.greeter-choice:hover,
+.greeter-choice:focus-visible,
+.greeter-stop:hover,
+.greeter-stop:focus-visible {
+  background: linear-gradient(#f0b05a, #e2a04a);
+  outline: none;
+}
+
+.greeter-stop {
+  position: fixed;
+  z-index: 13;
+  left: 50%;
+  bottom: calc(122px + var(--safe-bottom));
+  transform: translateX(-50%);
 }
 
 .race {
