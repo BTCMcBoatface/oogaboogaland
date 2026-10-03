@@ -31,7 +31,7 @@ Around the rim: **EntropyLab** (11 o'clock), the **Lightning Factory** (2), **Oo
 
 ## Playing together
 
-On https://obl.ruleswithoutrulers.com, **Sign in with GitHub** at the foot of the side panel to share the island. Signed-in players see each other: whoever drives an Ooga appears as that Ooga, moving live, with their name above it, while the rest of the crew keeps working around them. The panel shows how many are online. Opening the island in a second tab moves you there; the first tab offers **Play here** to move back.
+On the Cloudflare Workers ([staging](https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev), [production](https://oogaboogaland-production.wickedsmartbitcoin.workers.dev)), **Sign in with GitHub** at the foot of the side panel to share the island. Signed-in players see each other: whoever drives an Ooga appears as that Ooga, moving live, with their name above it, while the rest of the crew keeps working around them. The panel shows how many are online. Opening the island in a second tab moves you there; the first tab offers **Play here** to move back.
 
 Signed-in players also share the crew: one player's page runs the Oogas for everyone, so each Ooga walks, works and sleeps in the same place on every screen. If that player leaves, another page takes over by itself.
 
@@ -98,7 +98,7 @@ npm run build
 
 Writes `oogaboogaland.html`, one self-contained page with the content policy pinned to its hashes. CI commits it back after each merge to `rock`, and GitHub Pages serves it at https://oogaboogax.github.io/oogaboogaland/.
 
-The rules-without-rulers fork serves the same page from a Cloudflare Worker at https://obl.ruleswithoutrulers.com, with GitHub sign-in. It deploys on every merge to `rock`; `docs/cloudflare-setup.md` covers the setup and local development with `wrangler dev`, and `docs/auth-and-presence.md` the sign-in flow.
+Two Cloudflare Workers serve the same site with GitHub sign-in, the shared island and voice: https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev deploys on every merge to `rock`, and https://oogaboogaland-production.wickedsmartbitcoin.workers.dev by hand; `docs/cloudflare-setup.md` covers the setup and local development with `wrangler dev`, and `docs/auth-and-presence.md` the sign-in flow.
 
 To add your Ooga, add one file to `src/characters/` named after your GitHub handle; click **2140data** on the island for a prompt that walks you through it.
 

@@ -1,51 +1,57 @@
 # Cloudflare setup
 
-The island runs as one Cloudflare Worker, `oogaboogaland`, at https://obl.ruleswithoutrulers.com: the built page from static assets plus GitHub sign-in on D1 (see `docs/auth-and-presence.md`). Everything below is done once; after that a merge to `rock` deploys by itself.
+The island runs as two Cloudflare Workers in the account `1e5c1e8f7c343bf6cabced151b1ae2c6`. Each serves the staged site (`npm run build:site` → `_site/`) from static assets plus GitHub sign-in on D1, the island room and voice (see `docs/auth-and-presence.md`):
 
-## What exists
+| Worker | Address | Config | Deploys |
+|---|---|---|---|
+| `oogaboogaland-staging` | https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev | `wrangler.staging.jsonc` | every push to `rock` (`cloudflare-staging.yml`) |
+| `oogaboogaland-production` | https://oogaboogaland-production.wickedsmartbitcoin.workers.dev | `wrangler.production.jsonc` | by hand on `rock` (`cloudflare-production.yml`) |
+
+The two share code and nothing else: each has its own D1 database, room, OAuth App, Realtime app, secrets and rate-limit counters. Everything below is done once per Worker.
+
+## What exists, per Worker
 
 | Thing | Name | Set where |
 |---|---|---|
-| Worker | `oogaboogaland` | `worker/wrangler.jsonc` |
-| Custom domain | `obl.ruleswithoutrulers.com` | `routes` in `wrangler.jsonc`, attached on deploy |
-| D1 database | `oogaboogaland` | `d1_databases` (`database_id`) |
-| Rate limiters | `AUTH_LIMITER` 10 sign-ins a minute per IP; `ROOM_LIMITER` 20 room connections and `VOICE_LIMITER` 120 voice calls a minute per player | `ratelimits` |
+| D1 database | `oogaboogaland-staging`, `oogaboogaland-production` | `d1_databases` (`database_id`), migrations in `worker/migrations` |
+| Rate limiters | `AUTH_LIMITER` 10 sign-ins a minute per IP; `ROOM_LIMITER` 20 room connections and `VOICE_LIMITER` 120 voice calls a minute per player | `ratelimits` (staging namespaces 2001–2003, production 1001–1003) |
 | Durable Object | `Room`, one named `island` | `durable_objects`, `migrations` |
 | Cron | daily 04:00 UTC, purges expired sessions | `triggers` |
 | Vars | `SITE_ORIGIN`, `GITHUB_CLIENT_ID`, `REALTIME_APP_ID` | `vars` |
-| Worker secrets | `GITHUB_CLIENT_SECRET`, `REALTIME_SECRET` | `npx wrangler secret put` |
-| Realtime SFU app | `oogaboogaland-demo`, its App ID as `vars.REALTIME_APP_ID` | Realtime → Serverless SFU |
-| GitHub repo secret | `CLOUDFLARE_API_TOKEN` | repo Settings → Secrets and variables → Actions |
-| Workflow | Deploy to Cloudflare | `.github/workflows/deploy-cloudflare.yml` |
+| Worker secrets | `GITHUB_CLIENT_SECRET`, `REALTIME_SECRET` | `wrangler secret put` |
+| Realtime SFU app | `oogaboogaland-staging`, `oogaboogaland-production` | Realtime → Serverless SFU |
+| GitHub OAuth App | one per Worker, no scopes | the OogaBoogaX org's Developer settings |
+| GitHub repo secret | `CLOUDFLARE_API_TOKEN` | OogaBoogaX repo Settings → Secrets and variables → Actions |
 
-## One-time setup
+## Who administers it
 
-1. **GitHub OAuth Apps** (GitHub → Settings → Developer settings → OAuth Apps), no scopes:
-   - production: homepage `https://obl.ruleswithoutrulers.com`, callback `https://obl.ruleswithoutrulers.com/auth/callback`;
-   - local: homepage `http://localhost:8787`, callback `http://localhost:8787/auth/callback`.
-2. `cd worker && npm ci && npx wrangler login`.
-3. `npx wrangler d1 create oogaboogaland`; put its id in `database_id` (wrangler may offer to add a second binding: keep only `DB`).
-4. Put the production client id in `vars.GITHUB_CLIENT_ID`; `npx wrangler secret put GITHUB_CLIENT_SECRET`.
-5. **Voice.** dash.cloudflare.com → Realtime → Serverless SFU → Create; put the App ID in `vars.REALTIME_APP_ID` and `npx wrangler secret put REALTIME_SECRET` with the App Secret (also `REALTIME_SECRET=` in `.dev.vars` to test voice locally). Without the secret, **Join voice** says voice is unavailable and everything else works.
-6. `npm run migrate:remote`, then `npm run deploy`.
-7. **Deploy token.** dash.cloudflare.com → My Profile → API Tokens → Create Token → template *Edit Cloudflare Workers*; add *Account → D1 → Edit*; account resources: this account; zone resources: `ruleswithoutrulers.com` only. Save it as the repo secret `CLOUDFLARE_API_TOKEN` (`gh secret set CLOUDFLARE_API_TOKEN --repo rules-without-rulers/oogaboogaland`). If a deploy fails on the custom domain, add *Zone → DNS → Edit* for that zone.
-8. On the fork, enable Actions and disable the **Deploy GitHub Pages** workflow (Actions → the workflow → … → Disable). `pages.yml` itself stays as upstream has it.
+Workers, databases, rooms, rate limiters, secrets and Realtime apps belong to the account, so any of its Super Administrators (or Administrators) can change, redeploy or rotate them whoever created them. Two things are tied to an owner, so they live where they outlast any one person:
+- The deploy token is an **account-owned** API token (Manage Account → Account API Tokens), not a personal one.
+- The OAuth Apps belong to the **OogaBoogaX** GitHub org, where every org owner can manage them.
+
+Secrets cannot be read back once set; keep the OAuth client secrets and Realtime app secrets in a shared password manager. A lost one is regenerated and set again.
+
+## One-time setup, per Worker
+
+Run from `worker/` after `npm ci`, logged in with `npx wrangler login` as a member of the account (`npx wrangler whoami` lists it). `<env>` is `staging` or `production`.
+
+1. **D1.** `npx wrangler d1 create oogaboogaland-<env>`; put its id in `database_id` (wrangler may offer to add a second binding: keep only `DB`).
+2. **GitHub OAuth App** (OogaBoogaX → Settings → Developer settings → OAuth Apps → New): homepage `https://oogaboogaland-<env>.wickedsmartbitcoin.workers.dev`, callback `https://oogaboogaland-<env>.wickedsmartbitcoin.workers.dev/auth/callback`. Put the client id in `vars.GITHUB_CLIENT_ID`, then `npx wrangler secret put GITHUB_CLIENT_SECRET --config ../wrangler.<env>.jsonc`.
+3. **Voice.** dash.cloudflare.com → Realtime → Serverless SFU → Create `oogaboogaland-<env>`; put the App ID in `vars.REALTIME_APP_ID`, then `npx wrangler secret put REALTIME_SECRET --config ../wrangler.<env>.jsonc` with the App token. Without it **Join voice** says voice is unavailable and everything else works.
+4. `npm run deploy:<env>`: builds `_site`, applies the D1 migrations and deploys.
+5. **Deploy token**, once for both: Manage Account → Account API Tokens → Create, with *Workers Scripts → Edit* and *D1 → Edit* on this account. Save it in the OogaBoogaX repo as `CLOUDFLARE_API_TOKEN`.
 
 ## Every deploy
 
-`deploy-cloudflare.yml` runs on each push to `rock` and by hand (Actions → Deploy to Cloudflare → Run workflow): unit checks, a fresh jumbotron snapshot, `build:dist`, the Worker's tests, D1 migrations, `wrangler deploy`. It has no cron: once the room exists every deploy drops live sockets, and clients reconnect on their own. By hand from a laptop: `cd worker && npm run deploy`.
+`cloudflare-staging.yml` runs on each push to `rock`; `cloudflare-production.yml` runs by hand on `rock` (Actions → Deploy Cloudflare production → Run workflow). Each takes a fresh jumbotron snapshot, runs `npm run build:site` and the Worker's checks, applies D1 migrations and deploys. Every deploy drops live sockets, and clients reconnect on their own. By hand from a laptop: `cd worker && npm run deploy:staging` (or `deploy:production`).
 
 ## Local development
 
 ```sh
+cp worker/.dev.vars.example .dev.vars   # at the repo root, next to the wrangler configs; fill in the local OAuth App
 cd worker
-cp .dev.vars.example .dev.vars   # fill in the local OAuth App's id and secret
 npm run migrate:local
-npm run dev                      # http://localhost:8787
+npm run dev                             # http://localhost:8787, with the staging config
 ```
 
-`npm run dev` builds `dist/` and passes `--local-upstream localhost:8787`; without it wrangler reports the production route as the request's origin and the Origin check refuses sign-out. Local D1 lives in `worker/.wrangler/` and never touches production.
-
-## Moving to oogabooga.land
-
-Add the zone to this Cloudflare account, add `{ "pattern": "oogabooga.land", "custom_domain": true }` to `routes`, point a production OAuth App's callback at `https://oogabooga.land/auth/callback`, set `SITE_ORIGIN` and `GITHUB_CLIENT_ID` to match, and deploy. Sessions are per host, so players sign in again on the new domain.
+The local OAuth App has homepage `http://localhost:8787` and callback `http://localhost:8787/auth/callback`. `npm run dev` builds `_site/` and passes `--local-upstream localhost:8787`, so the Origin check sees the local address. Local D1 and the room live in `.wrangler/` and never touch staging.

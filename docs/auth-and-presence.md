@@ -6,7 +6,7 @@ How a visitor becomes a player on the Cloudflare-hosted island. Everything here 
 
 | Piece | Where | Job |
 |---|---|---|
-| Static page | `dist/index.html`, built by `npm run build:dist` | the whole game, served by the Worker's assets binding with the headers in `worker/_headers` |
+| Static site | `_site/` (the page as `index.html` and each `<route>.html`), staged by `npm run build:site` | the whole game, served by the Worker's assets binding with the headers in `worker/_headers` |
 | Worker | `worker/src/index.js` | runs only for `/auth/*`, `/api/*` and `/room` (`run_worker_first`); everything else is the static page |
 | D1 `oogaboogaland` | `worker/migrations/` | `players` (GitHub id, login, display name) and `sessions` (token hash, expiry) |
 | Page modules | `src/js/net.js` (`BL.net`), `src/js/remote-players.js` | the account and the room socket; the other visitors on the island. The sheet footer shows the account and the online count through `hud.showAccount` |
@@ -69,7 +69,7 @@ Every Ooga belongs to a contributor, and ownership keys on the GitHub login alon
 - Everyone else, signed in or not, drives an Ooga only when its owner is **not signed in**, **nobody else** holds it, and it is **not working** (by its real activity; the hub's temporary overrides do not count).
 - An owner arriving takes their Ooga back: the room frees it and the driver's page lets go with a notice.
 
-The page enforces all of it (`net.mayDrive`, checked by `pilot.possess` through the scene's `mayPossess`). The room enforces ownership and who holds what (`claimRefusal` in `worker/src/protocol.js`, over the cast `npm run build:dist` writes to `worker/src/characters.gen.json`), so a tampered page cannot take a contributor's Ooga; a refused claim answers `release { name, reason }` and is never shown to anyone. Whether an Ooga is working comes from activity the room does not see, so that rule is the page's alone. The rules apply only on the page served by the Worker; without a backend (GitHub Pages, the test suite) any Ooga can be driven as before.
+The page enforces all of it (`net.mayDrive`, checked by `pilot.possess` through the scene's `mayPossess`). The room enforces ownership and who holds what (`claimRefusal` in `worker/src/protocol.js`, over the cast `npm run build:site` writes to `worker/src/characters.gen.json`), so a tampered page cannot take a contributor's Ooga; a refused claim answers `release { name, reason }` and is never shown to anyone. Whether an Ooga is working comes from activity the room does not see, so that rule is the page's alone. The rules apply only on the page served by the Worker; without a backend (GitHub Pages, the test suite) any Ooga can be driven as before.
 
 A second tab of the same account takes over: the first is kicked with `replaced`, stops reconnecting, and its sheet footer offers **Play here**. Every deploy drops every socket; pages reconnect on their own with backoff (0.5 s × 1.7, up to 15 s). A tab hidden for five minutes leaves the room (voice stops) and rejoins when it is shown again.
 
@@ -97,7 +97,7 @@ The sound is an eight-second crackle over an ember rumble, synthesized in Web Au
 
 ## Voice
 
-Signed-in players can talk (`src/js/voice.js`, `worker/src/room.js`, `worker/src/sfu.js`), over the Cloudflare Realtime SFU app `oogaboogaland-demo` (`REALTIME_APP_ID` in `wrangler.jsonc`, `REALTIME_SECRET` a Worker secret).
+Signed-in players can talk (`src/js/voice.js`, `worker/src/room.js`, `worker/src/sfu.js`), over a Cloudflare Realtime SFU app per Worker (`REALTIME_APP_ID` in `wrangler.<env>.jsonc`, `REALTIME_SECRET` a Worker secret).
 
 - **Join voice** in the sheet footer asks for the microphone, then becomes **Mute** / **Unmute**; a failure says why on the button.
 - **Who hears whom: the same place.** Players driving an Ooga hear each other while they are in the same place: out on the island, in HQ (every HQ entrance leads to the one HQ), or inside one cave. A player in a cave hears only others in that cave, and nobody outside hears them. Within a place every voice plays at the same volume, however far apart the Oogas stand. The page reports its place as `zone { name }` (`outside`, `hq`, `cave-<mouth id>`), from the hub's own cave tracking. A player not driving an Ooga, or in another scene, is out of voice.

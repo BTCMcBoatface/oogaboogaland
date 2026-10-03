@@ -17,10 +17,10 @@ untracked/
 /oogaboogaland.html
 /src/js/characters.gen.js
 
-# Cloudflare Worker: the deployed asset folder, local state and local secrets
-/dist/
+# Cloudflare Workers: the staged site, local state and local secrets
+/_site/
 .wrangler/
-worker/.dev.vars
+.dev.vars
 worker/src/characters.gen.json
 
 # Test artifacts (screenshots written by test/ scripts)

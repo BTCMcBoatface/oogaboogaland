@@ -1,7 +1,7 @@
 // The Worker in front of Ooga Booga Land: the built page from static assets, GitHub sign-in under
 // /auth/*, the account API under /api/*, voice signalling under /api/voice/*, and /room, the island's
 // live socket. Only those paths run
-// this code (`run_worker_first` in wrangler.jsonc); every other path is served straight from ../dist.
+// this code (`run_worker_first` in wrangler.<env>.jsonc); every other path is served straight from _site.
 
 import { handleApi } from "./api.js";
 import { handleAuth } from "./auth.js";
