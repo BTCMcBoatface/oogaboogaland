@@ -265,6 +265,7 @@
     let eye = { x: 0, y: 0, z: 0 }, near = 0.2, cutawayMaxY = Infinity;
     const lightDir = new Float32Array([0, 1, 0]);
     let directStrength = 1, ambientFloor = 0.3, diffuseFloor = 0, skyLuma = 0.5, groundLuma = 0.2;
+    let pointLights = null, pointLightCount = 0;
     let spotLight = null;
     const spotEnergy = (x, y, z, nx, ny, nz) => {
       if (!spotLight || spotLight[3] <= 0) return 0;
@@ -650,9 +651,21 @@
               const tip = node.tip > 1.5 ? 0 : node.tip || 0;
               const fog = localMatrixGlyph ? smooth((glyphDistance - fogNear) / (fogFar - fogNear)) : Math.min(1, Math.max(0, (-rec.depth - fogNear) / (fogFar - fogNear)));
               const beam = localMatrixGlyph ? 0 : spotEnergy(centerX, centerY, centerZ, nx, ny, nz) * (1 - Math.min(1, emissive));
-              let red = lerp(lerp(cr * (k + (beam ? beam * spotLight[8] : 0)), 214, tip * 0.88), fogRgb[0], fog);
-              let green = lerp(lerp(cg * (k + (beam ? beam * spotLight[9] : 0)), 255, tip * 0.88), fogRgb[1], fog);
-              let blue = lerp(lerp(cb * (k + (beam ? beam * spotLight[10] : 0)), 227, tip * 0.88), fogRgb[2], fog);
+              let pointR = 0, pointG = 0, pointB = 0;
+              if (!localMatrixGlyph) for (let i = 0; i < pointLightCount; i++) {
+                const o = i * 8, dx = pointLights[o] - centerX, dy = pointLights[o + 1] - centerY, dz = pointLights[o + 2] - centerZ;
+                const radius = pointLights[o + 3], distance2 = dx * dx + dy * dy + dz * dz;
+                if (distance2 >= radius * radius || distance2 < 1e-8) continue;
+                const distance = Math.sqrt(distance2), facing = Math.max(0, (nx * dx + ny * dy + nz * dz) / distance);
+                const falloff = 1 - distance / radius;
+                const strength = (pointLights[o + 7] > 0.5 ? 0.72 * (1 - smooth((distance / radius - 0.2) / 0.8)) : falloff * falloff) * facing / distance;
+                pointR += pointLights[o + 4] * strength;
+                pointG += pointLights[o + 5] * strength;
+                pointB += pointLights[o + 6] * strength;
+              }
+              let red = lerp(lerp(cr * (k + pointR + (beam ? beam * spotLight[8] : 0)), 214, tip * 0.88), fogRgb[0], fog);
+              let green = lerp(lerp(cg * (k + pointG + (beam ? beam * spotLight[9] : 0)), 255, tip * 0.88), fogRgb[1], fog);
+              let blue = lerp(lerp(cb * (k + pointB + (beam ? beam * spotLight[10] : 0)), 227, tip * 0.88), fogRgb[2], fog);
               if (liquid) {
                 const time = node.portalTime, radius = Math.hypot(liquidX, liquidZ);
                 const interference = Math.sin(Math.hypot(liquidX - 0.22, liquidZ + 0.17) * 32 - time * 4)
@@ -1472,6 +1485,8 @@
       directStrength = strength;
       ambientFloor = ambient;
       diffuseFloor = diffuse;
+      pointLights = opts.lights || null;
+      pointLightCount = pointLights ? Math.min(6, opts.lightCount || 0) : 0;
       skyLuma = sky[0] * 0.2126 + sky[1] * 0.7152 + sky[2] * 0.0722;
       groundLuma = ground[0] * 0.2126 + ground[1] * 0.7152 + ground[2] * 0.0722;
       poolUsed = 0;
@@ -1554,6 +1569,34 @@
         ctx.translate(0, hazeShift);
         ctx.fillRect(0, -hazeShift, width, height);
         ctx.translate(0, -hazeShift);
+        const moon = opts.moon, moonSun = opts.moonSun || opts.sunDirection;
+        if (gradientSky && moon && moonSun && moon.y > 0) {
+          const mx = view[0] * moon.x + view[4] * moon.y + view[8] * moon.z;
+          const my = view[1] * moon.x + view[5] * moon.y + view[9] * moon.z;
+          const mz = view[2] * moon.x + view[6] * moon.y + view[10] * moon.z;
+          if (mz < -0.05) {
+            const radius = lastF * 0.05477 / -mz;
+            const cx = width * 0.5 + mx * lastF / -mz, cy = height * 0.5 - my * lastF / -mz;
+            if (cx + radius > 0 && cx - radius < width && cy + radius > 0 && cy - radius < height) {
+              const facing = Math.max(-1, Math.min(1, moon.x * moonSun.x + moon.y * moonSun.y + moon.z * moonSun.z));
+              const tx = moonSun.x - moon.x * facing, ty = moonSun.y - moon.y * facing, tz = moonSun.z - moon.z * facing;
+              const sx = view[0] * tx + view[4] * ty + view[8] * tz;
+              const sy = view[1] * tx + view[5] * ty + view[9] * tz;
+              const k = -facing;
+              ctx.save();
+              ctx.translate(cx, cy);
+              ctx.rotate(Math.atan2(-sy, sx));
+              ctx.globalAlpha = 0.3 + 0.7 * (opts.stars || 0);
+              ctx.fillStyle = "#d1dff6";
+              ctx.beginPath();
+              ctx.arc(0, 0, radius, -Math.PI / 2, Math.PI / 2);
+              ctx.ellipse(0, 0, Math.max(0.001, Math.abs(k) * radius), radius, 0, Math.PI / 2, k >= 0 ? Math.PI * 1.5 : -Math.PI / 2, k < 0);
+              ctx.closePath();
+              ctx.fill();
+              ctx.restore();
+            }
+          }
+        }
       }
       ctx.lineJoin = "round";
       let glyphBlend = false, glyphComposite = "";

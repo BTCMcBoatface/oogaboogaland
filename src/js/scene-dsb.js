@@ -112,8 +112,8 @@
   const poseAvatar = (moving, dt) => {
     if (moving) gait += dt * 7;
     const swing = moving ? Math.sin(gait) * 0.48 : 0;
-    avatar.parts.legL.rotation.x = swing; avatar.parts.legR.rotation.x = -swing;
-    avatar.parts.armL.rotation.x = -swing * 0.6; avatar.parts.armR.rotation.x = swing * 0.6;
+    avatar.parts.legR.rotation.x = swing; avatar.parts.legL.rotation.x = -swing;
+    avatar.parts.armR.rotation.x = -swing * 0.6; avatar.parts.armL.rotation.x = swing * 0.6;
   };
   const finishArrival = () => {
     if (phase !== "arrival") return;
@@ -439,7 +439,7 @@
       const contributor = BL.contributors.roster[i % BL.contributors.roster.length], cave = BL.models.caveman(BL.contributors.traitsFor(contributor.name));
       cave.baseY = cave.root.position.y; cave.floorY = i === 5 ? 1.1 : 0; cave.root.position.x = i === 5 ? -18 : -24 + i * 2.2; cave.root.position.z = i === 5 ? -15.6 : -6; cave.heading = i === 5 ? 0 : Math.PI; cave.root.rotation.y = cave.heading; cave.hit = 0;
       addChild(land.root, cave.root); visitors.push(cave); input.add(cave.root, { kind: "visitor", cave, label: `${contributor.name} · tomato target` }, { radius: 1 }); targets.push(cave.root);
-      for (const key of ["head", "torso", "armL", "armR", "legL", "legR"]) { const node = cave.parts[key]; input.add(node, { kind: "visitor", cave, label: `${contributor.name} · tomato target` }); targets.push(node); }
+      for (const key of ["head", "torso", "armR", "armL", "legR", "legL"]) { const node = cave.parts[key]; input.add(node, { kind: "visitor", cave, label: `${contributor.name} · tomato target` }); targets.push(node); }
     }
     for (let i = 0; i < 12; i++) { const node = M.block(land.root, "#ef4256", 0, 0, 0, 0.28, 0.28, 0.28); node.visible = false; shots.push({ node, life: 0, vx: 0, vy: 0, vz: 0, splat: false }); }
     register(land.tv, "tv", "DSB TV - walk closer to open");

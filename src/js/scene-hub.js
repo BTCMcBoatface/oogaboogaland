@@ -9,6 +9,7 @@
   const { CONFETTI } = fxMod;
   const params = new URLSearchParams(location.search);
   const METER_CAPACITY = 60;
+  const PILE_COUNT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
   const SEED = 1;
   const DEG = Math.PI / 180;
   const COARSE = window.matchMedia("(pointer: coarse)").matches;
@@ -36,7 +37,7 @@
   const preloadedJetpack = DEBUG && (params.get("jetpack") === "1" || !!preloadedPose?.character && preloadedPose.jetpack);
   const preloadedJetpackWear = preloadedJetpack && preloadedView !== "underground" && preloadedView !== "basement";
   const POSITION_DEBUG = DEBUG && params.get("pos") !== "0";
-  const islandLatitude = Number.isFinite(latitudeParam) ? Math.max(-66, Math.min(66, latitudeParam)) : daylight.ISLAND_LATITUDE_DEG;
+  const islandLatitude = Number.isFinite(latitudeParam) ? Math.max(-90, Math.min(90, latitudeParam)) : daylight.ISLAND_LATITUDE_DEG;
   // MEADOW/RADIUS are island measures owned by terrain.js; keep them in sync.
   const MEADOW = 22, RADIUS = 30;
   const PITCH_MIN = 0.2, PITCH_MAX = 1.25, DIST_MIN = 3.5, DIST_MAX = 64, BIRDS_EYE_MIN = 21, GORILLA_BIRDS_EYE_MIN = 8;
@@ -87,8 +88,8 @@
   // RENDER_OPTS sky, light and lamp values are resampled from the clock every frame.
   const RENDER_OPTS = {
     clear: new Float32Array(3), horizon: new Float32Array(3), zenith: new Float32Array(3), sky: new Float32Array(3), ground: new Float32Array(3), sun: new Float32Array(3), direct: new Float32Array(3),
-    light: { x: 0.55, y: 0.78, z: -0.25 }, sunDirection: { x: 0, y: 1, z: 0 }, moon: { x: 0, y: 1, z: 0 }, celestialPole: { x: 0, y: Math.sin(20 * DEG), z: -Math.cos(20 * DEG) }, starMatrix: new Float32Array(9),
-    stars: 0, torch: 0, day: 1, twilight: 0, lampFactor: 0, directStrength: 1, directionalLightStrength: 1, sunStrength: 1, moonStrength: 0, ambientFloor: 0.18, diffuseFloor: 0, shadowStrength: 1, shadowFloor: 0, shadowBias: 0.002, outdoorDarkestSurfaceEstimate: 0.34, activeLightSource: "sun", latitude: 20, dayOfYear: 172, continuousDay: 171.5, solarDeclination: 0, siderealAngle: 0, sunAltitude: 90, sunAzimuth: 180, moonAltitude: -90, moonAzimuth: 0, sunriseHour: 6, sunsetHour: 18,
+    light: { x: 0.55, y: 0.78, z: -0.25 }, sunDirection: { x: 0, y: 1, z: 0 }, moon: { x: 0, y: 1, z: 0 }, moonSun: { x: 0, y: -1, z: 0 }, celestialPole: { x: 0, y: Math.sin(20 * DEG), z: -Math.cos(20 * DEG) }, starMatrix: new Float32Array(9),
+    stars: 0, torch: 0, day: 1, twilight: 0, lampFactor: 0, directStrength: 1, directionalLightStrength: 1, sunStrength: 1, moonStrength: 0, moonIllumination: 1, moonPhase: 0.5, ambientFloor: 0.18, diffuseFloor: 0, shadowStrength: 1, shadowFloor: 0, shadowBias: 0.002, outdoorDarkestSurfaceEstimate: 0.34, activeLightSource: "sun", latitude: 20, dayOfYear: 172, continuousDay: 171.5, solarDeclination: 0, siderealAngle: 0, sunAltitude: 90, sunAzimuth: 180, moonAltitude: -90, moonAzimuth: 0, sunriseHour: 6, sunsetHour: 18,
     time: 0, bloomStrength: 0.5, lights: new Float32Array(BL.glRenderer.POINT_LIGHT_CAPACITY * 8), lightCount: 0, shadowCenter: { x: 0, y: 0, z: 0 }, shadowExtent: 34, matrix: MATRIX_WORLD, sea: -70, cutawayMaxY: 1e6, birdsEyeCutaway: false, cutawayFade: 0, cutawayRockMix: 0, cutawayRegions: [], cutawayRegionCount: 0, cutawayCloudY: 0, cutawayCloudMix: 0
   };
   let viewPoseActor = null;
@@ -108,7 +109,7 @@
   const DAYLIGHT_DEBUG = {
     sunDirection: RENDER_OPTS.sunDirection, moonDirection: RENDER_OPTS.moon, celestialPole: RENDER_OPTS.celestialPole,
     hour: 12, continuousDay: 171.5, phase: "noon", latitude: 20, dayOfYear: 172, solarDeclination: 0, siderealAngle: 0, sunAltitude: 90, sunAzimuth: 180, moonAltitude: -90, moonAzimuth: 0,
-    daylightFactor: 1, twilightFactor: 0, starFactor: 0, lampFactor: 0, directStrength: 1, directionalLightStrength: 1, moonStrength: 0, ambientFloor: 0.18, diffuseFloor: 0, shadowStrength: 1, shadowFloor: 0, shadowBias: 0.002, outdoorDarkestSurfaceEstimate: 0.34, activeLightSource: "sun", sunriseHour: 6, sunsetHour: 18
+    daylightFactor: 1, twilightFactor: 0, starFactor: 0, lampFactor: 0, directStrength: 1, directionalLightStrength: 1, moonStrength: 0, moonIllumination: 1, moonPhase: 0.5, ambientFloor: 0.18, diffuseFloor: 0, shadowStrength: 1, shadowFloor: 0, shadowBias: 0.002, outdoorDarkestSurfaceEstimate: 0.34, activeLightSource: "sun", sunriseHour: 6, sunsetHour: 18
   };
   // Mirrored out of RENDER_OPTS for __ooga only, so it stays off the shipped frame path.
   const syncDaylightDebug = (hour) => {
@@ -130,6 +131,8 @@
     DAYLIGHT_DEBUG.directStrength = RENDER_OPTS.directStrength;
     DAYLIGHT_DEBUG.directionalLightStrength = RENDER_OPTS.directionalLightStrength;
     DAYLIGHT_DEBUG.moonStrength = RENDER_OPTS.moonStrength;
+    DAYLIGHT_DEBUG.moonIllumination = RENDER_OPTS.moonIllumination;
+    DAYLIGHT_DEBUG.moonPhase = RENDER_OPTS.moonPhase;
     DAYLIGHT_DEBUG.ambientFloor = RENDER_OPTS.ambientFloor;
     DAYLIGHT_DEBUG.diffuseFloor = RENDER_OPTS.diffuseFloor;
     DAYLIGHT_DEBUG.shadowStrength = RENDER_OPTS.shadowStrength;
@@ -165,6 +168,7 @@
   const DRESSING_LAMPS = BL.dressing.LIGHT_RGB.map(([r, g, b]) => ({ r, g, b, radius: 5.5, glow: 0.9, hide: false }));
   const dressingLights = [];
   const PILE_POST_DEGREES = [315, 78, 195], pilePosts = [];
+  const PILE_POST_NIGHT_BOOST = 0.25, PILE_POST_NIGHT_REACH = 2;
   const PILE_SCALE = 0.45;
   // How tall a remote visitor's Ooga stands for the crew's walkers (`outsideActorHeight`).
   const REMOTE_BODY_HEIGHT = 2.2;
@@ -223,7 +227,11 @@
 
   // One visit's state: created in enter, dropped in leave.
   let jumbotronSpot, oogatronUnsub, renderer, game, world, go, lootEnabled, testBananas, root, camera, overlayCanvas, island, terrainRampRoof, pathNode, altar, hud, hooks, input, pilot, fx, cameraCover, bananaCover, solids, rockGuides, objectGuides, sightGuides, bananaGuides, pileGuides, platformGuides, mirrorGuides, pile, crew, crates, critters, clock, presets, entering, mirrorCave, matrixCave, matrixControl, gateRain, fire, headquarters, dockStairs, jumbotron, positionDebug, remotes, npcSync;
-  let magazine, magazineState, breakables, clankers, clankerPlay, clankerMeshes, clankerPartOwners, entropyLab, chalkboard, factoryMouth = null, arcadeMouth = null, glCanvas = null;
+  let magazine, magazineState, breakables, clankers, clankerPlay, clankerMeshes, clankerPartOwners, draggedOoga = null, grabSupportEntry = null, entropyLab, chalkboard, factoryMouth = null, arcadeMouth = null, glCanvas = null;
+  const dragHand = new Float64Array(3), dragFoot = new Float64Array(3);
+  const THROW_SWING_TIME = 0.28, THROW_CARRY_SPEED_MAX = 8;
+  const clankerThrow = { entry: null, time: 0, charge: 0, x: 0, z: 0,
+    aim: { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0 } };
   let debugSelectedGorilla = null, debugMovementTerrain = null;
   const debugGorillaHighlights = [];
   const DEBUG_MOVE_HIT = { node: null, owner: null, type: "none", distance: Infinity, x: 0, y: 0, z: 0, normal: { x: 0, y: 0, z: 0 } };
@@ -371,7 +379,7 @@
     monkey: ["OOK OOK!", "EEE EEE!", "*chatters*"],
     toucan: ["SQUAWK!", "KRRK-KRRK!", "*clacks beak*"]
   };
-  let positionDebugNext = 0, positionDebugJSON = "";
+  let positionDebugNext = 0, positionDebugJSON = "", positionDebugState = "";
   function createPositionPose() {
     return { version: 1, character: "", mode: "detached", closeWanted: false, combat: false, birdsEyeNorthUp: false, position: [0, 0, 0], target: [0, 0, -1], direction: [0, 0, -1], up: [0, 1, 0], fov: 48 * Math.PI / 180,
       actor: [0, 0, 0], body: [0, 0, 0], head: [0, 0, 0], bodyQuaternion: [0, 0, 0, 1], headQuaternion: [0, 0, 0, 1], bodyRolled: false, headRolled: false,
@@ -418,6 +426,14 @@
     return pose;
   }
   const POSITION_POSE = createPositionPose();
+  const positionVector = key => {
+    const value = params.get(key);
+    if (!value || value.length > 100) return null;
+    const parts = value.split(",");
+    if (parts.length !== 3 || parts.some(part => !part.trim())) return null;
+    const numbers = parts.map(Number);
+    return numbers.every(n => Number.isFinite(n) && Math.abs(n) <= 10000) ? numbers : null;
+  };
   const positionText = value => value.map(n => n.toFixed(5)).join(",");
   let phase = null;
   const updatePositionDebug = (force = false) => {
@@ -432,10 +448,23 @@
     POSITION_POSE.up[0] = up ? up.x : 0; POSITION_POSE.up[1] = up ? up.y : 1; POSITION_POSE.up[2] = up ? up.z : 0;
     POSITION_POSE.fov = camera.fov;
     const json = JSON.stringify(POSITION_POSE);
-    if (!force && json === positionDebugJSON) return;
+    const gorilla = clankerPlay && clankerPlay.player, g = gorilla && gorilla.root.position;
+    const state = gorilla ? `${json}|${gorilla.owner.traits.name}|${clankerPlay.view}|${clankerPlay.combat}|${g.x},${g.y},${g.z},${gorilla.heading}` : json;
+    if (!force && state === positionDebugState) return;
+    positionDebugState = state;
     positionDebugJSON = json;
     positionDebug.dataset.pose = json;
     positionDebug.dataset.copied = "false";
+    if (gorilla) {
+      positionDebug.textContent = `gorilla-${gorilla.owner.traits.name} · mode=${clankerPlay.view} · ${clankerPlay.combat ? "combat" : "carry"}`
+        + `\npos=${g.x.toFixed(5)},${g.y.toFixed(5)},${g.z.toFixed(5)}  heading=${gorilla.heading.toFixed(5)} (rad)`
+        + `\ncamera=${positionText(POSITION_POSE.position)}`
+        + `\nlook=${positionText(POSITION_POSE.target)}  dir=${positionText(POSITION_POSE.direction)}`
+        + `\nclick to copy gorilla position URL`;
+      positionDebug.setAttribute("aria-label", "Debug gorilla and camera state. Click to copy a gorilla position URL.");
+      return;
+    }
+    positionDebug.setAttribute("aria-label", "Debug character and camera state. Click to copy an exact replay URL.");
     const pose = POSITION_POSE, first = pose.mode === "first-person";
     positionDebug.textContent = `${pose.character || "free camera"} · mode=${pose.mode}${pose.character ? ` · ${pose.combat ? "combat" : "carry"} · weapon=${pose.selectedSlot} ammo=${pose.unlimited ? "unlimited" : pose.ammo}` : ""}`
       + (pose.character ? `\npos=${positionText(pose.actor)}\nbody=${positionText(pose.body)}  head=${positionText(pose.head)} (rad)` : "")
@@ -448,9 +477,17 @@
     const url = new URL(location.href);
     for (const key of ["pos", "body", "head", "camera", "look", "mode", "combat", "battle", "firstperson", "weapon", "ammo", "view", "jetpack", "mag"]) url.searchParams.delete(key);
     url.searchParams.set("debug", "1");
-    if (POSITION_POSE.character) url.searchParams.set("character", POSITION_POSE.character);
-    else url.searchParams.delete("character");
-    url.searchParams.set("pose", positionDebugJSON);
+    const gorilla = clankerPlay && clankerPlay.player;
+    if (gorilla) {
+      url.searchParams.set("character", `gorilla-${gorilla.owner.traits.name}`);
+      const p = gorilla.root.position;
+      url.searchParams.set("pos", `${p.x.toFixed(5)},${p.y.toFixed(5)},${p.z.toFixed(5)}`);
+      url.searchParams.delete("pose");
+    } else {
+      if (POSITION_POSE.character) url.searchParams.set("character", POSITION_POSE.character);
+      else url.searchParams.delete("character");
+      url.searchParams.set("pose", positionDebugJSON);
+    }
     const value = url.href;
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(value).catch(() => {});
     else {
@@ -466,16 +503,8 @@
   };
   const restorePositionDebug = () => {
     if (!DEBUG) return;
-    const vector = key => {
-      const value = params.get(key);
-      if (!value || value.length > 100) return null;
-      const parts = value.split(",");
-      if (parts.length !== 3 || parts.some(part => !part.trim())) return null;
-      const numbers = parts.map(Number);
-      return numbers.every(n => Number.isFinite(n) && Math.abs(n) <= 10000) ? numbers : null;
-    };
-    const position = vector("pos"), body = vector("body"), head = vector("head");
-    let eye = vector("camera"), look = vector("look");
+    const position = positionVector("pos"), body = positionVector("body"), head = positionVector("head");
+    let eye = positionVector("camera"), look = positionVector("look");
     const mode = ["carry", "shoulder", "first-person", "orbit", "birds-eye", "detached", "eye-level"].includes(preloadedMode) ? preloadedMode : null;
     if (!preloadedPose && !position && !body && !head && !eye && !look && !mode && !params.has("combat") && !params.has("battle")) return;
     const pose = preloadedPose || pilot.capturePose(createPositionPose()), cave = pilot.player;
@@ -1376,7 +1405,7 @@
   const updateLamps = (dt, elapsed, spark) => {
     const lights = RENDER_OPTS.lights;
     const webgl = renderer.kind === "webgl2";
-    const limit = webgl ? LIGHT_CAPACITY : 0;
+    const limit = webgl ? BL.glRenderer.QUALITY[renderer.quality].lights : 6;
     const phaseNow = daylight.phaseAt(hour);
     const lanternsOn = phaseNow === "dusk" || phaseNow === "night" || phaseNow === "midnight";
     let count = 0, approximated = 0, registered = 0;
@@ -1390,7 +1419,7 @@
       l.lit = lit;
       l.k = k;
       const flicker = Math.sin(elapsed * 11 + i * 2.3) * 0.15;
-      node.glow = (l.nightOnly ? 0 : LAMP_OFF) + k * (l.kind.glow + flicker) + node.flare * 1.5;
+      node.glow = (l.nightOnly ? 0 : LAMP_OFF) + k * (l.kind.glow * (1 + (l.pileProfile ? RENDER_OPTS.lampFactor * PILE_POST_NIGHT_BOOST * 0.25 : 0)) + flicker) + node.flare * 1.5;
       if (node.flare > 0) node.flare = Math.max(0, node.flare - dt * 2);
       // kind.hide: the node is hidden while unlit, so a cold fire shows no flame at all.
       if (l.kind.hide) node.visible = lit;
@@ -1403,29 +1432,39 @@
         l.debug.approximated = false;
       }
     }
-    // Keep the campfire and pile lanterns in every quality tier, then fill the
-    // remaining slots in stable registration order.
-    for (let pass = 0; pass < 2; pass++) for (let i = 0; i < lamps.length; i++) {
-      const l = lamps[i];
-      if (!!l.centerLight !== (pass === 0)) continue;
-      if (!l.lit || !l.light) continue;
-      if (count < limit) {
-        l.selected = true;
-        if (l.debug) l.debug.selected = true;
-        LIGHTING_DEBUG.selectedIds[count] = l.id;
-        const o = count++ * 8;
-        lights[o] = l.x;
-        lights[o + 1] = l.y;
-        lights[o + 2] = l.z;
-        lights[o + 3] = l.kind.radius;
-        lights[o + 4] = l.kind.r * l.k;
-        lights[o + 5] = l.kind.g * l.k;
-        lights[o + 6] = l.kind.b * l.k;
-      } else {
-        l.approximated = true;
-        if (l.debug) l.debug.approximated = true;
-        LIGHTING_DEBUG.approximatedIds[approximated++] = l.id;
+    // Fill each tier with the lamps nearest the view, so a lantern beside the player
+    // is never dropped just because distant cave lights were registered first.
+    for (; count < limit; count++) {
+      let nearest = null, distance = Infinity;
+      for (let i = 0; i < lamps.length; i++) {
+        const l = lamps[i];
+        if (!l.lit || !l.light || l.selected) continue;
+        const dx = l.x - camera.target.x, dy = l.y - camera.target.y, dz = l.z - camera.target.z;
+        const score = dx * dx + dy * dy + dz * dz - (l.centerLight ? 16 : 0);
+        if (score < distance) { nearest = l; distance = score; }
       }
+      if (!nearest) break;
+      const l = nearest, kind = l.kind, boost = 1 + (l.pileProfile ? RENDER_OPTS.lampFactor * PILE_POST_NIGHT_BOOST : 0);
+      l.selected = true;
+      if (l.debug) l.debug.selected = true;
+      LIGHTING_DEBUG.selectedIds[count] = l.id;
+      const o = count * 8;
+      lights[o] = l.x;
+      lights[o + 1] = l.y;
+      lights[o + 2] = l.z;
+      lights[o + 3] = kind.radius + (l.pileProfile ? RENDER_OPTS.lampFactor * PILE_POST_NIGHT_REACH : 0);
+      lights[o + 4] = kind.r * l.k * boost;
+      lights[o + 5] = kind.g * l.k * boost;
+      lights[o + 6] = kind.b * l.k * boost;
+      lights[o + 7] = l.pileProfile ? 1 : 0;
+    }
+    for (let i = 0; i < lamps.length; i++) {
+      const l = lamps[i];
+      if (!l.lit || !l.light || l.selected) continue;
+      l.approximated = true;
+      if (l.debug) l.debug.approximated = true;
+      if (approximated < LIGHT_CAPACITY) LIGHTING_DEBUG.approximatedIds[approximated] = l.id;
+      approximated++;
     }
     for (let i = count; i < LIGHT_CAPACITY; i++) LIGHTING_DEBUG.selectedIds[i] = null;
     for (let i = approximated; i < LIGHT_CAPACITY; i++) LIGHTING_DEBUG.approximatedIds[i] = null;
@@ -1655,7 +1694,7 @@
         ground.push(x, z, r);
         claim(x, z, r);
       };
-      const CAMP = [["bench", 0.9], ["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["rubble", 0.8]];
+      const CAMP = [["barrel", 0.55], ["coalCrate", 0.6], ["crate", 0.6], ["rubble", 0.8]];
       let placed = 0;
       for (let k = 0; k < 16 && placed < CAMP.length; k++) {
         const a = k / 16 * Math.PI * 2 + 0.3, x = fire.x + Math.cos(a) * 3.1, z = fire.z + Math.sin(a) * 3.1;
@@ -1707,6 +1746,7 @@
       const lamp = addLamp(glow, DRESSING_LAMPS[light[3]], 0, 0, 0, true, 0, `pile-post:${i}`);
       lamp.nightOnly = true;
       lamp.centerLight = true;
+      lamp.pileProfile = true;
       const pickNode = createNode({ geometry: PICK_GEOMETRY });
       const owner = { kind: "piece", piece: "lanternPost", variant: 0, node: pickNode, x: 0, y: 0, z: 0, next: 0, weaponType: "none" };
       addTarget(pickNode, owner, { radius: Math.max(0.35, pick[5]) });
@@ -2516,8 +2556,8 @@
       T.beer.pause();
       if (s.active) {
         s.active = false; cave.root.rotation.x = cave.root.rotation.z = 0;
-        parts.legL.rotation.x = parts.legR.rotation.x = 0;
-        parts.armL.rotation.x = parts.armR.rotation.x = -0.2;
+        parts.legR.rotation.x = parts.legL.rotation.x = 0;
+        parts.armR.rotation.x = parts.armL.rotation.x = -0.2;
         parts.head.rotation.x = 0;
       }
       return false;
@@ -2530,11 +2570,11 @@
     cave.root.position.x = s.x; cave.root.position.z = s.z; cave.root.position.y = T.place.y + 0.88 * h;
     cave.root.rotation.x = -0.23; cave.root.rotation.z = 0; cave.root.rotation.y = T.place.ry + s.angle;
     T.site.chair.scale.x = T.site.chair.scale.y = T.site.chair.scale.z = h;
-    parts.legL.rotation.x = parts.legR.rotation.x = -1.05;
-    parts.armL.quaternion = parts.armR.quaternion = null;
-    parts.armL.rotation.x = -0.95 + Math.sin(s.phase) * 0.035;
-    parts.armR.rotation.x = -0.95 - Math.sin(s.phase) * 0.035;
-    parts.armL.rotation.z = -0.12; parts.armR.rotation.z = 0.12;
+    parts.legR.rotation.x = parts.legL.rotation.x = -1.05;
+    parts.armR.quaternion = parts.armL.quaternion = null;
+    parts.armR.rotation.x = -0.95 + Math.sin(s.phase) * 0.035;
+    parts.armL.rotation.x = -0.95 - Math.sin(s.phase) * 0.035;
+    parts.armR.rotation.z = -0.12; parts.armL.rotation.z = 0.12;
     parts.head.rotation.x = 0.28;
     parts.club.visible = parts.gun.visible = parts.snack.visible = false;
     T.beer.update(cave, s, dt);
@@ -2833,6 +2873,12 @@
     syncMirrorDamage();
   };
   const weaponImpact = (source, hit, dx, dy, dz, power = 1) => {
+    if (source && source.controlled && source.actionControlled && source.combat && !source.combat.powerSpent) {
+      const combat = source.combat;
+      source.poundPower *= 0.25 + 0.75 * clamp((now - combat.lastHitAt - 0.1) / 0.1, 0, 1);
+      combat.lastHitAt = now; combat.powerSpent = true;
+      power = source.poundPower;
+    }
     if (hit.owner.kind === "caveman") {
       crew.damage(hit.owner.cave, power, isPlayerAttack(source));
       return;
@@ -3084,11 +3130,11 @@
   };
   // Surface caves and the headquarters can share a column below the same roof.
   const supportAt = (x, z, y = Infinity) => island.supportAt(x, z, y, STEP_MAX);
-  const playerSupportAt = (x, z, y = 0, previousY = y, player = pilot?.player, dockEntry = false) => {
+  const playerSupportAt = (x, z, y = 0, previousY = y, player = pilot?.player, dockEntry = false, ignoreClanker = false) => {
     const step = player ? player.hop === 0 && player.hopV <= 0 : !pilot.freeFalling;
     const height = player ? player.bodyHeight + Math.max(0, player.viewLift) : CLOSE_VIEW.eyeHeight + CAMERA_RADIUS;
     const from = Math.max(y, previousY), rise = step ? STEP_MAX : 0;
-    return Math.max(island.supportAt(x, z, y, STEP_MAX, ABYSS_FLOOR, PLAYER_RADIUS), bedSupportAt(x, z, from, STEP_MAX, PLAYER_RADIUS), cloudFloorAt(x, z, from, rise, height, player), propSupportAt(x, z, from, rise, player), dockStairs ? dockStairs.supportAt(x, z, from, rise, player, dockEntry) : -Infinity);
+    return Math.max(island.supportAt(x, z, y, STEP_MAX, ABYSS_FLOOR, PLAYER_RADIUS), bedSupportAt(x, z, from, STEP_MAX, PLAYER_RADIUS), cloudFloorAt(x, z, from, rise, height, player), propSupportAt(x, z, from, rise, player, ignoreClanker), dockStairs ? dockStairs.supportAt(x, z, from, rise, player, dockEntry) : -Infinity);
   };
   const abyssAt = (x, z, y, actor = pilot?.player) => playerSupportAt(x, z, y, y, actor) === ABYSS_FLOOR;
   const visualSupportAt = (x, z, y) => {
@@ -3097,7 +3143,7 @@
   };
   const PLAYER_RADIUS = 0.3;
   const BODY_RADIUS = 0.38;
-  const BODY_PARTS_SOLID = ["torso", "head", "armL", "armR", "legL", "legR"];
+  const BODY_PARTS_SOLID = ["torso", "head", "armR", "armL", "legR", "legL"];
   const BODY_BOUNDS = new Float64Array(6);
   // A swept circle restricted to the time the body overlaps the solid's height.
   // Also catches a fast move across a thin post or another Ooga.
@@ -3152,7 +3198,7 @@
     const dx = Math.max(b[0] - x, 0, x - b[3]), dz = Math.max(b[2] - z, 0, z - b[5]);
     return dx * dx + dz * dz < radius * radius - 1e-8;
   };
-  const uprightCharacter = (cave) => cave.root.visible && cave.state !== "sleeping" && !cave.root.quaternion && !cave.camp.seat && !cave.camp.rolling;
+  const uprightCharacter = (cave) => cave.root.visible && cave.state !== "sleeping" && !cave.grabbedBy && !cave.root.quaternion && !cave.camp.seat && !cave.camp.rolling;
   const standingPassenger = (cave) => uprightCharacter(cave) && cave.hop <= 1e-7 && cave.hopV <= 0 && !cave.jet?.thrust;
   const passengerOf = (cave, support) => {
     if (!support || !cave.riding.support || !uprightCharacter(support)) return false;
@@ -3192,16 +3238,109 @@
       ? Math.max(rise, BL.clankers.WALK_HEIGHT) : rise;
     return clankerMeshes.supportAt(x, z, y, step, PLAYER_RADIUS, null, null, false, characterClankerSupportAllowed);
   };
+  const riderSupportAllowed = (node) => clankerPartOwners.get(node) === grabSupportEntry;
+  const clankerGripAt = (entry) => {
+    const arm = entry.gorilla.parts.armL;
+    BL.scene.updateWorld(entry.root, entry.root.parent.world);
+    const bounds = BL.scene.boundsOf(arm.geometry);
+    BL.math.mat4.transformPoint(dragHand, arm.world, bounds.center[0], bounds.min[1] + 0.08, bounds.center[2]);
+    return dragHand;
+  };
+  const grabClankerRider = (entry) => {
+    if (!entry || draggedOoga || !clankerMeshes || !crew) return false;
+    grabSupportEntry = entry;
+    let nearest = Infinity, rider = null;
+    for (let i = 0; i < crew.list.length; i++) {
+      const cave = crew.list[i], p = cave.root.position;
+      if (cave === pilot?.player || !uprightCharacter(cave) || cave.health.stunned || cave.hop > 0.7
+        || cave.state !== "working" && cave.state !== "chilling") continue;
+      const distance = (p.x - entry.root.position.x) ** 2 + (p.z - entry.root.position.z) ** 2;
+      if (distance > 9 || distance >= nearest) continue;
+      const feet = p.y - cave.baseY;
+      if (feet < entry.root.position.y + 0.6) continue;
+      const support = clankerMeshes.supportAt(p.x, p.z, feet, 0.15, PLAYER_RADIUS, null, null, false, riderSupportAllowed);
+      if (Math.abs(support - feet) > 0.7) continue;
+      if (distance < nearest) { nearest = distance; rider = cave; }
+    }
+    grabSupportEntry = null;
+    if (!rider) return false;
+    crew.clearHeadLook(rider);
+    draggedOoga = rider; rider.grabbedBy = entry; entry.motion.dragging = true; entry.motion.throwProgress = 0;
+    rider.walk = null; rider.hop = rider.hopV = 0;
+    rider.leap.vx = rider.leap.vz = rider.leap.land = 0; rider.leap.thrown = false;
+    rider.act.kind = "idle";
+    return true;
+  };
+  const finishClankerRider = (entry, throwing, charge = 0, aim = null, carryX = 0, carryZ = 0) => {
+    const cave = draggedOoga;
+    if (!cave || cave.grabbedBy !== entry) return;
+    draggedOoga = null; cave.grabbedBy = null; entry.motion.dragging = false; entry.motion.throwProgress = 0;
+    const p = cave.root.position, hand = clankerGripAt(entry), handY = hand[1];
+    const tx = aim ? aim.ox + aim.dx * 24 - hand[0] : Math.sin(entry.heading);
+    const ty = aim ? aim.oy + aim.dy * 24 - handY : 1;
+    const tz = aim ? aim.oz + aim.dz * 24 - hand[2] : Math.cos(entry.heading);
+    crew.recoverDragged(cave);
+    crew.poseWeapon(cave);
+    const floor = playerSupportAt(p.x, p.z, handY, handY, cave, false, true);
+    cave.hop = Math.max(0, handY - floor);
+    p.y = floor + cave.baseY + cave.hop;
+    if (throwing) {
+      const launch = 6 + 12 * clamp(charge, 0, 1), distance = Math.hypot(tx, ty, tz) || 1;
+      cave.hopV = ty / distance * launch;
+      cave.leap.vx = tx / distance * launch + carryX;
+      cave.leap.vz = tz / distance * launch + carryZ;
+      cave.leap.thrown = true;
+      cave.hop = Math.max(cave.hop, 0.05);
+    } else { cave.hopV = 0; cave.leap.vx = cave.leap.vz = 0; cave.leap.thrown = false; }
+    cave.leap.land = 0.25;
+  };
+  const releaseClankerRider = (entry, throwing, charge = 0, aim = null) => {
+    if (!draggedOoga || draggedOoga.grabbedBy !== entry) return;
+    if (throwing) {
+      clankerThrow.entry = entry; clankerThrow.time = 0; clankerThrow.charge = charge;
+      const target = clankerThrow.aim;
+      target.ox = aim ? aim.ox : entry.root.position.x;
+      target.oy = aim ? aim.oy : entry.root.position.y;
+      target.oz = aim ? aim.oz : entry.root.position.z;
+      target.dx = aim ? aim.dx : Math.sin(entry.heading);
+      target.dy = aim ? aim.dy : 0;
+      target.dz = aim ? aim.dz : Math.cos(entry.heading);
+    } else if (clankerThrow.entry !== entry) finishClankerRider(entry, false);
+  };
+  const grabbedOogaPose = (cave) => {
+    const entry = cave.grabbedBy;
+    if (!entry) return false;
+    const parts = cave.parts, hand = clankerGripAt(entry);
+    cave.root.quaternion = null;
+    const headReach = cave.traits.height * 0.9, sx = Math.sin(entry.heading), sz = Math.cos(entry.heading);
+    const floor = playerSupportAt(hand[0] - sx * headReach, hand[2] - sz * headReach, hand[1], hand[1], cave, false, true);
+    cave.root.rotation.x = -Math.acos(clamp((floor + 0.12 - hand[1]) / headReach, -0.7, 0.3));
+    cave.root.rotation.y = entry.heading; cave.root.rotation.z = 0;
+    cave.root.position.x = hand[0]; cave.root.position.y = hand[1]; cave.root.position.z = hand[2];
+    parts.legL.rotation.x = 0.25; parts.legR.rotation.x = -0.1;
+    if (cave.weapon.carry !== "hands") {
+      parts.armR.quaternion = parts.armL.quaternion = null;
+      parts.armR.rotation.x = -1.1; parts.armL.rotation.x = -1.35;
+    }
+    parts.head.rotation.x = 0.2;
+    BL.scene.updateWorld(cave.root, cave.root.parent.world);
+    const footBounds = BL.scene.boundsOf(parts.legR.geometry);
+    BL.math.mat4.transformPoint(dragFoot, parts.legR.world, footBounds.center[0], footBounds.min[1], footBounds.center[2]);
+    cave.root.position.x += hand[0] - dragFoot[0];
+    cave.root.position.y += hand[1] - dragFoot[1];
+    cave.root.position.z += hand[2] - dragFoot[2];
+    return true;
+  };
   // Tree tops are landing surfaces for the visitor, not resting floors for wandering Oogas.
   const npcTreeSupportAllowed = (node) => !node.npcTreeSupport;
-  const propSupportAt = (x, z, y, rise, actor) => {
+  const propSupportAt = (x, z, y, rise, actor, ignoreClanker = false) => {
     const npc = actor?.contributor && actor !== pilot?.player;
     let floor = solids ? solids.supportAt(x, z, y, rise, PLAYER_RADIUS, null, null, false, npc ? npcTreeSupportAllowed : null) : -Infinity;
-    floor = Math.max(floor, characterClankerSupportAt(x, z, y, rise, actor));
+    if (!ignoreClanker) floor = Math.max(floor, characterClankerSupportAt(x, z, y, rise, actor));
     if (altar && ALTAR_HEIGHT <= y + rise + 1e-7 && Math.hypot(x, z) < altar.platformRadius + PLAYER_RADIUS - 1e-7) floor = Math.max(floor, ALTAR_HEIGHT);
     if (crew) for (let i = 0; i < crew.list.length; i++) {
       const other = crew.list[i];
-      if (other === actor || !other.root.visible) continue;
+      if (other === actor || !other.root.visible || other.grabbedBy) continue;
       const b = actorBounds(other);
       if (b[4] > floor && b[4] <= y + rise + 1e-7 && bodyOverlaps(other, b, x, z, PLAYER_RADIUS)) floor = b[4];
     }
@@ -3212,7 +3351,7 @@
     if (altar && y < ALTAR_HEIGHT - 1e-7 && Math.hypot(x, z) < altar.platformRadius + radius - 1e-7) ceiling = Math.min(ceiling, 0);
     if (crew) for (let i = 0; i < crew.list.length; i++) {
       const other = crew.list[i];
-      if (other === actor || !other.root.visible || passengerOf(other, actor)) continue;
+      if (other === actor || !other.root.visible || other.grabbedBy || passengerOf(other, actor)) continue;
       const b = actorBounds(other);
       if (b[1] > y + 1e-7 && y < b[4] - 1e-7 && bodyOverlaps(other, b, x, z, radius)) ceiling = Math.min(ceiling, b[1]);
     }
@@ -3242,7 +3381,7 @@
     if (altar && !cylinderSegmentClear(x, y, z, toX, toY, toZ, radius, height, 0, 0, 0, ALTAR_HEIGHT, altar.platformRadius)) return false;
     if (crew) for (let otherIndex = 0; otherIndex < crew.list.length; otherIndex++) {
       const other = crew.list[otherIndex];
-      if (other === actor || !other.root.visible || passengerOf(other, actor) || carrying && passengerOf(actor, other)) continue;
+      if (other === actor || !other.root.visible || other.grabbedBy || passengerOf(other, actor) || carrying && passengerOf(actor, other)) continue;
       const b = actorBounds(other), p = other.root.position;
       if (other.root.quaternion) {
         if (!terrain.segmentBoxClear(x, y, z, toX - x, toY - y, toZ - z, radius, height, b[0], b[1], b[2], b[3], b[4], b[5])) return false;
@@ -3848,7 +3987,7 @@
     return feet + height <= ceilingAt(toX, toZ, feet, actor) + 1e-7 && physicalClearAt(toX, feet + STEP_MAX, toZ, PLAYER_RADIUS, Math.max(0, height - STEP_MAX), actor) && propSegmentClear(fromX, feet + STEP_MAX, fromZ, toX, feet + STEP_MAX, toZ, PLAYER_RADIUS, Math.max(0, height - STEP_MAX), actor) && matrixGateSegmentClear(fromX, y, fromZ, toX, feet, toZ, PLAYER_RADIUS, height) && mirrorActorSegmentClear(fromX, y, fromZ, toX, feet, toZ, height, actor)
       || feet === y && playerEscapeClear(fromX, fromZ, toX, toZ, y, height, actor, STEP_MAX);
   };
-  const flyable = (fromX, fromZ, toX, toZ, y = 0, height = 1.5, actor = pilot?.player) => Math.hypot(toX, toZ) <= FLY_BOUND && !crossesSealedCave(fromX, fromZ, toX, toZ, y)
+  const flyable = (fromX, fromZ, toX, toZ, y = 0, height = 1.5, actor = pilot?.player) => (Math.hypot(toX, toZ) <= FLY_BOUND || actor?.leap?.thrown) && !crossesSealedCave(fromX, fromZ, toX, toZ, y)
     && (y + height <= ceilingAt(toX, toZ, y, actor) + 1e-7 && physicalClearAt(toX, y, toZ, PLAYER_RADIUS, height, actor) && propSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height, actor) && bedSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height) && matrixGateSegmentClear(fromX, y, fromZ, toX, y, toZ, PLAYER_RADIUS, height) && mirrorActorSegmentClear(fromX, y, fromZ, toX, y, toZ, height, actor)
       || playerEscapeClear(fromX, fromZ, toX, toZ, y, height, actor, 0));
   const characterCarryClear = (cave, x, y, z, toX, toY, toZ) => {
@@ -4530,6 +4669,20 @@
       default:
         return "";
     }
+  };
+  const PILE_SCREEN = { x: 0, y: 0, depth: 0 };
+  let pileHovered = false, pileTopY = 0, pileTipCount = -1, pileTipText = "";
+  const showPileTooltip = () => {
+    if (!pile.core.visible) { hud.tooltip.hide(); return; }
+    const top = pile.core.position.y + pile.core.scale.y * pileTopY + 0.3;
+    const screen = renderer.project(0, top, 0, PILE_SCREEN);
+    if (!screen) { hud.tooltip.hide(); return; }
+    const count = Math.floor(world.level);
+    if (count !== pileTipCount) {
+      pileTipCount = count;
+      pileTipText = `🍌 ${PILE_COUNT.format(count)}`;
+    }
+    hud.tooltip.show(pileTipText, screen.x, screen.y, null, false, true);
   };
   const reticleTarget = (hit) => {
     const o = hit.owner;
@@ -6209,7 +6362,7 @@
     now = elapsed;
     if (timechainIsland && !timechainIsland.boards && Math.hypot(camera.position.x - timechainIsland.place.x, camera.position.z - timechainIsland.place.z) < BL.timechainModels.SITE.radius + TIMECHAIN_NEAR) addTimechainBoards();
     hour = clock.read();
-    daylight.sample(hour, RENDER_OPTS, clock.dayOfYear, islandLatitude, clock.continuousDay);
+    daylight.sample(hour, RENDER_OPTS, clock.dayOfYear, islandLatitude, clock.continuousDay, clock.utcMs);
     RENDER_OPTS.time = elapsed;
     weather.update(dt, RENDER_OPTS);
     updateLamps(dt, elapsed, phase !== null);
@@ -6237,7 +6390,36 @@
     if (bifrostIsle) bifrostGate(dt, elapsed);
     if (factoryDeparting || bifrostDeparting) return; // The Ooga through a shield and its camera hold through the director fade.
     prepareClankerStrike();
+    if (clankerThrow.entry) {
+      const entry = clankerThrow.entry, p = entry.root.position;
+      clankerThrow.x = p.x; clankerThrow.z = p.z;
+      clankerThrow.time = Math.min(THROW_SWING_TIME, clankerThrow.time + dt);
+      entry.motion.throwProgress = clankerThrow.time / THROW_SWING_TIME;
+    }
     clankers.update(dt);
+    if (clankerThrow.entry) {
+      const entry = clankerThrow.entry, cave = draggedOoga;
+      if (!clankerPlay.active || !entry.active || !cave || cave.health.stunned) {
+        clankerThrow.entry = null;
+        finishClankerRider(entry, false);
+      } else if (clankerThrow.time >= THROW_SWING_TIME) {
+        grabbedOogaPose(cave);
+        const p = entry.root.position;
+        let carryX = dt > 0 ? (p.x - clankerThrow.x) / dt : entry.drive.vx;
+        let carryZ = dt > 0 ? (p.z - clankerThrow.z) / dt : entry.drive.vz;
+        // A climb or correction can reposition the gorilla during this frame.
+        // That displacement is not launch momentum; unbounded speed here also
+        // makes the Ooga's fixed-size collision steps take arbitrarily long.
+        const carrySpeed = Math.hypot(carryX, carryZ);
+        if (!Number.isFinite(carrySpeed)) { carryX = carryZ = 0; }
+        else if (carrySpeed > THROW_CARRY_SPEED_MAX) {
+          const scale = THROW_CARRY_SPEED_MAX / carrySpeed;
+          carryX *= scale; carryZ *= scale;
+        }
+        clankerThrow.entry = null;
+        finishClankerRider(entry, true, clankerThrow.charge, clankerThrow.aim, carryX, carryZ);
+      }
+    }
     for (let i = 0; i < clankers.list.length; i++) {
       const entry = clankers.list[i], p = entry.root.position;
       if (!entry.active || p.y >= ABYSS_RESPAWN_Y || island.supportAt(p.x, p.z, p.y, 0, ABYSS_FLOOR) !== ABYSS_FLOOR) continue;
@@ -6259,6 +6441,8 @@
     if (debugSelectedGorilla && (!debugSelectedGorilla.active || !debugSelectedGorilla.root.visible || pilot.player || clankerPlay.active)) selectDebugGorilla(null);
     updateLabEquipment(dt);
     clankerMeshes.sync();
+    if (draggedOoga && (!clankerPlay.active || draggedOoga.health.stunned || !draggedOoga.grabbedBy.active))
+      releaseClankerRider(draggedOoga.grabbedBy, false);
     updateClankerEffects(dt);
     if (timechainIsland) {
       timechainIsland.site.turn((elapsed % TIMECHAIN_OUTER_PERIOD) * Math.PI * 2 / TIMECHAIN_OUTER_PERIOD);
@@ -6784,8 +6968,11 @@
       return clankerCenterClear(entry, x, y, z, toX, toY, toZ,
         entry.drive.airborne && !entry.drive.passiveFall, fromHeading, toHeading)
         && clankerWalkCoreClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading);
+    // The outdoor footprint catches lab benches during a vertical jump;
+    // check the same upright rig that already fits between them on foot.
     const labPose = entry.planningLab || entropyLab.phase.inside(toX, toY, toZ)
-      && !entry.gorilla.motionActive && !entry.pound && !entry.beat && !entry.climb.active;
+      && (entry.controlled && entry.motion.lab && entry.drive.airborne
+        || !entry.gorilla.motionActive && !entry.pound && !entry.beat && !entry.climb.active);
     if (labPose) return entry.gorilla.labPoseClear(entry.planningLab ? 2 : entry.motion.labDt || 1 / 60,
       toX, toY, toZ, toHeading, entry.speed, entry.planningLab ? entry.planningLabWork : entry.motion.labWork,
       entry.motion.labPhase, entry.planningLab ? entry.planningLabSide : entry.motion.labSide,
@@ -6797,7 +6984,9 @@
       if (!entry.gorilla.labPoseClear(2, toX, toY, toZ, toHeading, entry.speed, "", 0, 1,
         island.solidAt, clankerExitTransitionClear, entry, true, false)) return false;
     }
-    if ((!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active
+    // A controlled smash moves on the ordinary walking footprint. Its raised
+    // fists still animate and hit, but cannot halt travel on a terrain tread.
+    if (!(entry.controlled && entry.actionControlled) && (!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active
       && (entry.planningRoam || entry.footprintMode === "walk")
       && (clankerGroundPlaneAt(x, y, z, fromHeading, CLANKER_WALK_PLANE)
         || clankerGroundPlaneAt(toX, toY, toZ, toHeading, CLANKER_WALK_PLANE))) {
@@ -6808,7 +6997,7 @@
         entry.motion, clankerWalkSolidAt, clankerWalkTransitionClear, island.hullClearAt,
         entry, planning ? 1 / 30 : entry.motion.labDt || 1 / 60, planning ? 0 : entry.speed, planning);
     }
-    if ((!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active
+    if (!(entry.controlled && entry.actionControlled) && (!entry.drive.airborne || entry.drive.passiveFall) && !entry.jump.active && !entry.climb.active
       && (entry.planningRoam || entry.footprintMode === "walk")
       && (entry.motion.supportOffset < -0.001 || clankerTerraceAt(x, y, z, fromHeading)
         || clankerTerraceAt(toX, toY, toZ, toHeading))) {
@@ -6859,14 +7048,18 @@
     fromHeading = entry ? entry.heading : 0, toHeading = fromHeading) => {
     if (entry) entry.walkPoseChecked = false;
     const previousEntry = clankerPassingEntry;
-    clankerPassingEntry = null;
+    // A lab crowd overlap must not trap an airborne gorilla at its current XZ.
+    // Keep peer checks on every step with horizontal travel.
+    const verticalLabJump = entry && entry.controlled && entry.motion.lab && entry.drive.airborne
+      && x === toX && z === toZ;
+    clankerPassingEntry = verticalLabJump ? entry : null;
     try {
       if (entry && !ignore && clankers && radius === entry.radius && height === entry.height && !entry.climb.active) {
         clankerPassingEntry = entry;
         // Surface NPCs sweep their trunks against peers too. The old centre
         // check admitted torso pileups that the climbing checks could not clear.
         // Human controls retain the permissive surface movement.
-        if (!entry.planningLabTraffic && !entry.planningRoam && (entry.motion.lab || !entry.controlled)
+        if (!verticalLabJump && !entry.planningLabTraffic && !entry.planningRoam && (entry.motion.lab || !entry.controlled)
           && !clankerPeersClear(entry, x, y, z, toX, toY, toZ, fromHeading, toHeading)) return false;
       }
       return clankerRigClear(x, y, z, toX, toY, toZ, radius, height, entry, ignore, fromHeading, toHeading);
@@ -6887,12 +7080,12 @@
   const clankerClimbTransitionClear = (entry, x, y, z, nx, ny, nz, radius, height, actors = true, riders = true, toRadius = radius, toHeight = height, peers = true, part = null, hull = null) => {
     const previous = clankerPassingEntry;
     if (!peers) clankerPassingEntry = entry;
-    const bench = (entry.motion.lab || entry.planningLab) && part === entry.gorilla.parts.armR ? entry.gorilla.labPickupBench : null;
+    const bench = (entry.motion.lab || entry.planningLab) && part === entry.gorilla.parts.armL ? entry.gorilla.labPickupBench : null;
     const station = entropyLab.stations[entry.planningLabStation >= 0 ? entry.planningLabStation : entry.lab.station];
     // Only the assigned touchscreen's working arm may contact its screen.
     // The torso, other arm, benches and cave walls retain their full collision.
     const screen = (entry.motion.lab || entry.planningLab) && station?.kind === "touch"
-      && part === (station.side < 0 ? entry.gorilla.parts.armL : entry.gorilla.parts.armR) ? station.contact : null;
+      && part === (station.side < 0 ? entry.gorilla.parts.armR : entry.gorilla.parts.armL) ? station.contact : null;
     const contact = bench || screen;
     try {
       if (clankerCylinderClear(x, y, z, nx, ny, nz, radius, height, entry, contact, true, actors, false, toRadius, toHeight)) return true;
@@ -6971,7 +7164,7 @@
     const nx = p.x + cosine * side * 1.55 + sine * 0.55, nz = p.z - sine * side * 1.55 + cosine * 0.55;
     return clankerCylinderClear(x, p.y + 1.1, z, nx, p.y + 1.1, nz, 0.22, 0.5, entry, partner);
   };
-  const FIRE_BODY_PARTS = ["torso", "head", "jaw", "armL", "armR", "legL", "legR"];
+  const FIRE_BODY_PARTS = ["torso", "head", "jaw", "armR", "armL", "legR", "legL"];
   const FIRE_PART_ROT = new Float64Array(9);
   const FIRE_PART_ABS = new Float64Array(9), FIRE_PART_EXTENT = new Float64Array(3);
   const FIRE_PART_TRANSLATION = new Float64Array(3), FIRE_PART_LOCAL = new Float64Array(3);
@@ -7455,6 +7648,12 @@
     && solids.segmentClear(x, y, z, toX, toY, toZ, 0.1, 0.15);
   const constrainClankerCamera = (entry, view, hold = false, previousEye = null, firstPerson = false, birdsEye = false) => {
     const a = view.target, b = view.position;
+    if (clankerPlay.view === "orbit") {
+      // Match the Ooga carry orbit: keep its chosen boom through stone and
+      // track the cave at the eye without changing the camera position.
+      clampCamera(b, 0);
+      return;
+    }
     if (hold || firstPerson) {
       // Mounts keep the displayed camera anchor. Looking remains possible,
       // with the eye swept from its previous position instead of rebasing
@@ -7507,10 +7706,14 @@
     const entry = clankers.player;
     if (!entry) return;
     const combat = entry.combat;
+    if (combat.serial !== entry.smashSerial) {
+      combat.hit = combat.groundChecked = combat.powerSpent = false;
+      combat.hitOwner = null; combat.serial = entry.smashSerial;
+    }
     if (!entry.pound) { combat.hit = combat.groundChecked = false; combat.hitOwner = null; return; }
     BL.scene.updateWorld(entry.root, root.world);
-    combat.left.set(entry.gorilla.parts.armL.world);
     combat.right.set(entry.gorilla.parts.armR.world);
+    combat.left.set(entry.gorilla.parts.armL.world);
   };
   const clankerSmashOverlaps = (entry, owner) => {
     const p = entry.root.position, node = owner.node, bounds = BL.scene.boundsOf(node.geometry);
@@ -7543,7 +7746,7 @@
       && Math.abs(dx * axisX + dz * axisZ) <= radiusX + frontRadius * Math.abs(forwardAxis) + halfSide * Math.abs(rightAxis)
       && Math.abs(dx * depthX + dz * depthZ) <= radiusZ + frontRadius * Math.abs(forwardDepth) + halfSide * Math.abs(rightDepth);
   };
-  const CLANKER_BURN_PARTS = ["legL", "legR", "armL", "armR", "torso", "head"];
+  const CLANKER_BURN_PARTS = ["legR", "legL", "armR", "armL", "torso", "head"];
   const updateClankerEffects = (dt) => {
     for (let i = 0; i < clankers.list.length; i++) {
       const entry = clankers.list[i];
@@ -7600,7 +7803,7 @@
       const combat = entry.combat;
       BL.scene.updateWorld(entry.root, root.world);
       for (let hand = 0; hand < 2; hand++) {
-        const part = hand ? entry.gorilla.parts.armR : entry.gorilla.parts.armL, previous = hand ? combat.right : combat.left;
+        const part = hand ? entry.gorilla.parts.armL : entry.gorilla.parts.armR, previous = hand ? combat.left : combat.right;
         mirrorCave.ripples.strike(previous, part.world, part.geometry, dt);
         if (!combat.hit && input.weaponTargets.strike(CLANKER_HIT, previous, part.world, part.geometry, entry)) {
           combat.hit = true;
@@ -7636,7 +7839,8 @@
     entry.renderParts = [];
     entry.fireFX.spread = new Float32Array(CLANKER_BURN_PARTS.length);
     entry.fireFX.burning = false;
-    entry.combat = { left: math.mat4.create(), right: math.mat4.create(), hit: false, hitOwner: null, groundChecked: false };
+    entry.combat = { left: math.mat4.create(), right: math.mat4.create(), hit: false, hitOwner: null, groundChecked: false,
+      serial: -1, lastHitAt: -Infinity, powerSpent: false };
     const visit = (node, region = "body") => {
       if (node === entry.gorilla.parts.head) region = "head";
       if (node.geometry) {
@@ -7787,6 +7991,7 @@
   // frame of lag never shows, and it is the difference between 42 and 59 fps behind cave rock at 4K.
   const SIGHT_RECOMPUTE_HZ = 30;
   const overlay = (dt) => {
+    if (pileHovered) showPileTooltip();
     sleepSightFrame++;
     if (CAMERA_GLYPHS.radius !== MATRIX_WORLD.radius || CAMERA_GLYPHS.active !== MATRIX_WORLD.active || CAMERA_GLYPHS.permanentCave !== MATRIX_WORLD.permanentCave) {
       CAMERA_GLYPHS.radius = MATRIX_WORLD.radius; CAMERA_GLYPHS.active = MATRIX_WORLD.active; CAMERA_GLYPHS.permanentCave = MATRIX_WORLD.permanentCave;
@@ -7886,10 +8091,7 @@
   const onKey = (e) => {
     if (factoryDeparting || bifrostDeparting) return;
     if (e.key === "Escape" && debugSelectedGorilla) { selectDebugGorilla(null); e.preventDefault(); return; }
-    if (clankerPlay.active) {
-      if (!e.repeat && (e.key === "x" || e.key === "X")) clankerPlay.action("mode-toggle");
-      return;
-    }
+    if (clankerPlay.active) return;
     if ((e.key === "x" || e.key === "X") && !e.repeat && pilot.modeAction("mode-toggle")) return;
     if ((e.key === "1" || e.key === "2") && pilot.weaponMode(Number(e.key))) return;
     if (e.key === "Escape") pilot.release();
@@ -7938,6 +8140,7 @@
     positionDebug.hidden = !POSITION_DEBUG;
     positionDebugNext = 0;
     positionDebugJSON = "";
+    positionDebugState = "";
     if (POSITION_DEBUG) positionDebug.addEventListener("click", copyPositionDebug);
     solids = BL.solidProps.create();
     clock = daylight.createClock({ hour: hourParam, daylen: daylenParam, day: dayParam, time: timeParam, now: new Date() });
@@ -7978,7 +8181,7 @@
     mark("island");
     hud = hudMod.create({ roster: contributors.activeRoster, catalog: models.SWAG, tierColors: models.TIER_COLORS, renderIcon: hudMod.renderIcon, lootEnabled });
     hooks = {};
-    input = interactMod.create({ canvas: ctx.canvas, renderer, camera, hooks });
+    input = interactMod.create({ canvas: ctx.canvas, renderer, camera, hooks, preciseHover: true });
     presets = { pile: PILE_VIEW, gate: GATE_VIEW };
     pilot = pilotMod.create({ renderer, canvas: ctx.canvas, camera, hud, presets, landing: "pile", pitch: [PITCH_MIN, PITCH_MAX], dist: [DIST_MIN, DIST_MAX], follow: FOLLOW, fly: FLY, clampTarget, clampCamera, observeOrbit: position => clampCamera(position, 0), ceilingAt, birdsEyeMin: BIRDS_EYE_MIN, birdsEyeCeiling, releaseView: releaseCameraView, enterFreeView: enterFreeCameraView, coarse: COARSE, onFreeAction: freeAction, jetpackStatus: jetpackHudStatus, mayPossess: mayDriveOoga, close: { ...CLOSE_VIEW, maxStep: STEP_MAX, groundAt: playerSupportAt, visualGroundAt: visualSupportAt, sleepEyeFloorAt, cloudAt, zone: () => playerCaveIndex } });
     chalkboard = BL.chalkboard.create({ renderer,
@@ -8115,7 +8318,7 @@
     spawnMagazinePickup();
     critters = crittersMod.create({ root, renderer, flowers: scenery.filter((o) => o.prop === "flower" && o.active), fire: firePos, secondaryFire: { x: 0, y: island.headquarters.floor, z: 0 }, meadowRadius: MEADOW, heightAt: island.surfaceAt });
     mark("props");
-    const shared = { root, input, hooks, hud, game, world, renderer, camera, overlay: ctx.overlay, overlayVisible: matrixOverlayVisible, zzzVisible: sleepMarksVisible, tickerAt: TICKER_AT, buildSpots: buildSpotsList, walkIn: WALK_IN, clampDrag, viewYaw: PILE_VIEW.yaw, bedrolls, pileScale: PILE_SCALE, pileY: ALTAR_HEIGHT + 0.02, matrixLivingPile: true, onLayout: layoutPile, onShown: () => { meterTimer = 0; }, crateRadius: () => Math.max(4.4, altar.platformRadius + 0.8), groundAt: playerSupportAt, prepareCloudSupport, cloudAt, ceilingAt, wanderSpot, walkable, flyable, glideJetCeiling, useNear, abyssAt, abyssRespawnY: ABYSS_RESPAWN_Y, jetpackAllowed, reticleTarget, phase: () => phase };
+    const shared = { root, input, hooks, hud, game, world, renderer, camera, overlay: ctx.overlay, overlayVisible: matrixOverlayVisible, zzzVisible: sleepMarksVisible, tickerAt: TICKER_AT, buildSpots: buildSpotsList, walkIn: WALK_IN, clampDrag, viewYaw: PILE_VIEW.yaw, bedrolls, pileScale: PILE_SCALE, pileY: ALTAR_HEIGHT + 0.02, matrixLivingPile: true, onLayout: layoutPile, onShown: () => { meterTimer = 0; }, crateRadius: () => Math.max(4.4, altar.platformRadius + 0.8), groundAt: playerSupportAt, prepareCloudSupport, cloudAt, ceilingAt, wanderSpot, walkable, flyable, glideJetCeiling, useNear, abyssAt, abyssRespawnY: ABYSS_RESPAWN_Y, seaY: SEA_Y, jetpackAllowed, reticleTarget, phase: () => phase };
     shared.reloadSlotRadius = () => island.path.debug.ringLoadingRadius;
     shared.reloadRadius = () => island.path.debug.ringCenterRadius;
     shared.reloadHeight = ALTAR_HEIGHT;
@@ -8242,6 +8445,10 @@
     Object.defineProperty(headquarters, "rockGuides", { configurable: true, get: ensureRockGuides });
     mark("rockGuides");
     pile = shared.pile = pileMod.create(shared);
+    pileHovered = false;
+    pileTipCount = -1;
+    pileTopY = BL.scene.boundsOf(pile.core.geometry).max[1];
+    addTarget(pile.core, { kind: "pile", weaponType: "none" });
     bananaCover = BL.bananaCover.create({ overlay: ctx.overlay, pile, renderOpts: RENDER_OPTS, renderer, floor: ALTAR_HEIGHT, lightVisibleAt: bananaLightVisibleAt });
     headquarters.bananaCover = bananaCover;
     solids.sync();
@@ -8346,7 +8553,7 @@
     shared.workHit = (cave) => clankers && clankers.hit(cave);
     shared.workPlanned = (cave, site) => clankers && clankers.plan(cave, site);
     mark("pile");
-    shared.residentPose = timechainResidentPose;
+    shared.residentPose = (cave, dt) => grabbedOogaPose(cave) || timechainResidentPose(cave, dt);
     // Signed-in visitors elsewhere, as the Oogas they drive; the crew walks round them.
     shared.outsideActors = () => remotes.actors();
     shared.outsideActorHeight = REMOTE_BODY_HEIGHT;
@@ -8474,6 +8681,7 @@
     shared.fireThreats = () => clankers.list;
     for (const entry of clankers.list) registerClanker(entry);
     clankerPlay = BL.clankerPlay.create({ canvas: ctx.canvas, camera, pilot, hud, clankers, input, renderer, reticleTarget,
+      grabOoga: grabClankerRider, releaseOoga: releaseClankerRider,
       sightClear: shared.fireReachable, aimCeiling: entry => birdsEyeCeiling(entry, true), constrainCamera: constrainClankerCamera,
       birdsEyeMin: GORILLA_BIRDS_EYE_MIN, maxDistance: DIST_MAX });
     createClankerEquipment(shared.workSites);
@@ -8511,10 +8719,15 @@
 
     Object.assign(hooks, {
       onHover: (hit, p) => {
-        if (hit) hud.tooltip.show(tooltipFor(hit), p.x, p.y, hit.owner.cave, hit.owner.kind === "clanker");
+        pileHovered = hit?.owner.kind === "pile";
+        if (pileHovered) showPileTooltip();
+        else if (hit) hud.tooltip.show(tooltipFor(hit), p.x, p.y, hit.owner.cave, hit.owner.kind === "clanker");
         else hud.tooltip.hide();
       },
-      onHoverMove: (hit, p) => hud.tooltip.show(tooltipFor(hit), p.x, p.y, hit.owner.cave, hit.owner.kind === "clanker"),
+      onHoverMove: (hit, p) => {
+        if (hit.owner.kind === "pile") showPileTooltip();
+        else hud.tooltip.show(tooltipFor(hit), p.x, p.y, hit.owner.cave, hit.owner.kind === "clanker");
+      },
       onTap,
       ...pilot.hooks,
       onOrbit: (dx, dy) => {
@@ -8859,7 +9072,15 @@
     if (ctx.from === null && !initialGorilla) restorePositionDebug();
     if (initialGorilla) {
       const entry = clankers.list.find(entry => entry.owner === initialGorilla);
-      if (clankerPlay.possess(entry, true)) clankerPlay.update(0);
+      if (clankerPlay.possess(entry, true)) {
+        const position = positionVector("pos");
+        if (position) {
+          const p = entry.root.position, dx = position[0] - p.x, dy = position[1] - p.y, dz = position[2] - p.z;
+          clankers.respawn(entry, position[0], position[1], position[2]);
+          clankerPlay.respawn(dx, dy, dz);
+        }
+        clankerPlay.update(0);
+      }
     }
     if (ctx.from === null && pilot.mode === "first-person") pilot.focusAim();
     if (POSITION_DEBUG) updatePositionDebug(true);
@@ -8924,6 +9145,8 @@
       positionDebug.removeAttribute("data-pose");
       positionDebug.removeAttribute("data-copied");
     }
+    if (draggedOoga) finishClankerRider(draggedOoga.grabbedBy, false);
+    clankerThrow.entry = null;
     clankerPlay.dispose();
     breakables.dispose();
     crates.dispose();

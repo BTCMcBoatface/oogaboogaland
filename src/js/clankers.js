@@ -6,7 +6,7 @@
   const { clamp, damp, mulberry32, fnv1a } = BL.math;
   const { addChild } = BL.scene;
   // The tallest shootable meadow rocks reach 1.11; a prop step must clear their real mesh.
-  const SCALE = 1, SPEED = 2.7, CHILL_SPEED = 0.9, STEP = 0.52, PROP_STEP = 1.16, JUMP_BUFFER = 0.18;
+  const SCALE = 1, SPEED = 2.7, CHILL_SPEED = 0.9, STEP = 0.52, PROP_STEP = 1.16, JUMP_BUFFER = 0.18, PLAYER_SMASH_RECOVER = 0.12;
   const CHILL_REST_SECONDS = 120, CHILL_REST_VARIATION = 120;
   // Measured full-size gallop envelope. Airborne and floor-pound poses reserve
   // their larger envelopes before beginning the animation.
@@ -17,7 +17,7 @@
   const WALK_HEIGHT = 2.2;
   const JUMP_SAMPLES = 20, MAX_JUMP = 8.5;
   const CLIMB_POINTS = 128, CLIMB_RADIUS = 1.05, CLIMB_HEIGHT = 3.1, CLIMB_STANDOFF = 0.87;
-  const CLIMB_SPEED = 2.1, CLIMB_APPROACH_SPEED = 3.15, CLIMB_CREST_SPEED = 2.75, CLIMB_TURN_TIME = 0.42, CLIMB_MOUNT_DISTANCE = 0.75;
+  const CLIMB_SPEED = 2.1, CLIMB_APPROACH_SPEED = 3.15, CLIMB_CREST_SPEED = 2.75, CLIMB_TURN_TIME = 0.24, CLIMB_MOUNT_DISTANCE = 0.75;
   const WALL_RECT_SAMPLES = 4, WALL_ENTER_SHARE = 0.25, TOP_EXIT_SHARE = 0.75;
   const ROLL_SECONDS = 3, ROLL_ENTRY_SECONDS = 0.45, ROLL_RECOVER_SECONDS = 0.8, SOOT_SECONDS = 10, MOTION_RADIUS = BL.agent.MANAGED_MOTION_RADIUS, MOTION_HEIGHT = BL.agent.MANAGED_MOTION_HEIGHT;
   const FIRE_FLEE_REACH = 8, FIRE_FLEE_CLEAR = 10, FIRE_MEMORY = 1.5;
@@ -188,7 +188,9 @@
           // approach. Allow planted turns and steps toward its nearest boundary.
           const depth = Math.min(zone.half - Math.abs(across), along - zone.from, zone.to - along, zone.top - y);
           const next = Math.min(zone.half - Math.abs(across + ax), along + az - zone.from, zone.to - along - az, zone.top - ny);
-          if (depth > 0 && (next < depth - 1e-9 || x === nx && y === ny && z === nz)) continue;
+          // An actor already in the approach must be able to fall in place
+          // after a blocked jump; the reservation only limits travel into it.
+          if (depth > 0 && (next < depth - 1e-9 || x === nx && z === nz && ny <= y)) continue;
         }
         if (!BL.terrain.segmentBoxClear(across, y, along, ax, ny - y, az, 0, 0,
           -zone.half, -Infinity, zone.from, zone.half, zone.top, zone.to)) return false;
@@ -300,6 +302,9 @@
       // Equipment claims keep their work positions distinct; scenery stays solid.
       if (enteringCave(e) || labWorker(e)) return false;
       const start = e.root.position;
+      // A crowded aisle must not pin a controlled jump at its current XZ.
+      // Horizontal movement still checks every peer below.
+      if (e.controlled && e.motion.lab && e.drive.airborne && x === start.x && z === start.z) return false;
       if (!e.motion.lab && !e.planningLabTraffic && !e.climb.active) {
         for (let i = 0; i < list.length; i++) {
           const other = list[i];
@@ -981,8 +986,8 @@
     };
     const labPickupPoint = (station, equipment, point) => {
       const q = equipment.pickup, sine = Math.sin(station.heading), cosine = Math.cos(station.heading);
-      point.x = q.x - sine * 1.213094 - cosine * 0.272893; point.y = station.y;
-      point.z = q.z - cosine * 1.213094 + sine * 0.272893;
+      point.x = q.x - sine * 1.213094 - cosine * 0.572893; point.y = station.y;
+      point.z = q.z - cosine * 1.213094 + sine * 0.572893;
       point.heading = station.heading; point.side = station.side;
       return point;
     };
@@ -1734,7 +1739,7 @@
       e.backoutLeft = 0;
       d.x = d.z = d.vx = d.vy = d.vz = d.motionRecover = d.jumps = 0;
       d.wallRelease = false;
-      d.climbExitHeading = d.climbExitLook = NaN;
+      d.climbExitHeading = d.climbExitLook = NaN; d.climbTurnTimer = 0;
       d.jumpHeld = d.jumpDown = d.jumpPressed = d.airborne = d.resume = d.motionEnvelope = false; d.jumpBuffer = 0; d.grounded = true;
       f.burning = f.rolling = f.requested = f.escaping = f.panic.active = false; f.retry = f.escapeRetry = 0; f.age = f.heat = f.soot = f.cooldown = f.rollRecover = 0;
       m.takeoff = m.landing = m.roll = m.rollAngle = m.rollSide = m.climb = m.climbSide = m.mantle = m.groom = m.supportOffset = 0;
@@ -1803,7 +1808,7 @@
           replans: 0, recoveries: 0, escapes: 0, escapeLeft: 0, escapeBlocked: 0, escapeX: 0, escapeZ: 0,
           retryAt: 0, reason: "", x: NaN, y: NaN, z: NaN, workTime: 0, workCycles: 0, workReach: 0, workStage: "", workItem: -1,
           turnError: Infinity, heading: NaN, searchCursor: 0 },
-        overflow: false, activity: 0, hits: 0, pounds: 0, pound: 0, poundHit: false, poundPower: 2.5,
+        overflow: false, activity: 0, hits: 0, pounds: 0, pound: 0, poundHit: false, poundPower: 2.5, smashSerial: 0,
         beat: 0, beats: 0, stand: 0, parked: false, parkFor: 0, exitFootprint: false, workCycle: 0, recover: 0, lounge: "", jumps: 0,
         loungePartner: null, loungeHeading: NaN, loungeCycle: 0, loungeRoof: false, loungeDepart: false, groomTime: 0, groomWait: 0,
         planningRoam: false, planningSeat: false, walkPoseChecked: false, roam: { path: new Float64Array(12), count: 0, index: 0, wall: false, detour: false, level: 0, reverseStart: false, departHeading: 0, propDeparture: false,
@@ -1826,16 +1831,16 @@
           yieldAlong: 0, yieldChoice: 0, yieldReady: false, yieldTargetX: 0, yieldTargetZ: 0,
           yieldProgressX: 0, yieldProgressZ: 0, yieldProgressAt: 0, yieldPoint: { x: 0, y: 0, z: 0, heading: 0 },
           squeezeUntil: 0, waitPoint: { x: 0, y: 0, z: 0, heading: 0 }, coordinationUntil: 0, path: new Float64Array(16 * 3), pathFacings: new Float64Array(16), pathWaits: new Float64Array(16), plans: 0, readyAt: 0, targetHeading: 0, trafficWait: 0, pathPending: false, pathPartial: false, pathFixed: false, pathHeading: 0, pathCount: 0, pathIndex: 0, pathAt: 0, targetX: NaN, targetY: NaN, targetZ: NaN },
-        drive: { x: 0, z: 0, climbAxis: 0, climbSide: 0, heading: NaN, climbExitHeading: NaN, climbExitLook: NaN,
+        drive: { x: 0, z: 0, climbAxis: 0, climbSide: 0, heading: NaN, climbExitHeading: NaN, climbExitLook: NaN, climbTurnTimer: 0,
           run: false, jumpHeld: false, jumpDown: false, jumpPressed: false, jumpBuffer: 0, jumps: 0, avoidSide: 0, avoidHeading: 0, avoidTime: 0,
           cancelled: false, vx: 0, vy: 0, vz: 0, airborne: false, passiveFall: false, wallRelease: false, grounded: true, resume: false, motionRecover: 0, motionEnvelope: false },
         motion: { poundCharge: 0, takeoff: 0, landing: 0, supportOffset: 0, supportEntry: null,
           groundRects: { flat: { x: 0, y: 0, z: 0, heading: 0 }, angled: { x: 0, y: 0, z: 0, heading: 0, groundX: 0, groundZ: 0, steep: false, walkable: true } },
-          walkPhase: NaN, roll: 0, rollAngle: 0, rollSide: 0, smash: false,
+          walkPhase: NaN, roll: 0, rollAngle: 0, rollSide: 0, smash: false, dragging: false, throwProgress: 0,
           climbGripX: NaN, climbGripY: NaN, climbGripZ: NaN, climbGripStride: 0, climbGripDirection: 0, climbGripSide: 0, climbGripRelease: 0,
           climb: 0, climbBlend: NaN, openingSettle: 0, climbStride: 0, climbDirection: 0, climbSide: 0, verifyGrip: false, mantle: 0, groom: 0, groomSide: 1, groomPhase: 0,
           sitWait: 3, sitTime: 0, sitLook: 0, sitShift: 0, sitLookTarget: 0, sitShiftTarget: 0,
-          lab: false, labRunIn: false, workExit: false, labWork: "", labPhase: i * 0.71, labSide: 1, labDt: 1 / 30, labReach: 0, labGripY: 0.53105, labSqueeze: false,
+          lab: false, labRunIn: false, workExit: false, labWork: "", labPhase: i * 0.71, labSide: 1, labDt: 1 / 30, labReach: 0, labGripY: 0.53105, labItemGeometry: null, labSqueeze: false,
           labDie: false, labRoll: 0, labBench: null },
         climb: { active: false,
           panel: { x: 0, y: 0, z: 0, heading: 0, nx: 0, nz: 1, u: 0, v: 0, depth: 0 },
@@ -2491,7 +2496,7 @@
       e.drive.airborne = e.drive.passiveFall = false; e.drive.grounded = false; e.drive.vx = e.drive.vy = e.drive.vz = e.drive.jumps = 0;
       e.drive.jumpPressed = false; e.drive.jumpBuffer = 0; e.drive.jumpDown = e.drive.jumpHeld; e.motion.groom = 0;
       e.motion.climb = 1; e.motion.climbBlend = 0; e.motion.mantle = 1;
-      e.drive.climbExitHeading = e.drive.climbExitLook = NaN;
+      e.drive.climbExitHeading = e.drive.climbExitLook = NaN; e.drive.climbTurnTimer = 0;
       e.lounge = ""; if (e.controlled) e.loungePartner = null;
       e.speed = 0; e.biped = false;
       releasePortal(e);
@@ -2918,7 +2923,8 @@
       d.airborne = d.passiveFall = false; d.grounded = true; d.vy = d.jumps = 0;
       d.wallRelease = false;
       d.climbExitHeading = wallDismount && e.controlled ? facing : NaN;
-      d.climbExitLook = NaN;
+      d.climbExitLook = wallDismount && e.controlled ? facing : NaN;
+      d.climbTurnTimer = e.controlled ? 0.45 : 0;
       m.climb = m.mantle = m.climbDirection = m.climbSide = 0; m.climbBlend = NaN;
       e.footprintMode = "walk"; e.compact = e.gorilla.compact;
       e.radius = WALK_RADIUS; e.height = WALK_HEIGHT;
@@ -3980,7 +3986,8 @@
         m.climb = 0; m.climbBlend = NaN; m.mantle = m.climbSide = 0;
         e.compact = e.gorilla.compact; e.footprintMode = "walk"; e.radius = WALK_RADIUS; e.height = 2.7;
         e.recover = e.blocked = 0;
-        if (axis < 0) d.climbExitHeading = e.heading;
+        if (e.controlled) d.climbTurnTimer = 0.45;
+        if (axis < 0) d.climbExitHeading = d.climbExitLook = e.heading;
         if (e.debugMove.active) { d.resume = false; resetDebugRoute(e); }
         else {
           if (!e.controlled && (d.resume || e.pendingSite >= 0)) resumeEntry(e);
@@ -4267,7 +4274,8 @@
           : e.phase === "work" && !sites[e.site].mirrorRoom ? sites[e.site].mouth.ry : NaN;
         const facingTurn = Number.isFinite(roomFacing)
           ? Math.atan2(Math.sin(roomFacing - e.heading), Math.cos(roomFacing - e.heading)) : turn;
-        const facing = e.heading + clamp(facingTurn, -dt * 5, dt * 5);
+        const facing = onProp && Math.cos(heading - e.heading) < -0.25 ? e.heading
+          : e.heading + clamp(facingTurn, -dt * 5, dt * 5);
         // The larger chain also covers reverse strides and the recovery
         // from a hop or chest beat. Reserve it before every working step.
         e.footprintMode = e.parked ? "stand" : e.mode === "working" || e.phase === "leave" || e.exitFootprint ? "pound" : "walk";
@@ -4727,9 +4735,10 @@
         const x = p.x + Math.sin(heading) * distance, z = p.z + Math.cos(heading) * distance;
         const y = ctx.terrainSupportAt
           ? ctx.terrainSupportAt(e, x, z, p.y, PROP_STEP, heading) : groundAt(x, z, p.y);
+        const facing = Math.cos(heading - e.heading) < -0.25 ? e.heading : heading;
         if (!Number.isFinite(y) || p.y - y <= 0.02 || p.y - y > PROP_STEP || !landing(x, y, z)
-          || occupied(e, x, y, z, true, heading)
-          || !propStepClear(e, p.x, p.y, p.z, x, y, z, e.heading, heading)) continue;
+          || occupied(e, x, y, z, true, facing)
+          || !roamLeg(e, p.x, p.y, p.z, x, y, z, e.heading, false, roamPoint, facing)) continue;
         e.compact = compact; e.footprintMode = mode; e.radius = radius; e.height = height; e.planningRoam = false;
         e.roam.count = e.roam.index = 0; e.roam.wall = false; e.roam.alignTime = 0;
         e.roam.targetX = e.roam.targetY = e.roam.targetZ = NaN;
@@ -4747,7 +4756,7 @@
       if (e.debugMove.active) { e.phase = e.route === "exit" ? "leave" : "chill"; resetDebugRoute(e); return; }
       e.roam.departPending = false;
       e.backoutLeft = 0;
-      e.drive.climbExitHeading = e.drive.climbExitLook = NaN;
+      e.drive.climbExitHeading = e.drive.climbExitLook = NaN; e.drive.climbTurnTimer = 0;
       if (!alive(e.owner)) return;
       e.mode = e.owner.state;
       if (e.mode === "working") {
@@ -4765,7 +4774,7 @@
       const d = player.drive;
       d.x = d.z = d.climbAxis = d.climbSide = 0; d.heading = NaN;
       d.avoidSide = d.avoidTime = 0;
-      d.climbExitHeading = d.climbExitLook = NaN;
+      d.climbExitHeading = d.climbExitLook = NaN; d.climbTurnTimer = 0;
       d.jumpHeld = d.jumpDown = d.jumpPressed = d.run = false; d.jumpBuffer = 0; d.cancelled = true;
       player.climb.searchPending = player.climb.searchDeferred = player.climb.claimPending = player.climb.crestPending = false;
       player.climb.claimFor = -1; player.climb.claimOwnerOrder = player.climb.claimOrder = 0;
@@ -4883,7 +4892,10 @@
         const p = e.root.position, floor = support(e, p.x, p.z, p.y, PROP_STEP);
         if (floor >= p.y - 0.05) continue;
         const d = e.drive;
-        d.vx = d.vz = d.vy = 0;
+        // A controlled walker keeps its horizontal pace while the destroyed
+        // support falls away; gravity handles the short drop separately.
+        if (!e.controlled) d.vx = d.vz = 0;
+        d.vy = 0;
         d.airborne = d.passiveFall = true; d.grounded = d.motionEnvelope = false;
         d.motionRecover = 0; d.resume = !e.controlled;
         e.lounge = ""; e.motion.takeoff = 0;
@@ -4915,15 +4927,19 @@
       e.motion.roll = e.motion.rollAngle = e.motion.rollSide = 0;
       return true;
     };
-    const smash = (charge = 0) => {
+    const quickSmash = e => e && e.poundHit && (e.pound > 0 || e.recover > 0);
+    const smashPower = (charge = 0, combo = quickSmash(player)) => (2.5 + 2.5 * clamp(charge, 0, 1)) * (combo ? 0.25 : 1);
+    const smash = (charge = 0, combo = quickSmash(player), power = smashPower(charge, combo)) => {
       const e = player;
-      if (!e || e.climb.active || e.fire.rolling || e.recover > 0 || e.parked || e.pound || e.beat) return false;
+      if (!e || e.climb.active || e.fire.rolling || e.parked || e.beat || e.pound > 0 && !e.poundHit) return false;
+      if (e.recover > 0 && !combo) return false;
       if (ctx.canSmash ? !ctx.canSmash(e) : !expandGesture(e, 2.25)) return false;
-      const duration = e.gorilla.pound(e.drive.airborne, charge);
+      const duration = e.gorilla.pound(e.drive.airborne, charge, combo);
       if (!duration) return false;
-      e.poundPower = 2.5 + 2.5 * clamp(charge, 0, 1);
+      // Spend the strength sampled on release, including a hold during recharge.
+      e.poundPower = power;
       e.footprintMode = "pound"; e.compact = e.gorilla.poundCompact; e.radius = Math.max(e.radius, 2.25);
-      e.pound = duration; e.poundHit = false; e.actionControlled = e.motion.smash = true;
+      e.pound = duration; e.poundHit = false; e.recover = 0; e.smashSerial++; e.actionControlled = e.motion.smash = true;
       return true;
     };
     const chestBeat = () => {
@@ -4940,8 +4956,26 @@
     const beginDrivenJump = (e) => {
       const d = e.drive;
       const jumps = d.grounded && !d.airborne ? 0 : Math.max(1, d.jumps);
-      if (jumps >= 2 || e.climb.active || e.recover > 0 || e.pound || e.beat || e.fire.burning || e.fire.rolling || e.parked
-        || !fullEnvelope(e, MOTION_RADIUS, MOTION_HEIGHT)) return false;
+      const carrying = e.motion.dragging;
+      // The lab's upright aisle cannot fit the outdoor motion envelope.
+      const labAir = e.motion.lab && !e.motion.labRunIn;
+      if (jumps >= 2 || e.climb.active || !carrying && (e.recover > 0 || e.parked)
+        || e.pound || e.beat || e.fire.burning || e.fire.rolling) return false;
+      // Check takeoff with the state the next movement step will use. The lab
+      // permits a vertical escape from an overlapping crowd only in flight;
+      // testing the still-grounded pose can reject that jump before it begins.
+      const wasAirborne = d.airborne;
+      if (labAir) d.airborne = true;
+      const clear = fullEnvelope(e, labAir ? Math.max(BL.agent.LAB_RADIUS, e.gorilla.bodyRadius + 0.1) : MOTION_RADIUS,
+        labAir ? Math.max(BL.agent.LAB_HEIGHT, e.gorilla.bodyHeight + 0.04) : MOTION_HEIGHT);
+      d.airborne = wasAirborne;
+      if (!clear) return false;
+      // A held Ooga already has one hand off the floor. A parked stance's
+      // rise/recovery must not outlast the fresh jump press.
+      if (carrying) {
+        e.recover = 0;
+        if (e.parked) { e.parked = e.biped = false; e.footprintMode = "pound"; }
+      }
       // Each fresh press supplies one impulse, with one additional press in
       // the air. Under the Ooga's gravity sqrt(1.5) gives 50% more height.
       d.vy = PLAYER_JUMP_SPEED; d.jumps = jumps + 1;
@@ -5266,6 +5300,7 @@
     };
     const updateDriven = (e, dt) => {
       const d = e.drive, p = e.root.position, m = e.motion;
+      d.climbTurnTimer = Math.max(0, d.climbTurnTimer - dt);
       if (e.controlled) { e.phase = "controlled"; e.route = ""; }
       e.lounge = "";
       if (d.cancelled && !d.jumpHeld) d.cancelled = false;
@@ -5296,7 +5331,7 @@
             if (!d.airborne && ctx.onPound) ctx.onPound(e);
             if (e.actionControlled && ctx.onSmash) ctx.onSmash(e);
           }
-          if (!e.pound) e.recover = 0.35;
+          if (!e.pound) e.recover = PLAYER_SMASH_RECOVER;
         }
         e.beat = Math.max(0, e.beat - dt);
         if (!e.actionControlled) { e.speed = 0; d.vx = d.vz = 0; return; }
@@ -5310,8 +5345,9 @@
       if (!d.airborne) d.motionRecover = Math.max(0, d.motionRecover - dt);
       const motion = d.airborne && !d.passiveFall || d.motionRecover > 0 || e.fire.rollRecover > 0 || e.drive.motionEnvelope && e.gorilla.motionActive;
       e.compact = !motion && (e.parked ? e.gorilla.standCompact : e.footprintMode === "walk" ? e.gorilla.compact : e.gorilla.poundCompact);
-      e.radius = Math.max(motion ? MOTION_RADIUS : WALK_RADIUS, e.gorilla.bodyRadius + 0.1);
-      e.height = Math.max(motion ? MOTION_HEIGHT : WALK_HEIGHT, e.gorilla.bodyHeight + 0.04);
+      const labAir = e.motion.lab && d.airborne && !e.motion.labRunIn;
+      e.radius = Math.max(labAir ? BL.agent.LAB_RADIUS : motion ? MOTION_RADIUS : WALK_RADIUS, e.gorilla.bodyRadius + 0.1);
+      e.height = Math.max(labAir ? BL.agent.LAB_HEIGHT : motion ? MOTION_HEIGHT : WALK_HEIGHT, e.gorilla.bodyHeight + 0.04);
       if (d.wallRelease && d.passiveFall) {
         e.radius = Math.max(CLIMB_RADIUS, e.gorilla.bodyRadius + 0.015);
         e.height = Math.max(CLIMB_HEIGHT, e.gorilla.bodyHeight + 0.015);
@@ -5323,8 +5359,8 @@
       const speed = e.parked ? 0.6 : d.run ? SPEED * 2 : CHILL_SPEED * 2;
       const wantX = e.controlled || !d.airborne ? d.x / norm * speed * amount : d.vx;
       const wantZ = e.controlled || !d.airborne ? d.z / norm * speed * amount : d.vz;
-      // NPC ground steps use their selected pace immediately. Apply the same
-      // pace here; only airborne steering needs a gradual velocity change.
+      // Controlled ground steps take their faster selected pace immediately;
+      // only airborne steering needs a gradual velocity change.
       d.vx = d.airborne ? damp(d.vx, wantX, 3, dt) : wantX;
       d.vz = d.airborne ? damp(d.vz, wantZ, 3, dt) : wantZ;
       let wantedHeading = Number.isFinite(d.heading) ? d.heading : amount > 0.01 ? Math.atan2(d.x, d.z) : e.heading;
@@ -5334,11 +5370,12 @@
         if (!Number.isFinite(d.climbExitLook)) d.climbExitLook = wantedHeading;
         const lookTurn = Math.abs(Math.atan2(Math.sin(wantedHeading - d.climbExitLook), Math.cos(wantedHeading - d.climbExitLook)));
         const movingAway = amount < 0.05 || (d.x * Math.sin(d.climbExitHeading) + d.z * Math.cos(d.climbExitHeading)) / norm < -0.7;
-        if (lookTurn > 0.25 || !movingAway || d.airborne) d.climbExitHeading = d.climbExitLook = NaN;
+        if (lookTurn > 0.08 || !movingAway || d.airborne) d.climbExitHeading = d.climbExitLook = NaN;
         else wantedHeading = d.climbExitHeading;
       }
       const delta = Math.atan2(Math.sin(wantedHeading - e.heading), Math.cos(wantedHeading - e.heading));
-      const heading = e.heading + clamp(delta, -dt * 7, dt * 7);
+      const turnRate = d.climbTurnTimer > 0 ? 14 : 7;
+      const heading = e.heading + clamp(delta, -dt * turnRate, dt * turnRate);
       const direction = Math.atan2(d.x, d.z), backing = e.controlled && Math.cos(direction - e.heading) < -0.25;
       if (d.airborne && (d.vy <= 0 && beginPlatformEntry(e) || attachContactWall(e))) return;
       if (!d.airborne && amount > 0.05 && !e.climb.retry && caveAt(p.x, p.y, p.z) < 0
@@ -5543,8 +5580,10 @@
       }
       if (e.gorilla.motionActive && !e.climb.active) {
         e.compact = false;
-        e.radius = Math.max(e.radius, MOTION_RADIUS);
-        e.height = Math.max(e.height, MOTION_HEIGHT);
+        if (!(e.motion.lab && e.drive.airborne && !e.motion.labRunIn)) {
+          e.radius = Math.max(e.radius, MOTION_RADIUS);
+          e.height = Math.max(e.height, MOTION_HEIGHT);
+        }
       }
       if (e.drive.motionEnvelope && !e.gorilla.motionActive && !e.drive.airborne
         && !e.drive.motionRecover && !e.fire.rolling && !e.fire.rollRecover) e.drive.motionEnvelope = false;
@@ -6227,7 +6266,7 @@
     };
     return { list, sync, update, target, companionTarget, hit, damage, plan, startLabShuttle, debugMove, cancelDebugMove, stats, liveGeometry, dispose, contactAt,
       debugLoungeSpots,
-      possess, release, respawn, control, cancelInput, smash, chestBeat, ignite, dropRoll, supportRemoved,
+      possess, release, respawn, control, cancelInput, smash, smashPower, quickSmash, chestBeat, ignite, dropRoll, supportRemoved,
       get player() { return player; } };
   };
   BL.clankers = { create, WALK_RADIUS, WALK_HEIGHT, PROP_STEP };

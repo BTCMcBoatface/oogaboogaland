@@ -635,14 +635,14 @@
         : "Equip the AK-47 to swap magazines";
       button.setAttribute("aria-label", `${count} spare magazine${count === 1 ? "" : "s"}; ${high} of 30 rounds${count > 1 ? ` fullest, ${low} of 30 rounds lowest` : ""}${reloadingIndex >= 0 ? "; reloading" : canSwap ? "; click to use the fullest spare" : ""}`);
       if (high !== magazineHigh) {
-        const filled = Math.floor(high / 6), previous = Math.floor(magazineHigh / 6);
+        const filled = Math.round(high / 6), previous = Math.round(magazineHigh / 6);
         for (let i = 0; i < el.magazineBananas.length; i++) if (magazineHigh < 0 || (i < filled) !== (i < previous)) el.magazineBananas[i].dataset.filled = String(i < filled);
         magazineHigh = high;
         el.magazineAmmo.firstChild.data = String(high);
         button.dataset.level = high === 0 ? "empty" : high <= 5 ? "low" : "ok";
       }
       if (low !== magazineLow) {
-        const filled = Math.floor(low / 6), previous = Math.floor(magazineLow / 6);
+        const filled = Math.round(low / 6), previous = Math.round(magazineLow / 6);
         for (let i = 0; i < el.magazineRearBananas.length; i++) if (magazineLow < 0 || (i < filled) !== (i < previous)) el.magazineRearBananas[i].dataset.filled = String(i < filled);
         magazineLow = low;
         el.magazineLowAmmo.firstChild.data = String(low);
@@ -694,11 +694,16 @@
       refreshWeaponSummary();
       setMode(null);
     };
-    const setGorillaSmashPower = (charge) => {
-      const power = 100 + Math.round(Math.max(0, Math.min(1, charge)) * 100);
-      el.gorillaStrengthFill.style.transform = `scaleY(${power / 200})`;
-      el.gorillaStrength.setAttribute("aria-valuenow", String(power));
-      el.gorillaStrength.setAttribute("aria-valuetext", `${power}% of normal smash damage`);
+    const setGorillaSmashPower = (power, returning = false, throwing = false) => {
+      const percent = Math.round(Math.max(0, Math.min(throwing ? 1 : 5, power)) * (throwing ? 100 : 40));
+      el.gorillaSmash.dataset.returning = String(returning);
+      el.gorillaStrengthFill.style.transform = `scaleY(${percent / (throwing ? 100 : 200)})`;
+      el.gorillaStrength.setAttribute("aria-label", throwing ? "Ooga throw power" : "Ground smash power");
+      el.gorillaStrength.setAttribute("aria-valuemax", throwing ? "100" : "200");
+      el.gorillaStrength.setAttribute("aria-valuenow", String(percent));
+      el.gorillaStrength.setAttribute("aria-valuetext", throwing ? `${percent}% throw power` : `${percent}% of normal smash damage`);
+      el.gorillaSmash.setAttribute("aria-label", throwing ? "Throw Ooga; hold click to charge, release to throw" : "Ground smash; hold for double damage");
+      el.gorillaSmash.title = throwing ? "Throw Ooga · hold click to charge, release to throw" : "Ground smash · hold for double damage (1)";
     };
     const setSubtitle = (text) => {
       el.subtitle.textContent = text;
@@ -1342,7 +1347,7 @@
       el.tooltip.style.transform = `translate(${left}px, ${top}px)`;
     };
     const tooltip = {
-      show: (text, x, y, cave = null, noStatusDot = false) => {
+      show: (text, x, y, cave = null, noStatusDot = false, above = false) => {
         if (cave !== tipCave) tipSpeechTop = Infinity;
         tipCave = cave;
         const name = !!cave;
@@ -1372,8 +1377,8 @@
           return;
         }
         const w = tipW, h = tipH;
-        const left = Math.min(window.innerWidth - w - 8, x + 14);
-        const top = y + 18 + h > window.innerHeight ? y - h - 10 : y + 18;
+        const left = above ? Math.max(8, Math.min(window.innerWidth - w - 8, x - w / 2)) : Math.min(window.innerWidth - w - 8, x + 14);
+        const top = above ? Math.max(8, y - h - 10) : y + 18 + h > window.innerHeight ? y - h - 10 : y + 18;
         placeTooltip(left, top);
       },
       setVisibility: (visibility) => {

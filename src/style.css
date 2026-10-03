@@ -1838,6 +1838,14 @@ body[data-active-scene="arcade"] .magazine-hud {
   transform-origin: bottom;
 }
 
+.gorilla-hud[data-returning="true"] .primary-strength-fill {
+  transition: transform 0.25s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gorilla-hud[data-returning="true"] .primary-strength-fill { transition: none; }
+}
+
 .jetpack-compact-fuel {
   display: block;
   position: relative;
