@@ -7066,6 +7066,34 @@ scene("flap", { steps: [carnivalPlay("flap", 0.5), trip("flap")] });
 scene("breaker", { steps: [carnivalPlay("breaker", 0.5), trip("breaker")] });
 scene("dash", { steps: [carnivalPlay("dash", 0.5), trip("dash")] });
 scene("stacker", { steps: [carnivalPlay("stacker", 0.5), trip("stacker")] });
+// The previous play check leaves table ten running. Freeze local deals while comparing
+// visits: different community cards legitimately have different SVG element counts.
+const pokerTrip = (() => {
+  const check = trip("poker");
+  return { ...check, run: async b => {
+    const before = await b.evaluate(`(() => {
+      const P = BL.scenes.poker.debug.poker;
+      if (P.session.live) throw new Error("Poker round trip needs a local session");
+      const paused = P.session.paused;
+      if (!paused) P.action("pause");
+      if (!P.session.paused) throw new Error("Poker round trip could not pause the local session");
+      return { paused, versions: P.session.tables.map(t => t.version), title: document.querySelector('[data-poker="title"]').textContent };
+    })()`);
+    try {
+      await check.run(b);
+      const after = await b.evaluate(`(() => {
+        const P = BL.scenes.poker.debug.poker;
+        return { paused: P.session.paused, local: !P.session.live, versions: P.session.tables.map(t => t.version), title: document.querySelector('[data-poker="title"]').textContent };
+      })()`);
+      record("poker round trip: both visits compare the same paused local hand and table", after.local && after.paused && after.title === before.title && JSON.stringify(after.versions) === JSON.stringify(before.versions), JSON.stringify({ before, after }));
+    } finally {
+      await b.evaluate(`(() => {
+        const P = BL.scenes.poker.debug?.poker;
+        if (P && !P.session.live && P.session.paused !== ${before.paused}) P.action("pause");
+      })()`);
+    }
+  } };
+})();
 scene("poker", { query: "character=portlandhodl", steps: [{ name: "poker floor and play", why: "playthrough: a visitor walks the floor, fills a table, plays to settlement and stands without exposing hidden cards", run: async b => {
   await b.evaluate(`document.querySelector('[data-intro="poker"] .game-intro-go').click()`);
   const walking = await walkKeys(b, "portlandhodl", 0, 18, [0, 1.5], 0.45);
@@ -7088,7 +7116,7 @@ scene("poker", { query: "character=portlandhodl", steps: [{ name: "poker floor a
     await b.evaluate(`(() => { const P = BL.scenes.poker.debug.pilot; P.release(true); P.goPreset("entrance"); __ooga.advance(2); })()`);
     await b.screenshot(join(process.env.POKER_SHOTS, "poker-floor.png"));
   }
-} }, trip("poker")] });
+} }, pokerTrip] });
 scene("poker", { label: "canvas2d", query: "canvas2d=1", steps: [{ name: "poker canvas2d", why: "rule: the floor and table controls work on the fallback renderer", run: async b => {
   await b.evaluate(`document.querySelector('[data-intro="poker"] .game-intro-go').click()`);
   const r = await b.evaluate(`(() => { const P = BL.scenes.poker.debug.poker; P.action("join"); P.action("bots"); P.action("start"); __ooga.advance(1); return { kind: __ooga.renderer.kind, phase: P.session.tables[0].snapshot().phase, nodes: __ooga.stats().visibleNodes }; })()`);
@@ -7463,8 +7491,19 @@ for (const fallback of [false, true]) scene("dsb", { label: "dsb gameplay " + (f
   record("dsb gameplay: station payment confirmation is shown", await untilPage(b, 'document.getElementById("dsb-tv-payment-status").textContent.includes("confirmed")', 10000));
   if (process.env.DSB_CAPTURE && !fallback) await b.screenshot(join(root, "untracked", "dsb-jukebox.png"));
   await click("#dsb-tv-close"); await dsbApproach(b, "shop"); await click("#dsb-context"); await click('[data-action="dsb-banana"]'); await click('[data-action="dsb-tomato"]');
-  const bought = await b.evaluate(`__ooga.dsb.inventory`); record("dsb gameplay: real shop clicks add a banana and tomato", bought.bananas === 1 && bought.tomatoes === 1 && bought.tokens === 18, JSON.stringify(bought));
-  await click('[data-action="dsb-close-shop"]'); await click('[data-action="dsb-throw"]');
+  const bought = await b.evaluate(`__ooga.dsb.inventory`);
+  await b.evaluate(`
+    // Let the open shop publish its hint, then observe the close action before
+    // another frame could hide a delayed hint update that moves the buttons.
+    __ooga.advance(0.41); window.__dsbShopClose = null;
+    document.querySelector('[data-action="dsb-close-shop"]').addEventListener("click", () => {
+      window.__dsbShopClose = { hidden: document.getElementById("dsb-shop").hidden, prompt: document.getElementById("dsb-prompt").textContent };
+    }, { once: true });
+  `);
+  await click('[data-action="dsb-close-shop"]');
+  const closed = await b.evaluate(`window.__dsbShopClose`);
+  record("dsb gameplay: real shop clicks add a banana and tomato", bought.bananas === 1 && bought.tomatoes === 1 && bought.tokens === 18 && closed?.hidden && closed.prompt === "Visit meme shop", JSON.stringify({ bought, closed }));
+  await click('[data-action="dsb-throw"]');
   const projectile = await b.evaluate(`(() => {
     const B = __ooga, geometry = BL.dsbModels.cube("#ef4256"), node = B.dsb.land.root.children.find(n => n.geometry === geometry && n.visible);
     if (!node) return { created: false };
