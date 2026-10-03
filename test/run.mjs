@@ -6440,7 +6440,8 @@ scene("hub", { label: "gorilla stone core", query: "status=chillin", steps: [{ n
       if (B.island.solidAt(p.x + Math.sin(e.heading) * 0.7, p.y + 0.85, p.z + Math.cos(e.heading) * 0.7)) buriedFrames++;
       if (Math.hypot(p.x - previousX, p.z - previousZ) > 1e-5) movingFrames++;
       previousX = p.x; previousZ = p.z;
-      if (!(frame % 12)) state.trace.push({ frame, x: p.x, y: p.y, z: p.z, heading: e.heading });
+      if (!(frame % 12)) state.trace.push({ frame, x: p.x, y: p.y, z: p.z, heading: e.heading,
+        climbing: e.climb.active, freeClimb: e.climb.free, climbAxis: e.drive.climbAxis });
     }
     state.slide = { tangent: (e.root.position.x - x) * sz - (e.root.position.z - z) * sx, movingFrames, buriedFrames };
     return state;
@@ -6818,17 +6819,24 @@ scene("hub", { label: "gorilla traversal", query: "status=chillin&gorillamove=1"
       jumps.push({ run, gait, startSpeed, switchSpeed, firstAir, heldTravel, stopped, vx, peak, heldJumps, heldLanded, releaseJumps,
         secondCount, secondVelocity, thirdCount, thirdVelocity, secondLift, landed, nextJump });
     }
-    const tree = B.props.find(prop => prop.prop === "tree"); tree.node.visible = true; S.updateWorld(root); solids.sync();
+    const tree = B.props.find(prop => prop.prop === "tree"), treePosition = { ...tree.node.position };
+    // Scattered trees live on cliff ledges; a westward retreat from the first
+    // can start beyond the island. Use the same cleared ground as the props.
+    Object.assign(tree.node.position, { x: 12, y: B.island.surfaceAt(12, 0), z: 0 });
+    tree.node.visible = true; S.updateWorld(root); solids.sync();
     const q = tree.node.position; setup(q.x - 2.8, q.z, Math.PI / 2);
+    const startY = e.root.position.y;
     e.drive.motionEnvelope = true; e.drive.motionRecover = 0.6;
-    let lowFrames = 0, bipedFrames = 0, movingFrames = 0, previous = e.root.position.x;
+    let lowFrames = 0, bipedFrames = 0, movingFrames = 0, airborneFrames = 0, previous = e.root.position.x;
     advance({ x: -1, z: 0, heading: Math.PI / 2, run: false, jumpHeld: false }, 1.5, () => {
       if (e.gorilla.debug.gait === "knuckle" && !e.drive.airborne) lowFrames++; if (e.biped) bipedFrames++;
+      if (e.drive.airborne) airborneFrames++;
       if (Math.abs(e.root.position.x - previous) > 1e-5) movingFrames++;
       previous = e.root.position.x;
     });
-    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, lowFrames, bipedFrames, movingFrames, envelopeCleared: !e.drive.motionEnvelope && !e.drive.motionRecover };
-    tree.node.visible = false;
+    const canopy = { startX: q.x - 2.8, endX: e.root.position.x, startY, endY: e.root.position.y,
+      lowFrames, bipedFrames, movingFrames, airborneFrames, envelopeCleared: !e.drive.motionEnvelope && !e.drive.motionRecover };
+    Object.assign(tree.node.position, treePosition); tree.node.visible = false; S.updateWorld(root); solids.sync();
     // Keep the identical obstacle outside the arcade's reserved entrance apron.
     const screen = S.createNode({ geometry: BL.models.box({ w: 0.5, h: 4, d: 4, color: BL.math.hexToRgb("#454545") }),
       position: { x: 12, y: B.island.surfaceAt(12, 10) + 2, z: 10 } });

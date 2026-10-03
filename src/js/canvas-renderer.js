@@ -658,7 +658,7 @@
                 if (distance2 >= radius * radius || distance2 < 1e-8) continue;
                 const distance = Math.sqrt(distance2), facing = Math.max(0, (nx * dx + ny * dy + nz * dz) / distance);
                 const falloff = 1 - distance / radius;
-                const strength = (pointLights[o + 7] > 0.5 ? 0.72 * (1 - smooth((distance / radius - 0.2) / 0.8)) : falloff * falloff) * facing / distance;
+                const strength = (pointLights[o + 7] > 0.5 ? 0.72 * (1 - smooth((distance / radius - 0.2) / 0.8)) : falloff * falloff) * facing * (1 - Math.min(1, emissive));
                 pointR += pointLights[o + 4] * strength;
                 pointG += pointLights[o + 5] * strength;
                 pointB += pointLights[o + 6] * strength;

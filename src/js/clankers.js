@@ -5050,7 +5050,10 @@
       if (!d.airborne && walkingRampAt(p.x, p.y, p.z, heading)
         && !cliffRiserAhead(p.x, p.z, heading, descending ? -1 : 1)) return false;
       const sx = Math.sin(heading), sz = Math.cos(heading);
+      // Ground travel along a room wall must keep sliding. Only a terrain
+      // riser starts a grounded climb; airborne contact can attach directly.
       if (!descending && (d.vx * sx + d.vz * sz < 0.2
+        || !d.airborne && !cliffRiserAhead(p.x, p.z, heading, 1)
         || wallRectangleShare(e, p.x, p.y, p.z, heading) < WALL_ENTER_SHARE)) return false;
       let wall = NaN;
       for (let distance = 0.35; distance <= 1.3; distance += 0.08) {
