@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
@@ -8223,26 +8222,32 @@ const unitChecks = async () => {
   // Sealed cave guides need the hub's seal nodes, so probes reading them stay in the browser tier.
   const island = BL.terrain.island({ seed: 1 });
   {
-    // #93: share duplicate vertices without rounding the ramp/window boundaries. This fingerprint is the
-    // expanded face stream from the unmodified seed-1 island, so vertex storage and indices may change.
+    // #93: compare the actual weld against independent coordinates, not a fixed hash of trig-built terrain.
+    // The source includes duplicates, signed zero on every axis, adjacent doubles and a nonempty line.
+    const source = [0, -0, 2, 0, 0, 2, 1 + Number.EPSILON, 1, 3, 1, 1, 3, 0, -0, 2, -0, -0, 2, 0, -0, -0, 0, -0, 0, 1, 1, 3];
+    const fixture = { verts: source.slice(), faces: [
+      { i: [0, 2, 3, 4], color: [12, 34, 56], emissive: 0.2, matrixCave: 3, cutawayPathKey: 255 },
+      { i: [1, 6, 7], color: [78, 90, 12], headquartersWindowReveal: true },
+      { i: [5, 8, 2], color: [34, 56, 78], headquartersBasementRamp: 1 }
+    ], lines: [{ i: [4, 5, 6, 7, 1, 8], color: [90, 12, 34], width: 2 }] };
+    const metadata = item => JSON.stringify(Object.fromEntries(Object.entries(item).filter(([key]) => key !== "i")));
+    const original = [...fixture.faces, ...fixture.lines].map(item => ({
+      coordinates: item.i.flatMap(i => source.slice(i * 3, i * 3 + 3)), metadata: metadata(item)
+    }));
+    const expectedIndices = [[0, 2, 3, 0], [1, 5, 6], [4, 3, 2], [0, 4, 5, 6, 1, 3]];
+    const expectedVertices = [0, 1, 2, 3, 5, 6, 7].flatMap(i => source.slice(i * 3, i * 3 + 3));
+    BL.terrain.compactVertices(fixture);
+    const items = [...fixture.faces, ...fixture.lines];
+    const exact = fixture.verts instanceof Float64Array && fixture.verts.length === expectedVertices.length
+      && expectedVertices.every((value, i) => Object.is(value, fixture.verts[i]))
+      && fixture.faces.length === 3 && fixture.lines.length === 1 && items.every((item, n) =>
+        metadata(item) === original[n].metadata && item.i.length === expectedIndices[n].length
+        && item.i.every((index, i) => index === expectedIndices[n][i]
+          && [0, 1, 2].every(axis => Object.is(fixture.verts[index * 3 + axis], original[n].coordinates[i * 3 + axis]))));
     const geo = island.geometry;
-    let count = 0;
-    for (const face of geo.faces) count += 1 + face.i.length * 3;
-    const expanded = new Float64Array(count);
-    let at = 0;
-    for (const face of geo.faces) {
-      expanded[at++] = face.i.length;
-      for (const i of face.i) {
-        expanded[at++] = geo.verts[i * 3];
-        expanded[at++] = geo.verts[i * 3 + 1];
-        expanded[at++] = geo.verts[i * 3 + 2];
-      }
-    }
-    const hash = createHash("sha256").update(new Uint8Array(expanded.buffer)).digest("hex");
-    record("terrain memory: compact cached vertices preserve every authored face coordinate and winding exactly",
-      geo.verts instanceof Float64Array && geo.verts.byteLength < 1957458 * 4
-        && hash === "2a572d33f96e74a8183ecbe9b36827b5d40d7f7dc4f02dc4bfbae37651e8e8b5"
-        && BL.terrain.island({ seed: 1 }) === island, JSON.stringify({ vertices: geo.verts.length / 3, bytes: geo.verts.byteLength, hash }));
+    record("terrain memory: exact compaction preserves coordinates, winding, lines and metadata; the cached island stays within its byte budget",
+      exact && geo.verts instanceof Float64Array && geo.verts.byteLength < 1957458 * 4
+        && BL.terrain.island({ seed: 1 }) === island, JSON.stringify({ exact, fixtureVertices: fixture.verts.length / 3, vertices: geo.verts.length / 3, bytes: geo.verts.byteLength }));
   }
 
   {
