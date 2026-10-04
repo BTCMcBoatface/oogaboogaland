@@ -2845,6 +2845,35 @@ const poolLayoutChecks = async () => {
   const lake = L.waterRadius(L.WATER.spill) === L.LAKE_R && L.waterRadius(L.WATER.low) < L.waterRadius(L.WATER.normal) && L.membraneY(0) === -L.MEMBRANE_DEPTH && !L.covered(2, 1, 0) && L.covered(2, -6, 0);
   record("pool layout: the descent falls ten metres in a hundred at one grade with its headroom open and rock over it all the way, every bed stands on a nest above the highest flood a body's width from the next, and the lake's water stays inside its membrane",
     graded && open && roofed && beds && apart >= 1.7 && lake, JSON.stringify({ graded, open, roofed, beds, apart, lake, slots: L.SLOTS.length }));
+  // The water over that layout, through its own module: what the backlog floods and what it never reaches.
+  Object.assign(context, { document: { createElement: () => ({ getContext: () => null }) }, performance, console });
+  for (const file of ["scene", "models", "convex", "terrain", "hub-models", "pool-models", "pool-water"]) runInNewContext(await readFile(new URL(`../src/js/${file}.js`, import.meta.url), "utf8"), context);
+  const { poolWater: W, scene: S } = context.window.BL, H = W.HYDRO;
+  let rising = true, last = -Infinity;
+  for (let mvb = 0; mvb <= 400; mvb += 0.5) { const level = W.levelFor(mvb * 1e6); rising &&= level >= last; last = level; }
+  const anchors = W.levelFor(0) === L.WATER.low && W.levelFor(H.NORMAL_VB) === L.WATER.normal && W.levelFor(H.OVERFLOW_VB) === L.WATER.spill && W.levelFor(H.FULL_VB) === L.WATER.flood && W.levelFor(H.FULL_VB * 3) === L.WATER.flood;
+  const water = W.create({ site: { node: S.createNode(), membrane: S.createNode() }, renderer: { kind: "webgl2", quality: "high" }, seaY: -76 });
+  let elapsed = 0;
+  const run = (seconds, now) => { for (let t = 0; t < seconds; t += 1 / 20) water.update(1 / 20, elapsed += 1 / 20, now); };
+  const channel = L.CHANNELS[1], at = (r) => water.levelAt(Math.sin(channel.bearing) * r, Math.cos(channel.bearing) * r), nest = L.NESTS[2];
+  const wet = () => ({ lake: water.levelAt(3, 0) > -Infinity, shore: water.levelAt(8.7, 0) > -Infinity, lowland: water.levelAt(-10, 0.3) > -Infinity, path: water.levelAt(-11.5, 0.3) > -Infinity, channel: at(15) > -Infinity, nest: water.levelAt(nest.x, nest.z) > -Infinity, falls: water.state.falls, status: water.state.status, stage: water.state.stage });
+  run(1, 1e6);
+  const none = wet();
+  water.apply({ backlogAt: 1e6, vsize: H.NORMAL_VB }); run(1, 1e6 + 1000);
+  const normal = wet();
+  water.apply({ backlogAt: 1e6, vsize: (H.OVERFLOW_VB + H.FULL_VB) / 2 }); run(40, 1e6 + 2000);
+  const spilling = wet();
+  water.apply({ backlogAt: 1e6, vsize: H.FULL_VB * 2 }); run(40, 1e6 + 3000);
+  const flooded = wet(), held = water.state.level;
+  run(1, 1e6 + H.FRESH_MS + 5000);
+  const stale = wet(), kept = water.state.level === held;
+  for (let i = 0; i < W.SEQUENCES + W.QUEUE + 2; i++) water.block();
+  const cubes = { falling: water.state.cubes, queued: water.state.queued, dropped: water.state.dropped };
+  const stages = none.status === "unavailable" && !none.lake && normal.status === "live" && normal.lake && !normal.shore && !normal.channel && !normal.falls
+    && spilling.stage === 1 && spilling.shore && spilling.channel && !spilling.lowland && spilling.falls > 0 && flooded.stage === 2 && flooded.lowland && flooded.falls > spilling.falls
+    && [normal, spilling, flooded].every((row) => !row.path && !row.nest) && stale.status === "stale" && kept;
+  record("pool water: the backlog fills the lake by a rising scale to its crest and its highest flood, the shore and channels flood before the lowland while the path and the nests never do, a stale reading is held and said to be stale, and blocks found faster than they fall wait in a bounded queue",
+    rising && anchors && stages && cubes.falling === W.SEQUENCES && cubes.queued === W.QUEUE && cubes.dropped === 2, JSON.stringify({ rising, anchors, none, normal, spilling, flooded, stale, kept, cubes }));
 };
 const debugActivityStatusChecks = async () => {
   const sources = await Promise.all(CONTRIBUTOR_SOURCES.map((name) => readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8")));
