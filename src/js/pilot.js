@@ -1840,6 +1840,7 @@
       zoomTilt = true;
     };
     const hooks = {
+      hoverIgnore: () => closeWanted || closeMix > 0 ? player() : null,
       onOrbit: (dx, dy) => {
         if (dx || dy) resumePose();
         if ((dx || dy) && hud.fadeDetachedName) hud.fadeDetachedName();
