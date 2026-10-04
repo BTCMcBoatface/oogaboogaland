@@ -4,11 +4,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXCLUDED, LOGIN } from "../worker/src/contributor-policy.js";
 import { declaredIdentity, mayAuthorIdentity } from "./character-identity.mjs";
+import { isOperator } from "./character-operators.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Attribution changes transfer stats/eligibility and are not self-service profile edits.
 const POLICY_FILES = new Set(["src/js/contributor-identities.js", "scripts/contributor-pr.mjs",
-  "scripts/character-identity.mjs", "worker/src/contributor-policy.js", ".github/workflows/character-identities.yml"]);
+  "scripts/character-identity.mjs", "worker/src/contributor-policy.js", ".github/workflows/character-identities.yml",
+  "scripts/character-safety.mjs", "scripts/character-submissions.mjs", "scripts/character-github.mjs", "scripts/character-bundles.mjs",
+  "scripts/character-operators.mjs",
+  ".github/workflows/character-bundles.yml", ".github/workflows/character-push.yml"]);
 const github = async (path, missing = false) => {
   const repo = process.env.GITHUB_REPOSITORY;
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo || "")) throw new Error("Missing GitHub repository");
@@ -21,7 +25,7 @@ const github = async (path, missing = false) => {
   return response.json();
 };
 export const mergedPull = async () => {
-  const sha = process.env.GITHUB_SHA;
+  const sha = process.env.CHARACTER_MERGE_SHA || process.env.GITHUB_SHA;
   if (!/^[a-f0-9]{40}$/.test(sha || "")) throw new Error("Missing merge SHA");
   const pulls = await github(`commits/${sha}/pulls?per_page=100`);
   return pulls.find((pr) => pr.merged_at && pr.base.ref === "rock" && pr.merge_commit_sha === sha) || null;
@@ -32,7 +36,8 @@ const changedFiles = async (pr) => {
   for (let page = 1; page <= 30; page++) {
     const batch = await github(`pulls/${pr.number}/files?per_page=100&page=${page}`);
     for (let file of batch) {
-      if (POLICY_FILES.has(file.filename) || POLICY_FILES.has(file.previous_filename)) policyChanged = true;
+      if (POLICY_FILES.has(file.filename) || POLICY_FILES.has(file.previous_filename)
+        || [file.filename, file.previous_filename].some((path) => path?.startsWith(".github/character-bundles/") || path?.startsWith(".github/workflows/"))) policyChanged = true;
       if (!file.filename.startsWith("src/characters/") && file.previous_filename?.startsWith("src/characters/")) file = { ...file, filename: file.previous_filename, status: "removed" };
       if (!file.filename.startsWith("src/characters/")) continue;
       if (!/^src\/characters\/[A-Za-z0-9-]{1,39}\.js$/.test(file.filename)) throw new Error("Character filenames must be GitHub-style handles ending in .js");
@@ -55,11 +60,23 @@ export const identityAdvice = (rows, paths, author, maintainer = false) => {
   });
 };
 export const checkCharacterIdentities = async (pr, apply = false) => {
+  const { isBundle, validateBundle } = await import("./character-submissions.mjs");
+  if (isBundle(pr, process.env.CHARACTER_BOT_LOGIN)) {
+    const { createGitHub } = await import("./character-github.mjs");
+    const gh = createGitHub(process.env.GITHUB_REPOSITORY, process.env.GITHUB_TOKEN);
+    const rock = apply ? (await gh.api(`commits/${pr.merge_commit_sha}`)).parents[0].sha
+      : (await gh.api("git/ref/heads/rock")).object.sha;
+    const checked = await validateBundle(gh, pr, process.env.CHARACTER_BOT_LOGIN, rock);
+    if (!checked.entries.length) throw new Error("Empty character bundle: keep it open until a submission arrives");
+    // The coordinator publishes the mandatory exact-head review status separately.
+    // This identity check stays independent so approving a review need not rerun it.
+    return [];
+  }
   const { files, policyChanged } = await changedFiles(pr), changed = [];
   if (!files.length && !policyChanged) return changed;
   const permission = await github(`collaborators/${encodeURIComponent(pr.user.login)}/permission`, true);
   const maintainer = permission?.permission === "admin" || permission?.role_name === "maintain";
-  if (policyChanged && !maintainer) throw new Error("Changing contribution attribution or identity policy requires OBL maintain or admin permission");
+  if (policyChanged && (!maintainer || !isOperator(pr.user))) throw new Error("Changing automation policy requires operator authority from w-s-bitcoin or 2140data");
   if (!files.length) return changed;
   const rows = [];
   // Local source is the trusted base checkout for PR checks and the merged checkout
@@ -115,8 +132,7 @@ export const checkCharacterIdentities = async (pr, apply = false) => {
   for (const file of files) {
     if (file.status === "removed") continue;
     const name = file.filename.slice("src/characters/".length), row = rows.find((row) => row.file === name), old = previous.get(name);
-    const identityChanged = !old || old.handle !== row.character.handle || old.github !== row.character.github || file.status === "renamed";
-    if (identityChanged && !mayAuthorIdentity(pr.user.login, row.character, old, maintainer)) throw new Error(`${name}: contributors may create or change only their own GitHub identity; another owner requires OBL maintain or admin permission`);
+    if (!mayAuthorIdentity(pr.user.login, row.character, old, maintainer)) throw new Error(`${name}: contributors may create or change only their own character; another owner requires OBL maintain or admin permission`);
     if (name.slice(0, -3).toLowerCase() !== (row.character.github || row.character.handle).toLowerCase()) console.log(`::warning file=${file.filename}::Filename is an alias; GitHub ownership is ${row.character.github || row.character.handle}.`);
   }
   // Validate the whole batch before writing any automatic mapping.

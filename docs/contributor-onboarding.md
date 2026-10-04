@@ -89,8 +89,7 @@ text, parses literal declarations, and never executes PR JavaScript. The check:
   name differs. The PR warning explains the correction before merge.
 - Rejects a new explicit owner other than the PR author, or transferring an
   existing character from another owner. Deleting another owner's character is
-  also rejected. Ordinary appearance edits with unchanged identity still go
-  through normal code review.
+  also rejected. Appearance edits require the same owner or maintainer authority.
 - Checks both old and new identities on renames, and rejects duplicate handles
   and owner aliases across files, ignoring case.
 - Allows cross-owner administration only when GitHub reports the PR author's
@@ -119,7 +118,9 @@ GitHub OAuth still supplies the authenticated identity; only a `User` profile is
 accepted. `/api/me` and `/room` independently look up that login in the same
 filtered Oogatron snapshot. Lookups coalesce and cache for one minute per Worker
 isolate, run only on requests, time out after four seconds, and grant no new
-identity on failure. No background polling, new secret or D1 migration is needed.
+identity on failure. No background polling, new secret or D1 migration is needed
+for sign-in. The separate [character bundle pipeline](character-bundles.md) uses
+GitHub's repository Actions token for daily and manual-review PRs.
 
 Before building the first scene, the browser waits for the bounded account lookup
 (at most six seconds) and can register one temporary default character matching
