@@ -140,7 +140,8 @@
   });
   // The plank bridge that carries the ring path over a channel, in its own frame: x along the path, the deck's
   // top at y = 0 and the channel passing under along z. Round logs for bearers, bevelled planks across them.
-  const CROSSING = { length: 2 * L.CHANNEL.low + 0.5, width: L.RING.path - L.RING.lowland - 0.4 };
+  // Wide enough for a gorilla on all fours with room either side: the whole ring path and a little of each verge.
+  const CROSSING = { length: 2 * L.CHANNEL.low + 0.5, width: L.RING.path - L.RING.lowland + 0.7 };
   const crossing = cached(() => {
     const geos = [], C = CROSSING, count = Math.round(C.length / 0.5), pitch = C.length / count;
     for (let i = 0; i < count; i++) geos.push(bevelBox({ w: pitch + 0.02, h: 0.16, d: C.width, color: i % 3 === 0 ? BARK : BARK_LT, bevel: 0.04, offset: { x: -C.length / 2 + (i + 0.5) * pitch, y: -0.08 } }));
@@ -824,7 +825,7 @@
     const bridgeNode = createNode({ position: { x: 0, y: 0, z: place.bridgeLocalZ }, geometry: bridge() });
     const membraneNode = createNode({ geometry: membrane(), sightHidden: true });
     // One crossing where the ring path meets each channel.
-    const pathR = (L.RING.lowland + L.RING.path) / 2 + 0.05;
+    const pathR = (L.RING.lowland + L.RING.path) / 2;
     const crossings = L.CHANNELS.map((channel) => createNode({
       position: { x: Math.sin(channel.bearing) * pathR, y: L.LEVEL.ground + 0.02, z: Math.cos(channel.bearing) * pathR },
       rotation: { x: 0, y: channel.bearing, z: 0 }, geometry: crossing()

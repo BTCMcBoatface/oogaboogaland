@@ -10,6 +10,8 @@
   const CHILL_REST_SECONDS = 120, CHILL_REST_VARIATION = 120;
   // Measured full-size gallop envelope. Airborne and floor-pound poses reserve
   // their larger envelopes before beginning the animation.
+  // A sleeper's path to bed is at most this many points; its mouth is where its marks of sleep rise from.
+  const SLEEP_POINTS = 24, SLEEP_MOUTH = { x: 0, y: 0, z: 0 };
   const WALK_RADIUS = 1.9, AIR_RADIUS = 2.05, FOOT = 1.4, SPACE = 0.07, TAU = Math.PI * 2;
   // The mirror sits at local z .5. Keeping a working root at or behind this
   // line leaves room for the largest 2.25-unit pound pose without recrossing it.
@@ -88,6 +90,8 @@
     const WALL_POINT = { x: 0, y: 0, z: 0, heading: 0, radius: 0 };
     const WALL_RECTANGLE = { halfForward: 0, halfSide: 0, centerForward: 0 };
     const alive = (cave) => cave.state === "working" || cave.state === "chilling";
+    // Asleep is the Ooga's own state. One standing in for an Ooga somebody else is driving is away, not asleep.
+    const sleeps = (cave) => cave.state === "sleeping" && !cave.remoteControlled;
     const enteringCave = e => !e.controlled && e.mode === "working" && e.phase === "travel"
       && (e.route === "apron" || e.route === "enter");
     const labWorker = e => !e.controlled && e.mode === "working"
@@ -1799,6 +1803,8 @@
         active: false, tracked: false, mode: "", phase: "", route: "", entryTurn: false, planningEntry: false, site: -1, fromSite: -1, portal: -1,
         hasSlot: false, slotIndex: -1, slotX: 0, slotY: 0, slotZ: 0, goalX: 0, goalY: 0, goalZ: 0,
         random: mulberry32(fnv1a(`clanker/${owner.id || owner.traits.name || i}`)),
+        // Its bed while its Ooga sleeps: see `updateSleep`.
+        sleep: { stage: "", slot: -1, leg: 0, count: 0, path: new Float64Array(SLEEP_POINTS * 2), mark: 0, pose: "", stall: 0, near: Infinity },
         heading: i * 2.39996323, speed: 0, blocked: 0, retry: 0, rest: 0, turn: 1, portalWait: false,
         steerHeading: NaN, steerSide: 0, steerFor: 0, steerClear: 0, steerGoalX: NaN, steerGoalZ: NaN,
         backoutLeft: 0, backoutHeading: 0,
@@ -3389,7 +3395,7 @@
       const dx = e.controlled ? d.x : e.goalX - p.x;
       const dz = e.controlled ? d.z : e.goalZ - p.z;
       const heading = climbApproachHeading(e, Math.atan2(dx, dz), c.searchDescending);
-      if (!Number.isFinite(heading) || !e.active || c.active || !e.controlled && (!alive(e.owner) || !e.debugMove.active && e.mode !== e.owner.state)
+      if (!Number.isFinite(heading) || !e.active || c.active || !e.controlled && (!alive(e.owner) && !e.sleep.stage || !e.debugMove.active && e.mode !== e.owner.state)
         || e.recover > 0 || e.jump.active || d.airborne || e.pound || e.beat || e.stand || e.parked || e.fire.rolling
         || Math.hypot(dx, dz) <= (e.controlled ? 0.05 : 0.18)
         || Math.hypot(p.x - c.searchX, p.y - c.searchY, p.z - c.searchZ) > 0.35
@@ -4804,6 +4810,8 @@
       if (!e || !e.active || !e.root.visible) return false;
       if (player === e) return true;
       release(); player = e; e.controlled = true; e.drive.resume = false;
+      // A hand on a sleeper wakes it. Its bed stays its own while its Ooga sleeps on.
+      if (e.sleep.stage) { e.sleep.stage = ""; e.gorilla.chest.scale.y = 1; e.exitFootprint = false; }
       e.fire.panic.active = false;
       cancelDebugMove(e);
       e.climb.debugStuck = false;
@@ -5746,6 +5754,166 @@
         } else job.time = 1 + e.random();
       }
     };
+    // Sleep. A gorilla sleeps when its Ooga does and where the scene keeps beds (`ctx.sleep`: `slots`, each with its
+    // root point, heading and `nest`, and `path(slot, out)`, the dry way there from the home island as x, z pairs).
+    // It reserves a bed before it sets out and keeps it through the walk, the sleep, the waking and the walk
+    // home; beds are picked among the free ones in the least full nests by a hash of its Ooga's name and last
+    // contribution, so the choice is reproducible, spreads the sleepers, and changes with each sleep without
+    // ever reshuffling. Stages: "go" along the path, "settle" turning onto the bed, "asleep", then "return" back
+    // along the path once its Ooga wakes, after which the ordinary work and chill machinery takes over.
+    // A hand on it wins: possession wakes it where it lies, and a release while its Ooga still sleeps walks it
+    // back to bed from where it stands.
+    const SLEEP_POSES = ["left", "right", "back"], SLEEP_REACH = 1.1, SLEEP_ARRIVE = 0.3, SLEEP_STALL = 25, SLEEP_MARK = 1.9;
+    const bedTaken = (slot, but) => {
+      for (const other of list) if (other !== but && other.sleep.slot === slot) return true;
+      return false;
+    };
+    const releaseBed = (e) => {
+      const s = e.sleep;
+      s.stage = ""; s.slot = -1;
+      e.gorilla.chest.scale.y = 1;
+    };
+    const reserveBed = (e) => {
+      const s = e.sleep, beds = ctx.sleep.slots;
+      if (s.slot >= 0) return true;
+      // The least full nests first, then one of their free beds by the hash.
+      let fewest = Infinity, free = 0;
+      for (let pass = 0; pass < 2; pass++) for (let i = 0; i < beds.length; i++) {
+        if (bedTaken(i, e)) continue;
+        let inNest = 0;
+        for (const other of list) if (other !== e && other.sleep.slot >= 0 && beds[other.sleep.slot].nest === beds[i].nest) inNest++;
+        if (!pass) fewest = Math.min(fewest, inNest);
+        else if (inNest === fewest) free++;
+      }
+      if (!free) return false;
+      const owner = e.owner, seed = fnv1a(`bed/${owner.traits.name}/${owner.contributor ? owner.contributor.lastCommitAt || 0 : 0}`);
+      let pick = seed % free;
+      for (let i = 0; i < beds.length; i++) {
+        if (bedTaken(i, e)) continue;
+        let inNest = 0;
+        for (const other of list) if (other !== e && other.sleep.slot >= 0 && beds[other.sleep.slot].nest === beds[i].nest) inNest++;
+        if (inNest === fewest && pick-- === 0) { s.slot = i; s.pose = SLEEP_POSES[(seed >>> 8) % SLEEP_POSES.length]; return true; }
+      }
+      return false;
+    };
+    // The leg of its path nearest where it stands, so a trip resumed anywhere on the way carries on from there.
+    const sleepLegFrom = (e) => {
+      const s = e.sleep, p = e.root.position;
+      let best = 0, nearest = Infinity;
+      for (let i = 0; i < s.count; i++) {
+        const d = Math.hypot(s.path[i * 2] - p.x, s.path[i * 2 + 1] - p.z);
+        if (d < nearest) { nearest = d; best = i; }
+      }
+      return best;
+    };
+    const layDown = (e) => {
+      const s = e.sleep, bed = ctx.sleep.slots[s.slot];
+      e.heading = bed.heading; e.speed = 0; e.lounge = s.pose; e.loungeDepart = false; e.loungeHeading = bed.heading;
+      e.footprintMode = "sit"; s.stage = "asleep"; s.mark = SLEEP_MARK * 0.5;
+    };
+    // True while sleep owns the entry this frame. False hands it back to the caller: to hide it (no bed to be had)
+    // or to let the ordinary update walk it out of a cave, down from a roof or back to its bench first.
+    const updateSleep = (e, dt, beforeX, beforeY, beforeZ) => {
+      const s = e.sleep, p = e.root.position, site = ctx.sleep;
+      if (!s.stage || s.stage === "return") {
+        if (!e.active) {
+          // First seen asleep: it is already in its bed.
+          if (!reserveBed(e)) return false;
+          const bed = site.slots[s.slot];
+          activate(e, true);
+          e.active = e.root.visible = true; e.parked = e.biped = false; e.mode = "sleeping"; e.phase = "sleep"; e.route = "";
+          p.x = bed.x; p.y = bed.y; p.z = bed.z;
+          // It knows the way home from the start, though it never walked here.
+          s.count = site.path(s.slot, s.path); s.leg = s.count - 1;
+          layDown(e);
+          e.gorilla.poseManaged(2, p.x, p.y, p.z, e.heading, 0, false, false, e.lounge, e.motion);
+          return true;
+        }
+        // Awake somewhere: what it holds goes back and it leaves any room by its door before it sets out.
+        if (!s.stage && (e.lab.item >= 0 || e.motion.lab || e.jump.active || caveAt(p.x, p.y, p.z) >= 0 || e.phase === "leave" && e.route === "exit")) return "busy";
+        if (!reserveBed(e)) return false;
+        releasePortal(e); releaseLab(e); clearWallSearch(e);
+        e.hasSlot = false; e.pendingSite = -1; e.parked = false; e.rest = e.pound = e.beat = e.stand = 0;
+        e.roam.departPending = false; e.roam.count = e.roam.index = 0;
+        if (e.lounge) { leaveLounge(e); e.lounge = ""; e.loungeDepart = false; e.recover = Math.max(e.recover, 0.65); }
+        e.mode = "sleeping"; e.phase = "sleep"; e.route = ""; e.exitFootprint = true;
+        s.count = site.path(s.slot, s.path);
+        s.leg = s.stage === "return" ? Math.min(s.count - 1, s.leg + 1) : sleepLegFrom(e);
+        s.stage = "go"; s.stall = 0; s.near = Infinity;
+      }
+      if (s.stage === "go") {
+        const last = s.leg >= s.count - 1, gx = s.path[s.leg * 2], gz = s.path[s.leg * 2 + 1], d = Math.hypot(gx - p.x, gz - p.z);
+        if (d < (last ? SLEEP_ARRIVE : SLEEP_REACH)) {
+          if (last) { s.stage = "settle"; e.speed = 0; }
+          else { s.leg++; s.near = Infinity; }
+        } else {
+          // The first two points are the home island's own ground: a goal known to lie below lets a sleeper that
+          // starts on a roof climb or hop down to it, as a stroller bound for the meadow does.
+          setGoal(e, gx, last ? site.slots[s.slot].y : s.leg < 2 && ctx.surfaceAt ? ctx.surfaceAt(gx, gz) : p.y, gz);
+          if (!e.jump.active) move(e, dt, SPEED);
+          // A way that cannot be walked is not a reason to stand in the forest all night: after a long stall the
+          // sleeper is simply found in its bed.
+          if (d < s.near - 0.25) { s.near = d; s.stall = 0; }
+          else if ((s.stall += dt) > SLEEP_STALL) {
+            // Placed, not walked: the pose is set outright, as a spawn's is, with no step to certify.
+            const bed = site.slots[s.slot];
+            p.x = bed.x; p.y = bed.y; p.z = bed.z; e.jump.active = false;
+            layDown(e);
+            e.gorilla.poseManaged(2, p.x, p.y, p.z, e.heading, 0, false, false, e.lounge, e.motion);
+            return true;
+          }
+        }
+      }
+      if (s.stage === "settle") {
+        const bed = site.slots[s.slot], turn = Math.atan2(Math.sin(bed.heading - e.heading), Math.cos(bed.heading - e.heading));
+        e.speed = 0;
+        e.heading += clamp(turn, -dt * 3, dt * 3);
+        if (Math.abs(turn) < 0.05) layDown(e);
+      }
+      if (s.stage === "asleep") {
+        e.speed = 0;
+        // Slow breath in the chest, and a mark of sleep from its mouth now and then.
+        e.gorilla.chest.scale.y = 1 + Math.sin(elapsed * 1.4 + e.index) * 0.018;
+        if ((s.mark -= dt) <= 0 && ctx.sleep.mark) {
+          s.mark = SLEEP_MARK;
+          e.gorilla.mouth(SLEEP_MOUTH);
+          ctx.sleep.mark(SLEEP_MOUTH.x, SLEEP_MOUTH.y + 0.25, SLEEP_MOUTH.z);
+        }
+      }
+      poseEntry(e, dt, beforeX, beforeY, beforeZ);
+      return true;
+    };
+    // Its Ooga is up: it rises and walks the same way home, then goes back to work or to its ease.
+    const updateWake = (e, dt, beforeX, beforeY, beforeZ) => {
+      const s = e.sleep, p = e.root.position;
+      if (s.stage !== "return") {
+        e.gorilla.chest.scale.y = 1;
+        if (e.lounge) { e.lounge = ""; e.loungeDepart = false; e.recover = Math.max(e.recover, 1.2); }
+        e.footprintMode = "walk";
+        // Back along the path from the point nearest where it stands: its bed if it reached it.
+        const at = sleepLegFrom(e);
+        s.leg = Math.max(0, Math.hypot(s.path[at * 2] - p.x, s.path[at * 2 + 1] - p.z) < SLEEP_REACH ? at - 1 : at);
+        s.stage = "return"; s.stall = 0; s.near = Infinity;
+      }
+      const gx = s.path[s.leg * 2], gz = s.path[s.leg * 2 + 1], d = Math.hypot(gx - p.x, gz - p.z);
+      if (d < SLEEP_REACH || (s.stall += dt) > SLEEP_STALL) {
+        s.stall = 0;
+        // Home is the second point of the path, back on the home island's own ground.
+        if (s.leg <= 1) {
+          releaseBed(e);
+          e.exitFootprint = false; e.mode = ""; e.phase = "chill"; e.route = ""; e.rest = 0;
+          return false;
+        }
+        s.leg--; s.near = Infinity;
+      } else {
+        if (d < s.near - 0.25) { s.near = d; s.stall = 0; }
+        setGoal(e, gx, p.y, gz);
+        if (e.recover > 0) e.recover = Math.max(0, e.recover - dt);
+        else if (!e.jump.active) move(e, dt, SPEED);
+      }
+      poseEntry(e, dt, beforeX, beforeY, beforeZ);
+      return true;
+    };
     const updateEntry = (e, dt) => {
       const p = e.root.position, beforeX = p.x, beforeY = p.y, beforeZ = p.z;
       if (e.health.delay > 0) e.health.delay = Math.max(0, e.health.delay - dt);
@@ -5762,8 +5930,14 @@
       if (e.controlled || e.mode !== "chilling" || e.fire.burning) e.motion.groom = 0;
       if (e.controlled || e.fire.burning) e.loungeDepart = false;
       e.parkFor = Math.max(0, e.parkFor - dt);
-      if (!alive(e.owner) && !e.controlled && !e.drive.airborne && !e.fire.rolling && !e.climb.active) {
+      // An Ooga asleep sends its gorilla to bed, not away. "busy" lets the rest of this update walk it out of a
+      // room or put its work down first; with no bed to be had it is hidden as it always was.
+      const bedtime = ctx.sleep && sleeps(e.owner) && !e.controlled && !e.drive.airborne && !e.fire.rolling && !e.fire.burning && !e.climb.active
+        ? updateSleep(e, dt, beforeX, beforeY, beforeZ) : false;
+      if (bedtime === true) return;
+      if (!bedtime && !alive(e.owner) && !e.controlled && !e.drive.airborne && !e.fire.rolling && !e.climb.active) {
         if (e.active) {
+          releaseBed(e);
           releasePortal(e);
           releaseLab(e);
           e.active = e.root.visible = e.hasSlot = e.jump.active = false;
@@ -5776,6 +5950,8 @@
         return;
       }
       if (!e.active) { if (!e.retry) activate(e); return; }
+      if (e.sleep.stage && alive(e.owner) && !e.controlled && !e.drive.airborne && !e.fire.rolling && !e.fire.burning && !e.climb.active
+        && updateWake(e, dt, beforeX, beforeY, beforeZ)) return;
       if (ctx.fireContact && ctx.fireContact(e, p.x, p.y, p.z)) ignite(e);
       updateFire(e, dt);
       if (e.climb.active) {
@@ -6007,6 +6183,8 @@
       // after cancellation and dismount. Ordinary collision-safe wandering
       // still runs; a stall must not silently relocate or hide this actor.
       if (e.debugMove.active || e.debugMove.cancelled || e.climb.debugRole >= 0 && e.climb.active) return;
+      // A sleeper lies still on purpose, and its trip keeps its own watch for a stall.
+      if (e.sleep.stage) return;
       const p = e.root.position, s = e.stuck, job = e.lab, r = e.roam;
       if (e.fire.panic.active) {
         s.x = p.x; s.y = p.y; s.z = p.z; s.time = s.taskTime = 0; s.taskActive = false;

@@ -2548,7 +2548,44 @@
       const level = water.levelAt(localX(wx, wz), localZ(wx, wz));
       return level > -Infinity && Math.abs(y - place.y - (level - draught)) < 0.12;
     };
-    return { site, place, centre, groundAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, floatAt, afloat, layout: L };
+    // Previews for the maintainer, reached under debug as `__ooga.poolIsland.preview`: the lake at a backlog in
+    // MvB (null hands it back to the feed), a block's bolt and cube, and an Ooga put to sleep or woken by name.
+    const preview = {
+      lake: (mvb) => water.preview(mvb === null || mvb === undefined ? null : mvb * 1e6),
+      block: () => { weather.strike(); water.block(); },
+      sleep: (name, asleep = true) => {
+        const cave = crew.list.find((c) => c.traits.name === name);
+        if (!cave) return false;
+        cave.override = asleep ? "sleeping" : "chilling";
+        crew.refreshStates(true);
+        return true;
+      }
+    };
+    return { site, place, centre, groundAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, floatAt, afloat, layout: L, preview };
+  };
+  // Where the gorillas sleep while their Oogas do: the banana-leaf beds of the Mempool island's nests, and the dry
+  // way to each from the home island, as x, z pairs: up the approach stair, over the bridge, across the court,
+  // west round the lake on the ring path (the way the nests lie, and never past the ridge), and in at its nest.
+  const clankerBeds = () => {
+    const M = mempoolIsland, L = M.layout, D = poolModels.DIR, ring = (L.RING.lowland + L.RING.path) / 2, ARC = 18 * DEG;
+    const slots = L.SLOTS.map((slot) => ({
+      x: M.worldX(slot.x, slot.z), y: M.place.y + slot.y, z: M.worldZ(slot.x, slot.z), heading: slot.heading + M.place.ry, nest: slot.nest, bearing: L.NESTS[slot.nest].bearing
+    }));
+    const path = (index, out) => {
+      const bed = slots[index], to = bed.bearing - Math.PI * 2;
+      let n = 0;
+      const local = (lx, lz) => { out[n * 2] = M.worldX(lx, lz); out[n * 2 + 1] = M.worldZ(lx, lz); n++; };
+      out[0] = D.x * (poolModels.SITE.approachFrom - 0.8); out[1] = D.z * (poolModels.SITE.approachFrom - 0.8);
+      out[2] = D.x * (M.place.rimRadius - 0.3); out[3] = D.z * (M.place.rimRadius - 0.3);
+      n = 2;
+      local(0, L.R - 1.6); local(0, 15.4); local(0, ring);
+      for (let b = -ARC; b > to + 0.05; b -= ARC) local(Math.sin(b) * ring, Math.cos(b) * ring);
+      local(Math.sin(to) * ring, Math.cos(to) * ring);
+      out[n * 2] = bed.x; out[n * 2 + 1] = bed.z;
+      return n + 1;
+    };
+    // A mark of sleep is the Oogas' own, shown wherever it can be seen: it belongs to no Ooga's bed.
+    return { slots, path, mark: (x, y, z) => fx.zzzAt(x, y, z, null) };
   };
   const buildTimechainIsland = () => {
     const T = BL.timechainModels, site = T.build(island), p = site.place;
@@ -8821,6 +8858,7 @@
     }
     const labSiteIndex = shared.workSites.findIndex(site => site.mouth === entropyLab.mouth);
     clankers = BL.clankers.create({ root, crew, sites: shared.workSites, loungeRoofs, loungeAreas, climbRoofs, chillZones, descentWalls,
+      sleep: clankerBeds(),
       walkingPeersClear: clankerWalkingPeersClear,
       debugMovement: DEBUG_GORILLA_MOVE, debugMinY: ABYSS_RESPAWN_Y,
       labSite: labSiteIndex,
