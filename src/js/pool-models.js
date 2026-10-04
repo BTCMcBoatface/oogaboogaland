@@ -405,8 +405,9 @@
     geo.normals = Float32Array.from(geo.normals);
     geo.sway = 0.0006;
     // Where the wildlife climbs and perches, in the tree's own frame: the trunk's lean at the top, its height, the
-    // five limbs (from the trunk out to each lower crown), and a perch on top of every crown.
-    geo.climb = { lean: cx, height, branches, perches: crowns.map(([x, y, z, , ry]) => [x, y + ry * 0.9, z]) };
+    // five limbs (from the trunk out to each lower crown), and a perch on top of every crown. `crowns` are the
+    // clumps themselves (centre, then radius across and up), which the rain lands on.
+    geo.climb = { lean: cx, height, branches, perches: crowns.map(([x, y, z, , ry]) => [x, y + ry * 0.9, z]), crowns };
     geo.collisionGeometry = merge(canopyShell(seed, height, spread), canopySupport(geo, canopyStart, canopyEnd));
     return geo;
   });
