@@ -423,15 +423,19 @@
     const workSites = ctx.workSites?.length ? ctx.workSites : ctx.workRoute ? [{ repo: "oogaboogax/entropylab", route: ctx.workRoute, position: ctx.workPosition, target: ctx.workTarget }] : null;
     const workBodyTarget = ctx.workSites?.length ? ctx.workTarget : null;
     const workCompanionTarget = ctx.workCompanionTarget;
-    // A site is eligible when the worker is fresh in its repo, or when it is
+    // A site is eligible when the worker is fresh in either of its repos, or when it is
     // the fallback (namesake) cave and the worker's fresh repo has no cave of
     // its own. An override or maintainer may visit every work cave.
     const siteRepos = new Set();
-    if (workSites) for (const site of workSites) siteRepos.add(site.repo);
+    if (workSites) for (const site of workSites) {
+      siteRepos.add(site.repo);
+      if (site.additionalRepo) siteRepos.add(site.additionalRepo);
+    }
     const siteActive = (cave, site) => {
       if (contributors.debugRoster) return contributors.hasRecentActivity(cave.contributor, site.repo);
       if (cave.override === "working" || cave.traits.maintainer || !contributors.hasRecentActivity) return true;
-      if (contributors.hasRecentActivity(cave.contributor, site.repo)) return true;
+      if (contributors.hasRecentActivity(cave.contributor, site.repo)
+        || site.additionalRepo && contributors.hasRecentActivity(cave.contributor, site.additionalRepo)) return true;
       if (!site.fallback) return false;
       for (const repo of cave.contributor.activity.keys()) {
         if (!siteRepos.has(repo) && contributors.hasRecentActivity(cave.contributor, repo)) return true;

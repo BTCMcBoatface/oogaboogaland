@@ -29,12 +29,7 @@
   const byName = new Map(roster.map((contributor) => [contributor.name.toLowerCase(), contributor]));
   characters.forEach((c, i) => { if (c.github) byName.set(c.github.toLowerCase(), roster[i]); });
   const listeners = new Set(), snapshotRepos = new Set();
-  const repositoryOf = (repo) => {
-    if (typeof repo !== "string") return null;
-    const key = repo.toLowerCase();
-    if (key === "w-s-bitcoin/entropylab") return ENTROPY;
-    return /^oogaboogax\/[a-z0-9_.-]{1,100}$/.test(key) ? key : null;
-  };
+  const repositoryOf = BL.activityRepos.keyOf;
   // Repeatable debug-only fixture: ooga=handle:clank:lab,obl,lf (or chill/sleep).
   // Unlisted owners sleep; explicit caves replace both activity and maintainer defaults.
   // Resolve handles and cave aliases once, keeping state/site reads allocation-free.
@@ -47,6 +42,10 @@
       repos.set(slot.name.toLowerCase(), slot.repo);
       repos.set(slot.repo, slot.repo);
       repos.set(slot.repo.slice(slot.repo.indexOf("/") + 1), slot.repo);
+      if (slot.additionalRepo) {
+        repos.set(slot.additionalRepo, slot.repo);
+        repos.set(slot.additionalRepo.slice(slot.additionalRepo.indexOf("/") + 1), slot.repo);
+      }
       repos.set(slot.scene === "factory" ? "lf" : slot.status === "mirror" ? "obl" : slot.scene || slot.status, slot.repo);
     }
     for (const value of params.getAll("ooga")) {
@@ -55,7 +54,7 @@
       if (!contributor) continue;
       const sites = new Set();
       if (mode?.trim() === "clank") for (const cave of caves.split(",", MAX_REPOS)) {
-        const key = cave.trim(), repo = repos.get(key) || repos.get(repositoryOf(key));
+        const key = cave.trim(), repo = repos.get(key) || repos.get(repositoryOf(key.includes("/") ? key : `oogaboogax/${key}`));
         if (repo) sites.add(repo);
       }
       const state = mode?.trim() === "clank" && sites.size ? "working" : mode?.trim() === "chill" ? "chilling" : "sleeping";

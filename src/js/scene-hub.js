@@ -186,8 +186,7 @@
   const RIPEN = 25, TREE_CHANCE = 0.5, BUSH_CHANCE = 0.25;
   const PROP_TIPS = { tree: "Tree · shake it", bush: "Bush · rustle it", rock: "Rock · hit to break", crate: "Box · hit to break", barrel: "Barrel · hit to break", flower: "Flowers", torch: "Torch · warm", firepit: "Fire pit", bedroll: "Somebody's bed", ladder: "Ladder · wobbly", dock: "Dock · creaky", magazine: "Spare magazine · walk into it to collect", poolbridge: "Vine bridge · to the Mempool island", poolstair: "The Mempool · tap to climb down", poolsign: "The Mempool · the cave reads the chain", chainsign: "The chain, at a glance · tap to read it", weathersign: "Reading the weather · tap for the key", poolrock: "Mossy rock", poolfern: "Fern · rustle it", poollog: "Fallen log · something lives in it", jaguar: "Jaguar · do not poke", monkey: "Monkey · it watches you", toucan: "Toucan · big beak", canopy: "Rainforest tree · shake it", jumbotron: "Oogatron · OogaBoogaX on the big screen · tap the screen for a close-up", palm: "Palm · shake it", bifrostbridge: "Bifröst · the bridge to ₿IFRÖST", bifrostgate: "₿IFRÖST · walk an Ooga through the field", heimdall: "Heimdall · keeper of the bridge", gate: null };
   const RETICLE_PROPS = new Set(["tree", "bush", "rock", "crate", "barrel", "flower", "torch", "firepit", "ladder", "poolstair", "poolsign", "chainsign", "weathersign", "poolfern", "poollog", "jaguar", "monkey", "toucan", "canopy", "jumbotron", "palm", "timechainentrance", "timechainboard", "timechainchair", "timechainbeer", "bifrostgate", "heimdall"]);
-  const workCave = (slot) => slot.repo && (slot.status === "open" || slot.status === "mirror")
-    && (slot.scene !== "factory" || contributors.debugRoster);
+  const workCave = (slot) => slot.repo && (slot.status === "open" || slot.status === "mirror");
   const MATRIX_LIVING_PROPS = new Set(["tree"]);
   const SOLID_PROPS = new Set(["tree", "rock", "crate", "barrel", "firepit", "dock", "jumbotron", "poolbridge", "poolstair", "poolrock", "canopy"]);
   const CLANKER_STEP_PROPS = new Set(["rock", "crate", "barrel", "poolrock"]);
@@ -8491,6 +8490,7 @@
       }
       return {
         repo: slot.repo,
+        additionalRepo: slot.additionalRepo,
         mouth, sr, cr,
         mirrorRoom: slot.status === "mirror",
         // The namesake cave adopts fresh contributors whose repo has no cave.

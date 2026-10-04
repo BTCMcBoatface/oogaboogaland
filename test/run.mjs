@@ -1683,6 +1683,25 @@ const { contributorActivityProbe } = (() => {
       const noSyntheticActivity = applySnapshot(absentTime, at) === 0 && first.lastCommitAt === firstAt;
       absentTime.contributors[0].last_seen_at = new Date(at).toUTCString();
       const strictTimestamp = applySnapshot(absentTime, at) === 0;
+      const foundry = "oogaboogax/lightningfoundry", bananaPay = "oogaboogax/bananapayserver";
+      applySnapshot(snapshot("DrNeski/lightning-foundry", first.name, 4000), at);
+      const legacyFoundry = first.activity.get(foundry) === at - 4000;
+      applySnapshot({ meta: { org: "OogaBoogaX", schema_version: 3 }, repos: [
+        { name: "LightningFactory", contributors: [{ login: first.name, last_seen_at: new Date(at - 3000).toISOString() }] },
+        { name: "LightningFoundry", contributors: [{ login: first.name, last_seen_at: new Date(at - 5000).toISOString() }] }
+      ] }, at);
+      const foundryFanOut = first.activity.get(foundry) === at - 3000;
+      applyActivity([
+        { name: first.name, repo: "OogaBoogaX/lightning_factory", lastCommitAt: at - 2000 },
+        { name: first.name, repo: "OogaBoogaX/LightningFoundry", lastCommitAt: at - 2500 },
+        { name: first.name, repo: "OogaBoogaX/BananaPayServer", lastCommitAt: at - 1000 }
+      ], at);
+      applySnapshot(snapshot("DrNeski/LightningFactory", first.name, 6000), at);
+      const foundryAliases = legacyFoundry && foundryFanOut && first.activity.get(foundry) === at - 2000
+        && hasRecentActivity(first, foundry, at) && [...first.activity.keys()].filter(repo => /lightning/.test(repo)).join() === foundry
+        && applyActivity([{ name: first.name, repo: "someoneelse/LightningFactory", lastCommitAt: at }], at) === 0;
+      const bananaPayDistinct = first.activity.get(bananaPay) === at - 1000 && hasRecentActivity(first, bananaPay, at)
+        && first.activity.get(foundry) !== first.activity.get(bananaPay);
       const lastNotification = notifications;
       unsubscribe();
       const unsubscribed = applyActivity([{ name: first.name, lastCommitAt: at }], at) === 1 && notifications === lastNotification;
@@ -1698,7 +1717,7 @@ const { contributorActivityProbe } = (() => {
       const boundedProjects = first.activity.size === 64 && hasRecentActivity(first, "oogaboogax/project-62", at) &&
         !hasRecentActivity(first, "oogaboogax/project-63", at);
       return { boundaries, invalidStates, labels, update, invalid, expires, projects, otherRepo, orgWideV3, fanOut, orgWide, wrongOrg, noSyntheticActivity, strictTimestamp,
-        unsubscribed, debugFixture, pinnedWorks, boundedProjects, rosterUnchanged: roster.length === saved.length };
+        foundryAliases, bananaPayDistinct, unsubscribed, debugFixture, pinnedWorks, boundedProjects, rosterUnchanged: roster.length === saved.length };
     } finally {
       unsubscribe();
       roster.forEach((entry, i) => {
@@ -2373,12 +2392,38 @@ const scene = (id, { query = "", steps, perf = false, opts = {}, label = "", url
   } });
 };
 // contributors.js reads the roster from the character files, which build on math, scene and models.
-const CONTRIBUTOR_SOURCES = ["math", "scene", "models", "caves", "characters", "characters.gen", "contributors"];
+const CONTRIBUTOR_SOURCES = ["math", "scene", "models", "caves", "activity-repos", "characters", "characters.gen", "contributors"];
 const contributorActivityChecks = async () => {
   const context = { window: {}, URLSearchParams, location: { search: "" } };
   for (const name of CONTRIBUTOR_SOURCES) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
   const r = contributorActivityProbe(context.window.BL.contributors, Date.now());
   record("banana weapon activity: one-hour clank and 24-hour chill boundaries, per-project updates, org snapshots, invalid data, and debug mix", Object.values(r).every(Boolean), JSON.stringify(r));
+  const metrics = ["commits", "prs", "reviews", "issues", "comments"], early = "2026-10-01T10:00:00Z", late = "2026-10-02T11:00:00Z";
+  const repo = (name, values, contributors) => ({ name, totals: { contributors: contributors.length, ...Object.fromEntries(metrics.map((key, i) => [key, values[i]])) },
+    weekly: [{ week: "2026-W40", ...Object.fromEntries(metrics.map((key, i) => [key, values[i]])) }],
+    leaderboards: Object.fromEntries(metrics.map((key, i) => [key, [{ login: contributors[0].login, count: values[i] }]])),
+    contributors, last_activity_at: contributors.reduce((latest, row) => row.last_seen_at > latest ? row.last_seen_at : latest, "") });
+  const fixture = { meta: { org: "OogaBoogaX", schema_version: 3 }, totals: { commits: 99 },
+    contributors: [{ login: "Alice", last_seen_at: late }], leaderboards: { commits: [{ login: "Alice", count: 99 }] },
+    repos: [repo("LightningFactory", [2, 3, 4, 5, 6], [{ login: "Alice", last_seen_at: early }]),
+      repo("lightningfoundry", [7, 11, 13, 17, 19], [{ login: "ALICE", last_seen_at: late }, { login: "Bob", last_seen_at: early }]),
+      repo("BananaPayServer", [23, 29, 31, 37, 41], [{ login: "Alice", last_seen_at: late }])],
+    recent: ["LightningFactory", "lightningfoundry", "LightningFactory", "BananaPayServer"].map(repo => ({ repo, login: "Alice", type: "commit", occurred_at: late })) };
+  fixture.repos[0].contributors.push({ login: "ALICE", last_seen_at: "2099-01-01T00:00:00Z" }, { login: "Alice", last_seen_at: "yesterday" });
+  const before = JSON.stringify(fixture), normalize = input => context.window.BL.activityRepos.normalizeStats(input, Date.parse("2026-10-03T00:00:00Z")), normalized = normalize(fixture);
+  const foundry = normalized.repos.find(repo => repo.name === "lightningfoundry"), banana = normalized.repos.find(repo => repo.name === "bananapayserver");
+  const sums = [9, 14, 17, 22, 25], identities = foundry && new Map(foundry.contributors.map(row => [row.login.toLowerCase(), row.last_seen_at]));
+  const counts = foundry && metrics.every((key, i) => foundry.totals[key] === sums[i] && foundry.weekly.length === 1
+    && foundry.weekly[0].week === "2026-W40" && foundry.weekly[0][key] === sums[i]
+    && foundry.leaderboards[key].length === 1 && foundry.leaderboards[key][0].login.toLowerCase() === "alice" && foundry.leaderboards[key][0].count === sums[i]);
+  record("activity repository identities: renamed Foundry rows merge without mutating sources, losing counts or events, or merging BananaPayServer",
+    normalized.repos.length === 2 && counts && identities.size === 2 && identities.get("alice") === late && identities.get("bob") === early
+      && foundry.totals.contributors === 2 && foundry.last_activity_at === late && banana.totals.commits === 23
+      && normalized.recent.length === 4 && normalized.recent.map(row => row.repo).join() === "lightningfoundry,lightningfoundry,lightningfoundry,bananapayserver"
+      && normalized.recent.every((row, i) => row.login === fixture.recent[i].login && row.type === fixture.recent[i].type && row.occurred_at === fixture.recent[i].occurred_at)
+      && JSON.stringify(normalized.totals) === JSON.stringify(fixture.totals) && JSON.stringify(normalized.leaderboards) === JSON.stringify(fixture.leaderboards)
+      && JSON.stringify(normalized.contributors) === JSON.stringify(fixture.contributors) && JSON.stringify(fixture) === before
+      && JSON.stringify(normalize(normalized)) === JSON.stringify(normalized), JSON.stringify({ counts, repos: normalized.repos, recent: normalized.recent }));
   const liveContext = { window: {}, URLSearchParams, location: { search: "" } };
   for (const name of [...CONTRIBUTOR_SOURCES, "jumbotron-data"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), liveContext);
   const live = liveContext.window.BL, generatedAt = Date.parse(live.jumbotronData.meta.generated_at), aliases = Object.fromEntries(live.characters.all().filter((c) => c.github).map((c) => [c.handle, c.github]));
@@ -2391,7 +2436,7 @@ const contributorActivityChecks = async () => {
   const loginOf = (entry) => (aliases[entry.name] || entry.name).toLowerCase();
   const perRepo = matched.every(({ entry }) => live.jumbotronData.repos.every((repo) => {
     const row = repo.contributors.find((c) => c.login.toLowerCase() === loginOf(entry));
-    return !row || entry.activity.get(`oogaboogax/${repo.name.toLowerCase()}`) === Date.parse(row.last_seen_at);
+    return !row || entry.activity.get(live.activityRepos.keyOf(`oogaboogax/${repo.name}`)) === Date.parse(row.last_seen_at);
   }));
   // Data integrity of the committed bake itself: each repo's contributor rows
   // must be that repo's own (aligned with its contributor total), and the
@@ -2846,7 +2891,7 @@ const debugActivityStatusChecks = async () => {
     return context.window.BL.contributors;
   };
   const example = "ooga=w-s-bitcoin:clank:lab,obl,lf&ooga=portlandhodl:clank:lab,obl&ooga=DrNeski:clank:lab,lf&ooga=bc1gui:clank:lab&ooga=2140data:clank:obl&ooga=SaniExp:chill&ooga=MrHodlX:chill&ooga=Holo-Elfstone:chill&ooga=Tmmmemcee:chill&ooga=YellowBrokeIt:chill";
-  const C = load(`?debug=1&status=sleepin&${example}`), lab = "oogaboogax/entropylab", obl = "oogaboogax/oogaboogaland", lf = "drneski/lightning-foundry";
+  const C = load(`?debug=1&status=sleepin&${example}`), lab = "oogaboogax/entropylab", obl = "oogaboogax/oogaboogaland", lf = "oogaboogax/lightningfoundry";
   C.seedDebugActivity(at);
   const modes = C.roster.map(entry => C.stateFor(entry, at));
   // Neither a maintainer nor a later feed/seed may wake unlisted owners or add work caves.
@@ -2969,6 +3014,37 @@ const workCaveTrips = async (b) => {
     all.rows.length === all.lines * 2 && all.rows.some(row => row.line === 4 && row.pathLength > 12) && all.rows.some(row => row.line === 1 && row.pathLength > 12)
       && all.rows.every(row => row.connected && row.arrived && row.onPath > 0.95 && row.error < 0.45), JSON.stringify(all));
 };
+const factoryActivityRouting = { name: "factory contribution routing", why: "regression: normal repo activity must assign both the Ooga and its clanker to Factory without falling back to OBL", run: async (b) => {
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, C = BL.contributors, sites = B.crew.workSites, index = sites.findIndex(site => site.mouth.id === "c2"), site = sites[index];
+    const cave = ["bc1gui", "DrNeski"].map(name => B.cavemen.get(name))
+      .find(c => c && !c.traits.maintainer && !c.contributor.maintainer && !c.camp.burning && !c.camp.rolling && !c.health.stunned);
+    const entry = cave.contributor, saved = { activity: [...entry.activity], lastCommitAt: entry.lastCommitAt, lastContributionAt: entry.lastContributionAt,
+      override: cave.override, controlOverride: cave.controlOverride }, rows = [];
+    B.pilot.release(true);
+    try {
+      for (const repo of ["OogaBoogaX/BananaPayServer", "OogaBoogaX/LightningFactory"]) {
+        entry.activity.clear(); entry.lastCommitAt = entry.lastContributionAt = 0; cave.override = cave.controlOverride = null;
+        C.applyActivity([{ name: entry.name, repo, lastCommitAt: Date.now() - 1000 }]);
+        B.pilot.possess(cave); B.crew.wakePlayer();
+        cave.override = cave.controlOverride = null;
+        B.pilot.navigate({ position: { x: 10, y: 0, z: 0 }, yaw: 0, pitch: 0.4, dist: 5 });
+        cave.weapon.workSite = -1; cave.work.plannedSite = -1;
+        B.pilot.release(true);
+        const clanker = B.clankers.list.find(e => e.owner === cave);
+        rows.push({ repo, state: cave.state, assigned: cave.work.plannedSite, clanker: clanker ? clanker.pendingSite >= 0 ? clanker.pendingSite : clanker.site : -1 });
+      }
+      return { debugRoster: C.debugRoster, debugState: C.debugState, index, repo: site?.repo, additionalRepo: site?.additionalRepo, rows };
+    } finally {
+      entry.activity.clear(); for (const [repo, stamp] of saved.activity) entry.activity.set(repo, stamp);
+      entry.lastCommitAt = saved.lastCommitAt; entry.lastContributionAt = saved.lastContributionAt;
+      cave.override = saved.override; cave.controlOverride = saved.controlOverride; B.crew.refreshStates(true);
+    }
+  })()`);
+  record("factory contribution routing: ordinary BananaPayServer and historical LightningFactory activity sends the Ooga and clanker to canonical LF",
+    !r.debugRoster && !r.debugState && r.index >= 0 && r.repo === "oogaboogax/lightningfoundry" && r.additionalRepo === "oogaboogax/bananapayserver"
+      && r.rows.length === 2 && r.rows.every(row => row.state === "working" && row.assigned === r.index && row.clanker === r.index), JSON.stringify(r));
+} };
 const npcPaths = (backend) => [`NPC paths ${backend}`, async (b) => {
   const rows = await b.evaluate(`(${npcPathWalkingProbe.toString()})()`);
   record(`NPC paths ${backend}: prefer connected trails, pass other Oogas, replan changed paths and reach off-path fireplace seats`, rows.length === 5 && rows.slice(0, 4).every((r) => r.arrived && r.distance < 1e-6 && r.stable && r.maximumStep <= 1.7 / 30 + 1e-6 && r.count > 0) && rows[0].onPath > 0.95 && rows[1].onPath > 0.65 && rows[1].separation >= 0.68 && rows[2].changed && rows[2].replans > 0 && rows[3].onPath < 0.95, JSON.stringify(rows.slice(0, 4)));
@@ -3033,7 +3109,7 @@ const gameRulesChecks = async () => {
     // The jackpot wheel, from arcade-models.js on the builders it loads with: the house wins slowly, and every
     // wedge, from a turn at rest and one far round after many spins, stops under the clapper wherever in it the spin
     // aims, after its whole turns and less than one more.
-    for (const name of ["scene", "models", "jumbotron", "hub-models", "arcade-models"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
+    for (const name of ["scene", "models", "activity-repos", "jumbotron", "hub-models", "arcade-models"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
     const { WHEEL_VALUES: V, WHEEL_COST: cost, wheelAt, wheelStop } = BL.arcadeModels;
     const ev = V.reduce((s, v) => s + v, 0) / V.length, jackpot = Math.max(...V), missed = [];
     for (const from of [0, -0.3, -1234.567]) for (let k = 0; k < V.length; k++) for (const at of [0.2, 0.5, 0.8]) {
@@ -5702,7 +5778,7 @@ const factoryCanvas = { name: "factory canvas2d", why: "contract: the Canvas 2D 
   record("factory canvas2d: with WebGL2 unavailable the factory still boots and paints", r.kind === "canvas2d" && r.scene === "factory" && r.colours >= 4, JSON.stringify(r));
 } };
 
-scene("hub", { steps: [{ name: `work movement lab lanes ${1 / RATES[0]}Hz`, why: "regression: work walkers left their facing-right side of the lab lane", open: "on about 4 boots in 30 the lane targets sit on the centre or far side; unfixed", run: labLanes }, donation("hub"), hubWalking, hubMapNavigation, hubRainforestSteps, hubRoutes, hubFall, trip("hub")] });
+scene("hub", { steps: [{ name: `work movement lab lanes ${1 / RATES[0]}Hz`, why: "regression: work walkers left their facing-right side of the lab lane", open: "on about 4 boots in 30 the lane targets sit on the centre or far side; unfixed", run: labLanes }, donation("hub"), hubWalking, hubMapNavigation, hubRainforestSteps, hubRoutes, hubFall, trip("hub"), factoryActivityRouting] });
 scene("hub", { query: "ooga=portlandhodl:clank:lab,obl,lf&ooga=w-s-bitcoin:clank:lab,obl,lf&ooga=bc1gui:clank:lab,obl,lf&ooga=DrNeski:clank:lab,obl,lf&ooga=2140data:clank:lab,obl,lf", steps: [{ name: "work movement cave trips", why: "regression: off-lane cave traffic aimed through obstacles and started backwards detours", run: workCaveTrips }] });
 scene("hub", { label: "room sign", query: "pos=0", steps: [{ name: "room sign copies hash", why: "rule: tapping a room sign swings it and copies its displayed eight-character code with visible confirmation", run: async (b) => {
   const point = await b.evaluate(`(() => { const B = __ooga, sign = B.headquarters.roomSigns[0], n = sign.node; Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: (value) => { window.__roomHash = value; return Promise.resolve(); } } }); window.__roomSignBefore = sign.hits; B.pilot.release(true); B.pilot.navigate({ position: { x: n.position.x, y: n.position.y, z: n.position.z }, target: { x: n.position.x, y: n.position.y - 0.2, z: n.position.z }, yaw: n.rotation.y, pitch: 0, dist: 4 }); B.advance(0.6, 1 / 60); return B.project(n.position.x, n.position.y - 0.2, n.position.z, {}); })()`);
