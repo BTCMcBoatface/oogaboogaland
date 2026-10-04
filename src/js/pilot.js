@@ -144,7 +144,7 @@
     const assistedTargetScreen = { x: 0, y: 0 }, aimProjection = new Float64Array(3), aimCenter = new Float64Array(3);
     const targetOrigin = { x: 0, y: 0, z: 0 };
     let targetWait = 0, targetPrimary = false, targetActive = false, hitRemaining = 0, hitStrength = 0;
-    let combatTooltipCave = null;
+    let combatTooltipCave = null, combatTooltipText = "";
     let assistedTargetActive = false, assistedTargetInRange = false, assistedTargetClose = false, assistedTargetDistance = Infinity, assistedTargetWait = 0, assistedReticleX = NaN, assistedReticleY = NaN;
     const targetFeedback = (type) => {
       if (reticle.dataset.target !== type) reticle.dataset.target = type;
@@ -157,11 +157,14 @@
       if (kind === "crate") return "object";
       return reticleTarget ? reticleTarget(hit) : hit.type;
     };
+    const visualTarget = (owner) => owner.cave !== player();
     const setCombatTooltip = (hit) => {
-      const cave = hit && hit.owner && hit.owner.kind === "caveman" ? hit.owner.cave : null;
-      if (cave === combatTooltipCave) return;
+      const owner = hit && hit.owner, gorilla = owner && owner.kind === "clanker";
+      const cave = owner && (gorilla || owner.kind === "caveman") ? owner.cave : null;
+      if (cave !== combatTooltipCave) combatTooltipText = cave ? gorilla ? `🦍 ${owner.entry.owner.traits.display}` : cave.traits.display : "";
+      else if (!cave || !hud.el.tooltip.hidden && hud.el.tooltipText.textContent === combatTooltipText) return;
       combatTooltipCave = cave;
-      if (cave) hud.tooltip.show(cave.traits.display, 0, 0, cave);
+      if (cave) hud.tooltip.show(combatTooltipText, 0, 0, cave, !!gorilla);
       else hud.tooltip.hide();
     };
     const clearFeedback = () => {
@@ -608,7 +611,10 @@
       const eye = camera.position, dx = camera.target.x - eye.x, dy = camera.target.y - eye.y, dz = camera.target.z - eye.z;
       const length = Math.hypot(dx, dy, dz), reach = visual ? 60 : primary ? crew.meleeReach(cave) : 60;
       const eyeReach = reach + Math.hypot(eye.x - targetOrigin.x, eye.y - targetOrigin.y, eye.z - targetOrigin.z);
-      if (!input.weaponTargets.ray(out, eye.x, eye.y, eye.z, dx / length, dy / length, dz / length, Math.min(60, eyeReach), cave, null, visual)) return false;
+      // Visual inspection includes the Ooga's own companion; weapon contacts
+      // keep their existing friendly-fire exclusions.
+      if (!input.weaponTargets.ray(out, eye.x, eye.y, eye.z, dx / length, dy / length, dz / length, Math.min(60, eyeReach),
+        visual ? null : cave, visual ? visualTarget : null, visual)) return false;
       const mx = out.x - targetOrigin.x, my = out.y - targetOrigin.y, mz = out.z - targetOrigin.z;
       const distance = Math.hypot(mx, my, mz), near = Math.max(0, 1 - TARGET_MARGIN / Math.max(distance, TARGET_MARGIN));
       const cameraNear = Math.max(0, out.distance - TARGET_MARGIN) / length;
@@ -654,7 +660,7 @@
       targetPrimary = primary;
       if (assistedView()) {
         targetActive = !!(input && input.weaponTargets && input.weaponTargets.ray(targetHit,
-          cursorRay.ox, cursorRay.oy, cursorRay.oz, cursorRay.dx, cursorRay.dy, cursorRay.dz, 60, cave, null, true));
+          cursorRay.ox, cursorRay.oy, cursorRay.oz, cursorRay.dx, cursorRay.dy, cursorRay.dz, 60, null, visualTarget, true));
         if (targetActive) {
           const clear = sightClear || cursorClear, near = Math.max(0, 1 - TARGET_MARGIN / Math.max(targetHit.distance, TARGET_MARGIN));
           if (clear && !clear(cursorRay.ox, cursorRay.oy, cursorRay.oz,
