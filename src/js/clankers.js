@@ -5759,13 +5759,37 @@
     // Sleep. A gorilla sleeps when its Ooga does and where the scene keeps beds (`ctx.sleep`: `slots`, each with its
     // root point, heading and `nest`, and `path(slot, out)`, the dry way there from the home island as x, z pairs).
     // It reserves a bed before it sets out and keeps it through the walk, the sleep, the waking and the walk
-    // home; beds are picked among the free ones in the least full nests by a hash of its Ooga's name and last
-    // contribution, so the choice is reproducible, spreads the sleepers, and changes with each sleep without
-    // ever reshuffling. Stages: "go" along the path, "settle" turning onto the bed, "asleep", then "return" back
+    // home; beds are dealt for the day by a hash of the roster's names (`bedsToday`), so the choice is random,
+    // reproducible, the same on every page, and never reshuffled under a sleeper. Stages: "go" along the path, "settle" turning onto the bed, "asleep", then "return" back
     // along the path once its Ooga wakes, after which the ordinary work and chill machinery takes over.
     // A hand on it wins: possession wakes it where it lies, and a release while its Ooga still sleeps walks it
     // back to bed from where it stands.
-    const SLEEP_POSES = ["left", "right", "back"], SLEEP_REACH = 1.1, SLEEP_ARRIVE = 0.3, SLEEP_STALL = 25, SLEEP_MARK = 1.9;
+    const SLEEP_POSES = ["left", "right", "back"], SLEEP_REACH = 1.1, SLEEP_ARRIVE = 0.3, SLEEP_STALL = 25, SLEEP_MARK = 1.9, DAY_MS = 86400000;
+    // Who sleeps where today: every gorilla's bed, worked out once a day from the roster's names alone. Each takes
+    // the first bed still free in its own shuffled order, in roster order, so the answer never depends on who
+    // happened to fall asleep first, and every page looking at the island sees the same gorilla in the same bed
+    // without a word passing between them. A bed already taken is kept past midnight until its sleeper leaves it.
+    let bedDay = -1;
+    const bedOf = [];
+    const bedsToday = () => {
+      const day = Math.floor(Date.now() / DAY_MS), beds = ctx.sleep.slots.length;
+      if (day === bedDay && bedOf.length === list.length) return bedOf;
+      bedDay = day;
+      const taken = new Uint8Array(beds);
+      bedOf.length = list.length;
+      for (let i = 0; i < list.length; i++) {
+        const name = list[i].owner.traits.name;
+        let best = -1, lowest = Infinity;
+        // The bed with the lowest hash for this name and day among those still free: a shuffle without a list.
+        for (let b = 0; b < beds; b++) {
+          const order = taken[b] ? Infinity : fnv1a(`bed/${day}/${name}/${b}`);
+          if (order < lowest) { lowest = order; best = b; }
+        }
+        bedOf[i] = best;
+        if (best >= 0) taken[best] = 1;
+      }
+      return bedOf;
+    };
     const bedTaken = (slot, but) => {
       for (const other of list) if (other !== but && other.sleep.slot === slot) return true;
       return false;
@@ -5778,25 +5802,16 @@
     const reserveBed = (e) => {
       const s = e.sleep, beds = ctx.sleep.slots;
       if (s.slot >= 0) return true;
-      // The least full nests first, then one of their free beds by the hash.
-      let fewest = Infinity, free = 0;
-      for (let pass = 0; pass < 2; pass++) for (let i = 0; i < beds.length; i++) {
-        if (bedTaken(i, e)) continue;
-        let inNest = 0;
-        for (const other of list) if (other !== e && other.sleep.slot >= 0 && beds[other.sleep.slot].nest === beds[i].nest) inNest++;
-        if (!pass) fewest = Math.min(fewest, inNest);
-        else if (inNest === fewest) free++;
+      let slot = bedsToday()[e.index];
+      // Its own bed, unless a sleeper from before midnight still lies in it: then the first one nobody has.
+      if (slot >= 0 && bedTaken(slot, e)) {
+        slot = -1;
+        for (let b = 0; b < beds.length && slot < 0; b++) if (!bedTaken(b, e)) slot = b;
       }
-      if (!free) return false;
-      const owner = e.owner, seed = fnv1a(`bed/${owner.traits.name}/${owner.contributor ? owner.contributor.lastCommitAt || 0 : 0}`);
-      let pick = seed % free;
-      for (let i = 0; i < beds.length; i++) {
-        if (bedTaken(i, e)) continue;
-        let inNest = 0;
-        for (const other of list) if (other !== e && other.sleep.slot >= 0 && beds[other.sleep.slot].nest === beds[i].nest) inNest++;
-        if (inNest === fewest && pick-- === 0) { s.slot = i; s.pose = SLEEP_POSES[(seed >>> 8) % SLEEP_POSES.length]; return true; }
-      }
-      return false;
+      if (slot < 0) return false;
+      s.slot = slot;
+      s.pose = SLEEP_POSES[fnv1a(`pose/${e.owner.traits.name}/${slot}`) % SLEEP_POSES.length];
+      return true;
     };
     // The leg of its path nearest where it stands, so a trip resumed anywhere on the way carries on from there.
     const sleepLegFrom = (e) => {

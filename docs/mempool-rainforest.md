@@ -38,6 +38,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
 | Cube sequence | gather 1.6 s, bulge 1.7 s, hang 1.5 s, slow fall 3.2 s, then to the sea | `poolWater.CUBE` |
 | Float draught | Ooga 0.55 x body height, gorilla 0.9 m | `scene-hub.js` |
 | Beds | 20 (4 on each of 5 nests) for a roster of 16 | `poolLayout.SLOTS` |
+| Bed choice | dealt once a UTC day by `fnv1a` of day, name and bed, in roster order | `clankers.js` `bedsToday` |
 | Sleep trip stall fallback | 25 s | `clankers.js` `SLEEP_STALL` |
 
 ## Verification actually performed
@@ -61,7 +62,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
 
 1. **Seen only in headless screenshots** (the overview, the court, the ring path, a nest, a tunnel, the chamber, the paintings with the issue's snapshot values, a flood, a storm, the cube), never played by a person. Colours, forest density, torch light and the glass alphas (membrane 0.3, water 0.5) have had one pass.
 2. A gorilla that starts its sleep trip on high ground climbs or hops down and walks; where it cannot find a way within 25 s (one roof in the probes) it is placed in its bed.
-3. **Beds are chosen per page**, not replicated: a seeded choice among free beds in the least full nests. Two signed-in pages can show the same gorilla in different beds. `npc-sync.js` record offsets 101-111 are free for a bed index (bump `FORMAT`) if that matters.
+3. **Beds are not sent over the network**, and do not need to be: each day's beds are dealt from the roster's names alone (`bedsToday` in `clankers.js`), so every page computes the same bed for the same gorilla. Two pages can still differ for a moment around midnight UTC, or in where a gorilla is along its walk, since each page walks its own gorillas as it always has.
 4. Tunnel **walls are voxel**, like the rest of the island; only the floors are smooth.
 5. The tunnel network is the descent, the ledge and its two doors, and the window. The plan's A/B links are not built.
 6. At low water the membrane's rim is a **transparent bank** that walkers stand on.
