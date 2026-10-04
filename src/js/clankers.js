@@ -4536,10 +4536,24 @@
       }
     };
     const runDownhill = (e, dt, heading) => {
+      const p = e.root.position, sx = Math.sin(heading), sz = Math.cos(heading);
+      if (ctx.fireClear) {
+        // The roof-height step cannot see a fire below. Check the whole
+        // descent before borrowing the player's running ledge hop, including
+        // momentum that can carry the landing beyond the work-cave approach.
+        const fallTime = (LEDGE_RISE + Math.sqrt(LEDGE_RISE * LEDGE_RISE
+          + 2 * GRAVITY * Math.max(0, p.y - e.goalY))) / GRAVITY;
+        const reach = Math.max(Math.hypot(e.goalX - p.x, e.goalZ - p.z), SPEED * 2 * fallTime);
+        if (!ctx.fireClear(e, p.x, p.y, p.z, p.x + sx * reach, e.goalY, p.z + sz * reach, e.heading, heading)) {
+          // Keep the normal supported approach and edge-climb fallback.
+          move(e, dt, SPEED);
+          return;
+        }
+      }
       const d = e.drive, c = e.climb, departurePlanning = c.departurePlanning;
       c.searchPending = c.searchDeferred = c.claimPending = c.crestPending = false;
       if (climbTurn === e.index) climbTurn = -1;
-      d.x = Math.sin(heading); d.z = Math.cos(heading); d.heading = heading; d.run = true;
+      d.x = sx; d.z = sz; d.heading = heading; d.run = true;
       c.departurePlanning = true;
       updateDriven(e, dt);
       c.departurePlanning = departurePlanning;
@@ -4864,6 +4878,15 @@
       // raised prop or backing off a cliff hands the step to ordinary gravity.
       if (e.parked || e.climb.active || !terrainEdge && (!Number.isFinite(landingFloor)
         || !edgeLeap && !backwardStepOff && (!landing(x, landingFloor, z) || p.y - currentFloor <= STEP))) return false;
+      // The walking fallback must not turn a rejected fire-bound leap into
+      // a slower fall onto the same pit. Forced falls in place remain free.
+      if (!e.controlled && speed > 0 && ctx.fireClear && Number.isFinite(landingFloor)) {
+        const rise = edgeLeap ? LEDGE_RISE : 0;
+        const fallTime = (rise + Math.sqrt(rise * rise
+          + 2 * GRAVITY * Math.max(0, p.y - landingFloor))) / GRAVITY;
+        if (!ctx.fireClear(e, p.x, p.y, p.z, x + vx * fallTime, landingFloor, z + vz * fallTime,
+          e.heading, heading)) return false;
+      }
       // A running gorilla leaves the rim under its own momentum. Check the
       // airborne centre path before committing, including beyond the island.
       if (edgeLeap) d.airborne = true;
