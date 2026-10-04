@@ -5,12 +5,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { contributorRows, createContributorLookup } from "../src/contributor-policy.js";
 import { missingCharacters, characterSource } from "../../scripts/sync-characters.mjs";
-import { identityAdvice } from "../../scripts/contributor-pr.mjs";
+import { checkCharacterIdentities, identityAdvice } from "../../scripts/contributor-pr.mjs";
 import { declaredIdentity, mayAuthorIdentity } from "../../scripts/character-identity.mjs";
 import { CharacterRejection, parseSafeCharacter, scanCharacter, safeCharacterSource, checkOwner } from "../../scripts/character-safety.mjs";
 import { digest, due, inspectSubmission, manifestPath, readManifest, reviewDecision } from "../../scripts/character-submissions.mjs";
 import { createCoordinator } from "../../scripts/character-bundles.mjs";
-import { OPERATORS, isOperator } from "../../scripts/character-operators.mjs";
+import { BOT, OPERATORS, isOperator } from "../../scripts/character-operators.mjs";
 
 const NOW = Date.parse("2026-10-04T12:00:00Z");
 const person = (login, extra = {}) => ({ login, counts: { commits: 1 }, first_seen_at: "2026-09-01T00:00:00Z", last_seen_at: "2026-10-04T11:00:00Z", ...extra });
@@ -54,6 +54,40 @@ test("midnight gates are UTC, never merge empty or manual bundles, and reused bu
   assert.throws(() => readManifest(JSON.stringify({ version: 1, lane: "daily", openedOn: "2026-10-04", entries: [{ path: "../auth.js" }] }), "daily"));
 });
 
+test("empty bundle identity checks pass only for validated placeholders and still reject reconciliation", async (t) => {
+  const repo = "example/land", bot = "private-app[bot]", rock = "a".repeat(40), head = "b".repeat(40), blob = "c".repeat(40);
+  const saved = Object.fromEntries(["GITHUB_REPOSITORY", "GITHUB_TOKEN", "CHARACTER_BOT_LOGIN"].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, { GITHUB_REPOSITORY: repo, GITHUB_TOKEN: "test-token", CHARACTER_BOT_LOGIN: bot });
+  t.after(() => { for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  let lane = "daily", verified = true, unexpected = false;
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const path = url.slice(`https://api.github.com/repos/${repo}/`.length);
+    const source = JSON.stringify({ version: 1, lane, openedOn: "2026-10-04", entries: [] });
+    let data;
+    if (path === "git/ref/heads/rock") data = { object: { sha: rock } };
+    else if (path === "commits/merged") data = { parents: [{ sha: rock }] };
+    else if (path === `git/trees/${head}?recursive=1`) data = { tree: [{ path: manifestPath(lane), type: "blob", mode: "100644", sha: blob, size: source.length }] };
+    else if (path === `git/blobs/${blob}`) data = { encoding: "base64", size: source.length, content: Buffer.from(source).toString("base64") };
+    else if (path === `commits/${head}`) data = { author: { login: bot }, commit: { verification: { verified } } };
+    else if (path === `compare/${rock}...${head}`) data = { files: [{ filename: unexpected ? "worker/src/auth.js" : manifestPath(lane), status: "added" }] };
+    else if (path === `git/trees/${rock}?recursive=1`) data = { tree: [] };
+    else throw new Error(`Unexpected request: ${path}`);
+    return new Response(JSON.stringify(data));
+  });
+  for (lane of ["daily", "manual"]) {
+    const pr = { user: { login: bot }, head: { sha: head, ref: `automation/characters-${lane}-abc`, repo: { full_name: repo } },
+      base: { ref: "rock", repo: { full_name: repo } }, merge_commit_sha: "merged" };
+    assert.deepEqual(await checkCharacterIdentities(pr), []);
+    await assert.rejects(checkCharacterIdentities(pr, true), /Empty character bundle/);
+    verified = false;
+    await assert.rejects(checkCharacterIdentities(pr), /not a verified commit/);
+    verified = true;
+    unexpected = true;
+    await assert.rejects(checkCharacterIdentities(pr), /unexpected files/);
+    unexpected = false;
+  }
+});
+
 test("manual bundles require current-head operator approval and respect dismissal or requested changes", async () => {
   const pr = { number: 1, user: { login: "app[bot]" }, head: { sha: "current" } };
   const operator = { ...OPERATORS[0], type: "User" };
@@ -91,6 +125,8 @@ test("Actions-token merges explicitly dispatch the post-merge build and recover 
   const dispatches = calls.filter((call) => call.path.endsWith("/dispatches"));
   assert.equal(dispatches.length, 1);
   assert.deepEqual(dispatches[0].data, { ref: "rock", inputs: { merge_sha: pr.merge_commit_sha } });
+  await createCoordinator(gh, "private-app[bot]").deployMerged({ ...pr, user: { login: "private-app[bot]" }, merged_by: { login: "private-app[bot]" } });
+  assert.equal(calls.filter((call) => call.path.endsWith("/dispatches")).length, 1); // App merges already emit push events.
 });
 
 test("an otherwise validated overdue daily bundle never calls merge when conflicted or its mergeability is unknown", async () => {
@@ -150,8 +186,9 @@ test("the scanner checks earlier character revisions and extracts only character
   await assert.rejects(inspectSubmission(gh, { pr: 7, head }, rock), CharacterRejection);
 });
 
-test("bundle placeholders stay open without merging and both lanes reopen after their own merge", async () => {
-  const bot = "character-app[bot]", repo = "example/land", refs = new Map([["rock", "1".repeat(40)]]), files = new Map(), prs = [];
+test("empty placeholders migrate to the scoped App without duplication, never merge empty, and reopen after merging", async () => {
+  let bot = BOT, unexpected = false;
+  const repo = "example/land", refs = new Map([["rock", "1".repeat(40)]]), files = new Map(), authors = new Map(), prs = [];
   let sequence = 2, mergeCalls = 0;
   const gh = {
     repo,
@@ -161,6 +198,7 @@ test("bundle placeholders stay open without merging and both lanes reopen after 
     commit: async (branch, expected, additions) => {
       assert.equal(refs.get(branch), expected);
       const sha = String(sequence++).padStart(40, "0"); refs.set(branch, sha);
+      authors.set(sha, bot);
       for (const file of additions) files.set(`${sha}:${file.path}`, { source: file.source, sha });
       return sha;
     },
@@ -171,17 +209,33 @@ test("bundle placeholders stay open without merging and both lanes reopen after 
         const pr = { number: prs.length + 1, state: "open", user: { login: bot }, head: { ref: data.head, sha: refs.get(data.head), repo: { full_name: repo } }, base: { ref: "rock", repo: { full_name: repo } } };
         prs.push(pr); return pr;
       }
-      if (/^pulls\/\d+$/.test(path)) return prs.find((pr) => pr.number === Number(path.split("/")[1]));
-      if (path.startsWith("commits/")) return { author: { login: bot }, commit: { verification: { verified: true } } };
-      if (path.startsWith("compare/")) return { files: [{ filename: manifestPath("daily"), status: "added" }] };
+      if (/^pulls\/\d+$/.test(path)) {
+        const pr = prs.find((pr) => pr.number === Number(path.split("/")[1]));
+        pr.head.sha = refs.get(pr.head.ref); return pr;
+      }
+      if (path.startsWith("commits/")) return { author: { login: authors.get(path.slice(8)) }, commit: { verification: { verified: true } } };
+      if (path.startsWith("compare/")) {
+        const sha = path.split("...")[1], lane = files.has(`${sha}:${manifestPath("daily")}`) ? "daily" : "manual";
+        return { files: [{ filename: manifestPath(lane), status: "added" }, ...(unexpected ? [{ filename: "unsafe.js", status: "added" }] : [])] };
+      }
       if (path.endsWith("/merge")) { mergeCalls++; throw new Error("Empty bundle must never merge"); }
       throw new Error(`Unexpected API call ${path}`);
     }
   };
-  const coordinator = createCoordinator(gh, bot, () => new Date(NOW));
+  let coordinator = createCoordinator(gh, bot, () => new Date(NOW));
   const daily = await coordinator.ensure("daily"), manual = await coordinator.ensure("manual");
   assert.notEqual(daily.number, manual.number);
   assert.equal((await coordinator.ensure("daily")).number, daily.number);
+  bot = "private-app[bot]";
+  coordinator = createCoordinator(gh, bot, () => new Date(NOW));
+  unexpected = true;
+  await assert.rejects(coordinator.ensure("daily"), /unexpected files/);
+  unexpected = false;
+  for (const lane of ["daily", "manual"]) {
+    const adopted = await coordinator.ensure(lane);
+    assert.equal(authors.get(adopted.head.sha), bot);
+  }
+  assert.equal(prs.length, 2);
   await coordinator.mergeDaily();
   assert.equal(mergeCalls, 0);
   manual.state = "closed"; refs.set("rock", "f".repeat(40));
