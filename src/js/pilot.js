@@ -60,6 +60,16 @@
   const create = (ctx) => {
     const { renderer, canvas, camera, hud, presets, dist: [DIST_MIN, DIST_MAX], follow, fly, clampTarget, clampCamera, coarse, close = null, ceilingAt = null, mayPossess = null } = ctx;
     let crew = null, fx = null, input = null, reticleTarget = null, active = true;
+    let ownAccount = null, ownCrew = null, ownOoga = null;
+    const syncOwnOoga = () => {
+      const account = BL.net.state.me;
+      if (account === ownAccount && crew === ownCrew) return;
+      ownAccount = account; ownCrew = crew;
+      const character = BL.net.ownCharacter();
+      ownOoga = character && crew && crew.cavemen ? crew.cavemen.get(character.handle) || null : null;
+      if (hud.setOwnOoga) hud.setOwnOoga(ownOoga);
+    };
+    const unsubscribeOwnOoga = BL.net.subscribe(syncOwnOoga);
     let restoredPose = null;
     const freeTarget = { x: 0, y: 0, z: 0 };
     const followTarget = { x: 0, y: 0, z: 0 };
@@ -114,6 +124,7 @@
       systems.meleeTarget = meleeTarget;
       systems.onWeaponHit = weaponHit;
       fx = systems.fx;
+      syncOwnOoga();
     };
     const player = () => crew ? crew.player : null;
     const rememberControlMode = () => {
@@ -1673,6 +1684,11 @@
     };
     const modeAction = (action) => {
       const cave = player();
+      if (action === "mode-retake") {
+        syncOwnOoga();
+        if (ownOoga && ownOoga !== cave) hooks.onDoubleTap({ owner: { kind: "caveman", cave: ownOoga } });
+        return !!ownOoga;
+      }
       if (action === "mode-release") {
         if (cave) release();
         return !!cave;
@@ -2916,6 +2932,9 @@
       reticle.hidden = !value || !armed();
     };
     const dispose = () => {
+      unsubscribeOwnOoga();
+      ownAccount = ownCrew = ownOoga = null;
+      if (hud.setOwnOoga) hud.setOwnOoga(null);
       rememberControlMode();
       restoredPose = null;
       disposed = true;

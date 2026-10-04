@@ -38,7 +38,7 @@ Signed-in players also share the crew: one player's page runs the Oogas for ever
 
 Who drives which Ooga:
 
-- **Contributors drive their own.** If your GitHub login is a contributor's in `src/characters/`, signing in hands you your own Ooga, and while you are signed in nobody else can drive it. Contributors drive only their own Ooga.
+- **Contributors drive their own.** If your GitHub login is a contributor's in `src/characters/`, signing in hands you your own Ooga, and while you are signed in nobody else can drive it. Your Ooga's face stays beside the location button; click it while detached to retake control. Contributors drive only their own Ooga.
 - **Everyone else** (signed in or not) may drive an Ooga only when its contributor is not signed in, nobody else is driving it, and it is not working (yellow in the roster). Resting and sleeping Oogas are free to borrow.
 - **Owners come first.** When a contributor signs in, their Ooga is handed back to them, and whoever was driving it lets go.
 

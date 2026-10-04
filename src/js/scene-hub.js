@@ -8760,6 +8760,7 @@
     hud.setDetachedView("pile");
     hud.onAction((action, value) => {
       if (factoryDeparting || bifrostDeparting) return;
+      if (action === "mode-retake" && clankerPlay.active) clankerPlay.release();
       if (clankerPlay.active && clankerPlay.action(action)) return;
       if (action === "tip") demoTip(1200);
       else if (action === "tip-legendary") demoTip(120000);
