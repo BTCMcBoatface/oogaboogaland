@@ -21,7 +21,7 @@ npm run watch   # the same, rebuilding on every change under src/
 - **Play a gorilla:** double-click or double-tap one to take control. **W A S D** walks, hold **Left Shift** to run, and **Space** jumps with an optional second jump in the air. Controlled gorillas walk at 1.8 m/s and run at 5.4 m/s, twice the NPC pace, with the same animations.
 - **Gorilla views:** **X** switches carry/combat. Scroll between first person, shoulder, and orbit/bird's-eye; combat shows the same crosshair. **Right-click** returns to shoulder, **Right Shift** swaps shoulders (**Right Shift + A/D** peeks), and **Q/E** rotate bird's-eye with **N** for north. **C** beats its chest.
 - **Gorilla attacks:** hold **Left mouse** to charge a smash; rapid hits are weaker until the power bar recovers. Hold **G** to grab an Ooga riding on you; release **G** to drop them. While holding **G**, hold **Left mouse** to charge a throw, then release the mouse to throw toward the crosshair. You can run and jump while carrying them.
-- **Views:** **X** switches carry and combat. Combat has first-person, shoulder and birds-eye (scroll out from shoulder); in birds-eye the mouse points your Ooga, **Q E** rotate and **N** turns north up. **Right-click** returns to shoulder. In shoulder view, **Right Shift + A/D** peeks; tap **Right Shift** to switch shoulders.
+- **Views:** **X** switches carry and combat. Combat has first-person, shoulder and birds-eye (scroll out from shoulder); in birds-eye move the mouse up/down to aim along the centerline from the screen's center to its top, and sideways to turn the view. **Q E** also rotate and **N** turns north up. **Right-click** returns to shoulder. In shoulder view, **Right Shift + A/D** peeks; tap **Right Shift** to switch shoulders.
 - **Weapons:** **G** switches, **1** club, **2** rifle. **Left mouse** fires or swings (hold to charge), **F** strikes with the rifle in combat mode, **R** swaps magazines, **Space** at the pile reloads. Boxes, barrels and rocks break and drop pickups; the mirror cracks and heals.
 - **Reset:** **Right Shift + R** resets saved progress. **Left Shift + R** keeps running while swapping magazines.
 - **Jetpack:** **J** puts it on; hold **Space** to climb.
@@ -38,7 +38,7 @@ Signed-in players also share the crew: one player's page runs the Oogas for ever
 
 Who drives which Ooga:
 
-- **Contributors drive their own.** If your GitHub login is a contributor's in `src/characters/`, signing in hands you your own Ooga, and while you are signed in nobody else can drive it. Contributors drive only their own Ooga.
+- **Contributors drive their own.** If your GitHub login is a contributor's in `src/characters/`, signing in hands you your own Ooga, and while you are signed in nobody else can drive it. Your Ooga's face stays beside the location button; click it while detached to retake control. Contributors drive only their own Ooga.
 - **Everyone else** (signed in or not) may drive an Ooga only when its contributor is not signed in, nobody else is driving it, and it is not working (yellow in the roster). Resting and sleeping Oogas are free to borrow.
 - **Owners come first.** When a contributor signs in, their Ooga is handed back to them, and whoever was driving it lets go.
 
@@ -69,7 +69,7 @@ Each game and cave has an address to share, with its own preview card: `/oogaral
 
 With `debug=1`, repeat `ooga=<handle>:<mode>[:<caves>]` to set individual owners to `clank`, `chill` or `sleep`. Once any `ooga` flag is present, unlisted owners and omitted/invalid modes sleep, including maintainers and Sani. This fixture overrides `status=` and live activity for the visit; without `ooga`, normal activity and the existing debug defaults apply. GitHub logins also work. Repeating an owner replaces its earlier setting. The companion gorillas follow their owners' modes.
 
-Clanking requires a comma-separated cave list: `lab` for EntropyLab, `obl` for Ooga Booga Land, and `lf` for Lightning Factory. Cave IDs (`c11`, `c1`, `c2`) and repository names (`oogaboogax/entropylab`, `oogaboogax/oogaboogaland`, `drneski/lightning-foundry`) also work. Unknown caves are ignored; a clank entry with no valid caves sleeps. Workers cycle through only their listed repositories. `&ooga=` makes everyone sleep. LF work routing is enabled for this debug fixture.
+Clanking requires a comma-separated cave list: `lab` for EntropyLab, `obl` for Ooga Booga Land, and `lf` for Lightning Factory. Cave IDs (`c11`, `c1`, `c2`) and repository names (`oogaboogax/entropylab`, `oogaboogax/oogaboogaland`, `oogaboogax/lightningfoundry`) also work. Historical Lightning Factory/Foundry names and `bananapayserver` resolve to LF. Unknown caves are ignored; a clank entry with no valid caves sleeps. Workers cycle through only their listed caves. `&ooga=` makes everyone sleep. In normal play, recent contributions to either `lightningfoundry` or `bananapayserver` send the Ooga and its Clanker to the Lightning Factory cave.
 
 Example: five clanking owners, five chilling owners, and everyone else sleeping. w-s-bitcoin visits all three repositories, portlandhodl visits lab/OBL, DrNeski visits lab/LF, bc1gui visits the lab, and 2140data visits OBL. Append this query to the built page's address:
 
@@ -99,7 +99,7 @@ npm run build
 
 Writes `oogaboogaland.html`, one self-contained page with the content policy pinned to its hashes. CI commits it back after each merge to `rock`, and GitHub Pages serves it at https://oogaboogax.github.io/oogaboogaland/.
 
-Two Cloudflare Workers serve the same site with GitHub sign-in, the shared island and voice: https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev deploys on every merge to `rock`, and https://oogabooga.land (production) by hand; `docs/cloudflare-setup.md` covers the setup and local development with `wrangler dev`, and `docs/auth-and-presence.md` the sign-in flow.
+Two Cloudflare Workers serve the same site with GitHub sign-in, the shared island and voice: https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev and https://oogabooga.land (production) both deploy by hand through GitHub Actions; `docs/cloudflare-setup.md` covers the setup and local development with `wrangler dev`, and `docs/auth-and-presence.md` the sign-in flow.
 
 ### Deploying to Cloudflare
 
@@ -107,7 +107,7 @@ Deploy only through GitHub Actions, and keep Cloudflare's Git connection (Worker
 
 | Environment | URL | Deploys |
 |---|---|---|
-| Staging | https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev | automatically on every merge to `rock` (**Deploy Cloudflare staging**) |
+| Staging | https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev | by hand: **Actions → Deploy Cloudflare staging → Run workflow** on `rock` |
 | Production | https://oogabooga.land | by hand once staging looks right: **Actions → Deploy Cloudflare production → Run workflow** on `rock` |
 
 Each workflow builds the site (`npm run build:site`), runs the Worker's checks, applies D1 migrations and deploys with `wrangler.<env>.jsonc`. A deploy drops live connections for a moment, and players reconnect on their own.

@@ -406,6 +406,11 @@
         </span>
         <span class="detached-destination-name" id="detached-destination-name" aria-live="polite"></span>
       </button>
+      <button type="button" class="mode-hud" id="own-ooga-hud" data-action="mode-retake" data-selected="true"
+        aria-label="Return to your Ooga" title="Return to your Ooga" hidden>
+        <canvas class="mode-face-icon" id="own-ooga-face-icon" width="48" height="48" aria-hidden="true"></canvas>
+        <span class="mode-health" id="own-ooga-health" role="progressbar" aria-label="Your Ooga's health" aria-valuemin="0" aria-valuemax="25" aria-valuenow="25"><span id="own-ooga-health-fill"></span></span>
+      </button>
       <button type="button" class="mode-hud" id="mode-hud" data-action="mode-toggle" data-selected="false" data-shooter="false"
         aria-label="Character controls" title="Character controls" hidden>
         <canvas class="mode-face-icon" id="mode-face-icon" width="48" height="48" aria-hidden="true" hidden></canvas>
@@ -1551,6 +1556,8 @@ Then run npm run build and ONLY=characters node test/run.mjs.</pre>
   <script src="js/dressing.js"></script>
   <script src="js/chalkboard.js"></script>
   <script src="js/lifehash.js"></script>
+  <script src="js/contributor-identities.js"></script>
+  <script src="js/activity-repos.js"></script>
   <script src="js/jumbotron-data.js"></script>
   <script src="js/jumbotron.js"></script>
   <script src="js/headquarters-models.js"></script>

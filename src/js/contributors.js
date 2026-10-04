@@ -28,13 +28,25 @@
   const activeRoster = solo ? roster.filter((entry) => entry.name.toLowerCase() === character) : roster;
   const byName = new Map(roster.map((contributor) => [contributor.name.toLowerCase(), contributor]));
   characters.forEach((c, i) => { if (c.github) byName.set(c.github.toLowerCase(), roster[i]); });
-  const listeners = new Set(), snapshotRepos = new Set();
-  const repositoryOf = (repo) => {
-    if (typeof repo !== "string") return null;
-    const key = repo.toLowerCase();
-    if (key === "w-s-bitcoin/entropylab") return ENTROPY;
-    return /^oogaboogax\/[a-z0-9_.-]{1,100}$/.test(key) ? key : null;
+  // One server-vouched-for default per page, installed before the first scene.
+  // Append rather than reorder: the bundled crew keeps its indices and NPC signature.
+  let temporary = null;
+  const addTemporary = (row, login) => {
+    if (temporary || !row || typeof row.handle !== "string" || typeof login !== "string"
+      || row.handle !== login.toLowerCase() || !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(row.handle)
+      || row.handle.includes("--") || BL.characters.get(row.handle)
+      || !Number.isSafeInteger(row.joined) || !Number.isSafeInteger(row.lastCommit)
+      || row.joined <= 0 || row.lastCommit < row.joined || row.lastCommit * 1000 > Date.now()) return false;
+    BL.characters.add({ handle: row.handle, joined: row.joined, lastCommit: row.lastCommit, temporary: true });
+    temporary = { name: row.handle, display: row.handle, lastCommitAt: row.lastCommit * 1000,
+      lastContributionAt: row.lastCommit * 1000, activity: new Map(), maintainer: false, temporary: true };
+    roster.push(temporary);
+    if (solo && character === row.handle) activeRoster.push(temporary);
+    byName.set(row.handle, temporary);
+    return true;
   };
+  const listeners = new Set(), snapshotRepos = new Set();
+  const repositoryOf = BL.activityRepos.keyOf;
   // Repeatable debug-only fixture: ooga=handle:clank:lab,obl,lf (or chill/sleep).
   // Unlisted owners sleep; explicit caves replace both activity and maintainer defaults.
   // Resolve handles and cave aliases once, keeping state/site reads allocation-free.
@@ -47,6 +59,10 @@
       repos.set(slot.name.toLowerCase(), slot.repo);
       repos.set(slot.repo, slot.repo);
       repos.set(slot.repo.slice(slot.repo.indexOf("/") + 1), slot.repo);
+      if (slot.additionalRepo) {
+        repos.set(slot.additionalRepo, slot.repo);
+        repos.set(slot.additionalRepo.slice(slot.additionalRepo.indexOf("/") + 1), slot.repo);
+      }
       repos.set(slot.scene === "factory" ? "lf" : slot.status === "mirror" ? "obl" : slot.scene || slot.status, slot.repo);
     }
     for (const value of params.getAll("ooga")) {
@@ -55,7 +71,7 @@
       if (!contributor) continue;
       const sites = new Set();
       if (mode?.trim() === "clank") for (const cave of caves.split(",", MAX_REPOS)) {
-        const key = cave.trim(), repo = repos.get(key) || repos.get(repositoryOf(key));
+        const key = cave.trim(), repo = repos.get(key) || repos.get(repositoryOf(key.includes("/") ? key : `oogaboogax/${key}`));
         if (repo) sites.add(repo);
       }
       const state = mode?.trim() === "clank" && sites.size ? "working" : mode?.trim() === "chill" ? "chilling" : "sleeping";
@@ -132,7 +148,8 @@
     // One sub-snapshot per repository key, so the per-key first-snapshot
     // bookkeeping below stays uniform across all three intake shapes.
     const intakes = [];
-    for (const snapshot of Array.isArray(snapshots) ? snapshots : [snapshots]) {
+    for (const input of Array.isArray(snapshots) ? snapshots : [snapshots]) {
+      const snapshot = BL.contributorIdentities.normalizeStats(input, at);
       if (!snapshot || !snapshot.meta) continue;
       const version = snapshot.meta.schema_version;
       if (version === 1) {
@@ -235,5 +252,5 @@
     if (look.height) traits.height = look.height;
     return traits;
   };
-  BL.contributors = { roster, activeRoster, solo, debugState, debugRoster, stateFor, ageLabel, contributionStateFor, contributionAgeLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
+  BL.contributors = { roster, activeRoster, solo, debugState, debugRoster, addTemporary, stateFor, ageLabel, contributionStateFor, contributionAgeLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
 })();
