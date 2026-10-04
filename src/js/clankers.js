@@ -90,8 +90,10 @@
     const WALL_POINT = { x: 0, y: 0, z: 0, heading: 0, radius: 0 };
     const WALL_RECTANGLE = { halfForward: 0, halfSide: 0, centerForward: 0 };
     const alive = (cave) => cave.state === "working" || cave.state === "chilling";
-    // Asleep is the Ooga's own state. One standing in for an Ooga somebody else is driving is away, not asleep.
-    const sleeps = (cave) => cave.state === "sleeping" && !cave.remoteControlled;
+    // Asleep is the Ooga's standing state, by its contributions: not the moment it stirs to eat a donation or
+    // flee a fire, which would send its gorilla home over the bridge and straight back. One standing in for an
+    // Ooga somebody else is driving is away, not asleep.
+    const sleeps = (cave) => crew.stateOf(cave) === "sleeping" && !cave.remoteControlled;
     const enteringCave = e => !e.controlled && e.mode === "working" && e.phase === "travel"
       && (e.route === "apron" || e.route === "enter");
     const labWorker = e => !e.controlled && e.mode === "working"
@@ -5830,7 +5832,11 @@
           return true;
         }
         // Awake somewhere: what it holds goes back and it leaves any room by its door before it sets out.
-        if (!s.stage && (e.lab.item >= 0 || e.motion.lab || e.jump.active || caveAt(p.x, p.y, p.z) >= 0 || e.phase === "leave" && e.route === "exit")) return "busy";
+        if (!s.stage && (e.lab.item >= 0 || e.motion.lab || e.jump.active || caveAt(p.x, p.y, p.z) >= 0 || e.phase === "leave" && e.route === "exit")) {
+          // Its bench is free the moment its Ooga sleeps, though it still has the room to walk out of.
+          if (e.mode !== "sleeping" && e.lab.item < 0) releaseLab(e);
+          return "busy";
+        }
         if (!reserveBed(e)) return false;
         releasePortal(e); releaseLab(e); clearWallSearch(e);
         e.hasSlot = false; e.pendingSite = -1; e.parked = false; e.rest = e.pound = e.beat = e.stand = 0;
@@ -5898,8 +5904,9 @@
       const gx = s.path[s.leg * 2], gz = s.path[s.leg * 2 + 1], d = Math.hypot(gx - p.x, gz - p.z);
       if (d < SLEEP_REACH || (s.stall += dt) > SLEEP_STALL) {
         s.stall = 0;
-        // Home is the second point of the path, back on the home island's own ground.
-        if (s.leg <= 1) {
+        // Home is the first point of the path, down the approach stair in the meadow: a gorilla is not left
+        // standing at the bridge's head, where the walkers come and go.
+        if (s.leg <= 0) {
           releaseBed(e);
           e.exitFootprint = false; e.mode = ""; e.phase = "chill"; e.route = ""; e.rest = 0;
           return false;
@@ -5950,7 +5957,7 @@
         return;
       }
       if (!e.active) { if (!e.retry) activate(e); return; }
-      if (e.sleep.stage && alive(e.owner) && !e.controlled && !e.drive.airborne && !e.fire.rolling && !e.fire.burning && !e.climb.active
+      if (e.sleep.stage && !sleeps(e.owner) && alive(e.owner) && !e.controlled && !e.drive.airborne && !e.fire.rolling && !e.fire.burning && !e.climb.active
         && updateWake(e, dt, beforeX, beforeY, beforeZ)) return;
       if (ctx.fireContact && ctx.fireContact(e, p.x, p.y, p.z)) ignite(e);
       updateFire(e, dt);
