@@ -156,14 +156,16 @@
   // The lake's underside, hung in the hole in the ground: a bowl level with the spill crest at its rim and
   // MEMBRANE_DEPTH lower in the middle. Drawn as glass from both sides, so the chamber looks up through it at
   // whoever floats above; walked on as a thin closed shell, so no one falls through it and nothing passes it.
-  const WATER = ["#2d7dff", "#4aa6ff", "#7cc8ff"], FOAM = "#e2f5ff";
+  const WATER = ["#2d7dff", "#4aa6ff", "#7cc8ff"], FOAM = "#e2f5ff", SKIN = ["#4aa6ff", "#5cb2ff"];
   const membraneProfile = (drop) => Array.from({ length: 11 }, (_, i) => {
     const r = L.LAKE_R * (1 - i / 10);
     return [r, L.membraneY(r) - drop];
   });
   const membrane = cached(() => {
-    const geo = noShadow(latheBy({ profile: membraneProfile(0), segments: 32, color: (t, s) => WATER[(s + Math.round(t * 10)) % 5 === 0 ? 2 : (s + Math.round(t * 10)) % 2], emissive: 0.5 }));
-    geo.glass = 0.3;
+    // Nearly clear, in rings of two close tones that show the bulge without a pattern to look at: what is seen
+    // through it is the water's own surface and whoever floats there. A paler band where it is sealed into the roof.
+    const geo = noShadow(latheBy({ profile: membraneProfile(0), segments: 32, color: (t) => t < 0.05 ? WATER[2] : SKIN[Math.round(t * 10) % 2], emissive: 0.5 }));
+    geo.glass = 0.18;
     geo.collisionGeometry = merge(
       lathe({ profile: membraneProfile(0), segments: 32, color: WATER[0] }),
       lathe({ profile: membraneProfile(0.3).reverse(), segments: 32, color: WATER[0] })

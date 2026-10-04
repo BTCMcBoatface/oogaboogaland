@@ -27,7 +27,7 @@
   const { clamp, lerp, mulberry32, hexToRgb } = math;
   const { box, merge, noShadow, cached, pushVert, face } = models;
   const TAU = Math.PI * 2;
-  const WATER = P.WATER, FOAM = P.FOAM, WATER_RGB = WATER.map(hexToRgb), FOAM_RGB = hexToRgb(FOAM);
+  const WATER = P.WATER, FOAM = P.FOAM, WATER_RGB = WATER.map(hexToRgb), FOAM_RGB = hexToRgb(FOAM), CALM = ["#3a8cff", "#4a9cff", "#6fbcff"].map(hexToRgb);
 
   // Tuning. POINTS is [waiting vB, level]: an empty mempool stands at the low water, NORMAL_VB at the normal
   // water, OVERFLOW_VB reaches the spill crest and FULL_VB the highest flood. Between them it is linear.
@@ -72,12 +72,13 @@
     geo.glass = alpha;
     return geo;
   };
-  // The lake's surface at unit radius: rings of blue quads, the node's scale its reach.
+  // The lake's surface at unit radius: rings of quads in three close blues (`CALM`), so the chamber looks up
+  // through water and not at a checkerboard; the node's scale its reach.
   const surface = [false, true].map((both) => cached(() => {
     const geo = { verts: [], faces: [], lines: [] }, RINGS = [1, 0.82, 0.62, 0.42, 0.22], SECTORS = 24;
     const at = (r, s) => pushVert(geo, Math.sin(s / SECTORS * TAU) * r, 0, Math.cos(s / SECTORS * TAU) * r);
     for (let ring = 0; ring < RINGS.length; ring++) for (let s = 0; s < SECTORS; s++) {
-      const tone = WATER_RGB[(ring * 5 + s * 3) % 7 === 0 ? 2 : (ring + s) % 2];
+      const tone = CALM[(ring * 5 + s * 3) % 7 === 0 ? 2 : (ring + s) % 2];
       const inner = ring + 1 < RINGS.length ? RINGS[ring + 1] : 0;
       face(geo, inner ? [at(RINGS[ring], s), at(RINGS[ring], s + 1), at(inner, s + 1), at(inner, s)] : [at(RINGS[ring], s), at(RINGS[ring], s + 1), at(0, 0)], tone, { emissive: 0.55 });
     }
@@ -101,14 +102,14 @@
     const at = (bearing, r) => pushVert(geo, Math.sin(bearing) * r, 0, Math.cos(bearing) * r);
     for (let s = 0; s < SECTORS; s++) {
       const a = s / SECTORS * TAU, b = (s + 1) / SECTORS * TAU;
-      face(geo, [at(a, L.LAKE_R), at(b, L.LAKE_R), at(b, outer), at(a, outer)], WATER_RGB[s % 2], { emissive: 0.55 });
+      face(geo, [at(a, L.LAKE_R), at(b, L.LAKE_R), at(b, outer), at(a, outer)], CALM[s % 2], { emissive: 0.55 });
     }
     for (const channel of L.CHANNELS) {
       const end = Math.min(channel.to, L.edgeAt(channel.bearing) + 0.3), half = L.CHANNEL.low, ux = Math.sin(channel.bearing), uz = Math.cos(channel.bearing), vx = uz, vz = -ux;
       for (let r = outer, n = 0; r < end - 1e-6; r += 1.5, n++) {
         const to = Math.min(end, r + 1.5);
         face(geo, [pushVert(geo, ux * r - vx * half, 0, uz * r - vz * half), pushVert(geo, ux * to - vx * half, 0, uz * to - vz * half),
-          pushVert(geo, ux * to + vx * half, 0, uz * to + vz * half), pushVert(geo, ux * r + vx * half, 0, uz * r + vz * half)], WATER_RGB[n % 2], { emissive: 0.55 });
+          pushVert(geo, ux * to + vx * half, 0, uz * to + vz * half), pushVert(geo, ux * r + vx * half, 0, uz * r + vz * half)], CALM[n % 2], { emissive: 0.55 });
       }
     }
     return glass(geo, 0.5, both);
