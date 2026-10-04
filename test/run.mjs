@@ -6300,7 +6300,8 @@ scene("hub", { label: "lab work rotation", query: "status=clankin", steps: [{ na
     C.update(1 / 30); B.advance(1 / 60, 1 / 60);
     const restored = display.node.visible && !display.work.node.visible;
     const next = C.sites.findIndex((value, i) => i !== site && value.mirrorRoom);
-    const departing = workers.filter(e => e.active && e.site === site);
+    // The seventh's Ooga sleeps: its gorilla walks out to bed by itself, and is not one of the coworkers leaving.
+    const departing = workers.filter(e => e.active && e.site === site && e.mode !== "sleeping");
     for (const e of departing) {
       e.owner.work.site = e.owner.work.plannedSite = next;
       C.plan(e.owner, next);

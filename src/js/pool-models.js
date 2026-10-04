@@ -832,8 +832,9 @@
     }));
     const beds = L.NESTS.map((nest, i) => createNode({ position: { x: nest.x, y: nest.y, z: nest.z }, rotation: { x: 0, y: nest.bearing, z: 0 }, geometry: NEST_BEDS[i](), sightHidden: true }));
     // The sign stands on the court beside the mouth, its face to the bridge.
-    const mouth = L.RAMP.start - 0.2, signR = L.RAMP.r + L.RAMP.half + 1.6;
-    const signNode = createNode({ position: { x: Math.sin(mouth) * signR, y: L.LEVEL.court, z: Math.cos(mouth) * signR }, rotation: { x: 0, y: 0.35, z: 0 }, geometry: caveSign() });
+    // Clear of the bridge's gateway and turned to whoever steps off it.
+    const mouth = L.RAMP.start - 0.1, signR = L.RAMP.r + L.RAMP.half + 0.9;
+    const signNode = createNode({ position: { x: Math.sin(mouth) * signR, y: L.LEVEL.court, z: Math.cos(mouth) * signR }, rotation: { x: 0, y: -0.85, z: 0 }, geometry: caveSign() });
     // Lit like every hub torch, so the Matrix treats their flames as fire rather than as stone.
     const torches = [-1, 1].map((side) => {
       const r = L.RAMP.r + side * (L.RAMP.half + 0.9), b = L.RAMP.start - 0.07;

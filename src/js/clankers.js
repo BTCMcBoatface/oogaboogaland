@@ -5856,10 +5856,22 @@
           // The first two points are the home island's own ground: a goal known to lie below lets a sleeper that
           // starts on a roof climb or hop down to it, as a stroller bound for the meadow does.
           setGoal(e, gx, last ? site.slots[s.slot].y : s.leg < 2 && ctx.surfaceAt ? ctx.surfaceAt(gx, gz) : p.y, gz);
-          if (!e.jump.active) move(e, dt, SPEED);
+          // A hop it has begun is finished, and it gets to its feet before it walks, as on any other errand.
+          // A blocked walk marks itself as waiting at a doorway, which forbids a climb: a sleeper has no doorway.
+          e.route = "";
+          if (e.jump.active) updateJump(e, dt);
+          else if (e.recover > 0) { e.recover = Math.max(0, e.recover - dt); e.speed = 0; }
+          else move(e, dt, SPEED);
           // A way that cannot be walked is not a reason to stand in the forest all night: after a long stall the
           // sleeper is simply found in its bed.
           if (d < s.near - 0.25) { s.near = d; s.stall = 0; }
+          else if (s.stall > 3 && !last && !e.jump.active && !e.climb.active && e.recover <= 0 && e.retry <= 0 && p.y > e.goalY + 0.8) {
+            // Held up on high ground with the way on below it: hop down, as a stroller leaving a roof does.
+            const desired = Math.atan2(gx - p.x, gz - p.z);
+            e.retry = 1.2;
+            for (let i = 0; i < STEERING.length; i++) if (tryJump(e, desired + STEERING[i] * e.turn)) { e.heading = desired + STEERING[i] * e.turn; break; }
+            s.stall += dt;
+          }
           else if ((s.stall += dt) > SLEEP_STALL) {
             // Placed, not walked: the pose is set outright, as a spawn's is, with no step to certify.
             const bed = site.slots[s.slot];
@@ -5915,8 +5927,10 @@
       } else {
         if (d < s.near - 0.25) { s.near = d; s.stall = 0; }
         setGoal(e, gx, p.y, gz);
-        if (e.recover > 0) e.recover = Math.max(0, e.recover - dt);
-        else if (!e.jump.active) move(e, dt, SPEED);
+        e.route = "";
+        if (e.jump.active) updateJump(e, dt);
+        else if (e.recover > 0) { e.recover = Math.max(0, e.recover - dt); e.speed = 0; }
+        else move(e, dt, SPEED);
       }
       poseEntry(e, dt, beforeX, beforeY, beforeZ);
       return true;

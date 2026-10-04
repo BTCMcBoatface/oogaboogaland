@@ -44,7 +44,7 @@
   const LEDGE = { width: 3.2, lead: 0.12, tail: 0.2, to: 0.5, thick: 2.5, lip: 1 };
   // Four reading stops on the chamber's wall, square to the grid so each is a flat face to paint on: its
   // bearing, and its half width along the wall.
-  const STOPS = [0, 90, 180, 270].map((deg) => deg * DEG), STOP = { half: 2.75 };
+  const STOPS = [0, 90, 180, 270].map((deg) => deg * DEG), STOP = { half: 3.01 };
   const COURT = { from: -0.36, step: 0.06, inner: 13.5 };
   // Nests stand on the far side from the ridge, a channel between each pair.
   const NEST = { r: 16.5, halfR: 3.1, halfT: 2.6 };

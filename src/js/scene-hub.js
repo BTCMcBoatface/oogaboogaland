@@ -1287,6 +1287,8 @@
     return false;
   };
   const sleepMarksVisible = (cave, x, y, z) => {
+    // Nobody's sleep is seen through the Mempool island's rock from the tunnels and the chamber inside it.
+    if (poolShade > 0.5) return false;
     if (!cave) return sleepSightAt(x, y, z);
     const bed = cave.bedroll;
     if (cave.state !== "sleeping" || cave.bedTravel.mode !== "rest" || !bed || bed.sleeper !== cave) return false;
@@ -2379,22 +2381,26 @@
       addChild(site.node, node);
       return node;
     };
-    const wallTorch = (x, y, z, ry, id) => {
+    // Under the ground a torch has a tunnel or the chamber to light by itself, so it reaches further than one
+    // outdoors; and the lake lights the chamber from above, blue through its membrane.
+    const TUNNEL_TORCH = { ...LAMP.torch, radius: 10 }, CHAMBER_TORCH = { ...LAMP.torch, radius: 13 }, LAKE_LIGHT = { r: 0.3, g: 0.55, b: 1, radius: 15, glow: 0, hide: false };
+    const wallTorch = (x, y, z, ry, id, kind) => {
       const node = fitting(P.wallTorch(), x, y, z, ry);
       node.matrixEmissiveLiving = true;
       // The flame stands 0.46 out from the wall and 0.92 up its bracket.
-      addLamp(node, LAMP.torch, worldX(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), place.y + y + 0.92, worldZ(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), true, 0, id).always = true;
+      addLamp(node, kind, worldX(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), place.y + y + 0.92, worldZ(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), true, 0, id).always = true;
     };
+    addLamp({ glow: 0, flare: 0, visible: true }, LAKE_LIGHT, place.x, place.y - L.MEMBRANE_DEPTH - 1.6, place.z, true, 0, "pool:lake").always = true;
     {
       const point = {};
       for (let s = 14.5, n = 0; s < L.RAMP.length - 3; s += 11, n++) {
         const side = n % 2 ? -1 : 1;
         L.rampPoint(s, side * (L.rampHalf(s / L.RAMP.r) - 0.02), point);
-        wallTorch(point.x, point.y + 1.55, point.z, point.bearing + (side > 0 ? Math.PI : 0), `pool:ramp:${n}`);
+        wallTorch(point.x, point.y + 1.55, point.z, point.bearing + (side > 0 ? Math.PI : 0), `pool:ramp:${n}`, TUNNEL_TORCH);
       }
       for (let k = 0; k < 4; k++) {
         const bearing = Math.PI / 4 + k * Math.PI / 2, r = L.CHAMBER_R - 0.05;
-        wallTorch(Math.sin(bearing) * r, L.FLOOR + 1.9, Math.cos(bearing) * r, bearing + Math.PI, `pool:chamber:${k}`);
+        wallTorch(Math.sin(bearing) * r, L.FLOOR + 1.9, Math.cos(bearing) * r, bearing + Math.PI, `pool:chamber:${k}`, CHAMBER_TORCH);
       }
       // Roots hang through the roof just inside the mouth and inside each door.
       L.rampPoint(2.4, 0, point);
@@ -2448,20 +2454,36 @@
       : kind === "bush" ? P.shrub() : kind === "poolfern" ? P.fern() : kind === "flower" ? P.flowers()
       : kind === "poolrock" ? P.mossRock() : P.log();
     const inner = L.RING.lowland * L.RING.lowland, outer = (S.isletR + 0.8) * (S.isletR + 0.8), trunks = [];
-    for (let i = 0; i < 1100; i++) {
-      const a = rand() * Math.PI * 2, r = Math.sqrt(inner + rand() * (outer - inner));
-      const x = Math.sin(a) * r, z = Math.cos(a) * r, roll = rand();
-      const pick = SCATTER.find((e) => roll < e.upTo), ground = L.groundAt(x, z);
-      // Dry forest floor and the ridge only, clear of everything that is walked, slept on or flooded, and off the rim.
-      if (!(ground >= L.LEVEL.ground) || L.keptClear(x, z, pick.clear) || r + pick.r > L.edgeAt(a) - 0.5) continue;
-      // Level ground under the whole footprint: nothing stands half over a terrace's step.
-      if (L.groundAt(x + pick.r * 0.6, z) !== ground || L.groundAt(x - pick.r * 0.6, z) !== ground || L.groundAt(x, z + pick.r * 0.6) !== ground || L.groundAt(x, z - pick.r * 0.6) !== ground) continue;
-      // Nothing grows through an animal, and trunks keep a body's width apart. Plants still crowd each other,
-      // which is what makes it jungle.
-      if (claimed.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + pick.r)) continue;
-      if (pick.kind === "canopy" || pick.kind === "poolrock" || pick.kind === "poollog") {
-        if (trunks.some((t) => Math.hypot(x - t.x, z - t.z) < t.r + pick.r + 1)) continue;
-        trunks.push({ x, z, r: pick.r });
+    const level = (x, z, reach, ground) => L.groundAt(x + reach, z) === ground && L.groundAt(x - reach, z) === ground && L.groundAt(x, z + reach) === ground && L.groundAt(x, z - reach) === ground;
+    // Planted, not scattered: trees at the back corners of every nest and behind it, so each clearing lies under
+    // crowns of its own. A trunk stands clear of the beds; only its crown reaches over them.
+    const planted = [];
+    for (const nest of L.NESTS) for (const [across, out] of [[-L.NEST.halfT - 0.35, L.NEST.halfR - 0.3], [L.NEST.halfT + 0.35, L.NEST.halfR - 0.3], [0.3, L.NEST.halfR + 0.75], [-L.NEST.halfT - 0.5, -0.6], [L.NEST.halfT + 0.5, 0.4]]) {
+      const ux = Math.sin(nest.bearing), uz = Math.cos(nest.bearing), x = ux * (L.NEST.r + out) + uz * across, z = uz * (L.NEST.r + out) - ux * across;
+      const ground = L.groundAt(x, z), r = Math.hypot(x, z);
+      if (!(ground >= L.LEVEL.lowland) || r + 0.5 > L.edgeAt(Math.atan2(x, z)) - 0.4 || !level(x, z, 0.3, ground)) continue;
+      planted.push({ x, z, ground });
+      trunks.push({ x, z, r: 0.6 });
+    }
+    for (let i = 0; i < 3600 + planted.length; i++) {
+      const fixed = i < planted.length ? planted[i] : null;
+      const a = rand() * Math.PI * 2, r = Math.sqrt(inner + rand() * (outer - inner)), roll = rand();
+      const x = fixed ? fixed.x : Math.sin(a) * r, z = fixed ? fixed.z : Math.cos(a) * r;
+      const pick = fixed ? SCATTER[0] : SCATTER.find((e) => roll < e.upTo), ground = L.groundAt(x, z);
+      if (!fixed) {
+        // Undergrowth takes the lowland's damp ground too; everything else wants the dry forest floor or the ridge.
+        const soft = pick.kind === "poolfern" || pick.kind === "bush" || pick.kind === "flower";
+        // Clear of everything that is walked, slept on or flooded, and off the rim.
+        if (!(ground >= (soft ? L.LEVEL.lowland : L.LEVEL.ground)) || Math.hypot(x, z) < L.RING.path + pick.clear || L.keptClear(x, z, soft ? Math.min(pick.clear, 0.15) : pick.clear) && !(soft && ground === L.LEVEL.lowland && Math.hypot(x, z) > L.RING.path + 0.3) || r + pick.r > L.edgeAt(a) - 0.5) continue;
+        // Level ground under the whole footprint: nothing stands half over a terrace's step.
+        if (!level(x, z, pick.r * 0.6, ground)) continue;
+        // Nothing grows through an animal, and trunks keep a body's width apart. Plants still crowd each other,
+        // which is what makes it jungle.
+        if (claimed.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + pick.r)) continue;
+        if (pick.kind === "canopy" || pick.kind === "poolrock" || pick.kind === "poollog") {
+          if (trunks.some((t) => Math.hypot(x - t.x, z - t.z) < t.r + pick.r + 0.7)) continue;
+          trunks.push({ x, z, r: pick.r });
+        }
       }
       const geometry = geometryFor(pick.kind);
       // A little scale and turn per copy: free variety, since every copy shares one cached build.
@@ -6548,11 +6570,12 @@
     RENDER_OPTS.time = elapsed;
     // Under the Mempool island's ground the storm is muffled and the daylight shut out: no shadow reaches that
     // island, so its tunnels would otherwise stand in full sun. The fires and the water light them instead.
-    const sheltered = mempoolIsland.coveredAt(camera.target.x, camera.target.y, camera.target.z) ? 1 : 0;
+    // By where the eye is, not what it looks at: a view from outside aimed into the rock is still outdoors.
+    const sheltered = mempoolIsland.coveredAt(camera.position.x, camera.position.y, camera.position.z) ? 1 : 0;
     poolShade += clamp(sheltered - poolShade, -dt * 1.6, dt * 1.6);
     weather.update(dt, RENDER_OPTS, poolShade);
     if (poolShade > 0) {
-      const keep = 1 - 0.55 * poolShade;
+      const keep = 1 - 0.4 * poolShade;
       RENDER_OPTS.directStrength *= 1 - 0.92 * poolShade;
       for (let i = 0; i < 3; i++) { RENDER_OPTS.sky[i] *= keep; RENDER_OPTS.ground[i] *= keep; }
     }
