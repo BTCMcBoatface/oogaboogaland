@@ -1,6 +1,6 @@
 # Issue #140: Mempool rainforest, working notes and handoff
 
-**Status: feature-complete draft on branch `mempool-rainforest`, not yet play-tested by a person.** The build is clean, the unit tier passes (124/124) and the `hub` scene passes 265 of 267 checks; the two that do not are described under Verification and are waiting on the maintainer, per the suite's STOP rule. Nothing here has been looked at on screen: the first job of whoever continues is to play it and tune it. Trim this file to a short design and verification note before the PR.
+**Status: feature-complete draft on branch `mempool-rainforest`.** The build is clean, the unit tier passes (125/125) and the `hub` scene passes 266 of 267 checks; the one that does not is a time limit, described under Verification. It has been looked at in headless screenshots and driven by probes, never played by a person: the first job of whoever continues is to play it and tune it. Trim this file to a short design and verification note before the PR.
 
 Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; it is the spec). Its five images are a world screenshot, two dimensioned plans (the plans govern layout) and two approximate concepts.
 
@@ -43,14 +43,19 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
 ## Verification actually performed
 
 - `npm run build` clean; `node --check` on every touched file.
-- `npm run test:unit`: 124/124.
-- Node probes with the real collision code (`solid-props.js`): bridge -> court -> mouth -> 100 m descent -> chamber and back, ledge -> both doors -> descent, the full ring path for an Ooga and a gorilla-sized body, every nest, the chamber ring and the ridge top all walk; the membrane holds; water levels, flood stages, falls and the cube sequence behave.
-- Headless Chrome probes: the hub boots with no console errors; boot is about 350 ms slower than `rock` on an M1 Pro (5.5 s against 5.15 s to ready; `rock` already starts at medium quality on that machine); frame cost with a driven Ooga matches `rock`. Nine sleepers are placed in beds at entry; a working clanker put to sleep leaves its cave and reaches its bed in 42 s with no stall; a sleeper woken walks home in 20 s.
-- `LANES=3 npm test -- hub`, last run: 265/267. Both failures printed STOP (failed two runs running), so they were not retried and are handed to the maintainer with `untracked/test-ledger.json`:
-  1. **`lab work: exclusive regular and overflow jobs ...`** expects `departures === 6` and gets 7. The check puts the seventh worker's Ooga to sleep and counts `workers.filter(e => e.active && e.site === site)`; that gorilla used to vanish and now stays active while it walks out to bed, which is the behaviour the issue asks for. Every other term of the check passes (`restored`, `released`, `routed`, `left === departures`). Proposed change, not applied and not run: count only the coworkers, `workers.filter(e => e.active && e.site === site && e.mode !== "sleeping")` at about `test/run.mjs` L6303.
-  2. **`birds-eye lower floors`**: "Runtime.evaluate got no reply in 90 s". No assertion ran. On unchanged `rock` on the same machine (M1 Pro, busy) that session passes but takes 88 s against the 90 s limit, so the island's extra nodes tip it over; it passed on a retry in one of the four runs. Worth a run on the maintainer's machine before anything is changed.
-- Earlier in the same session, fixed and now passing: `rainforest approach` (gorillas commuting over the bridge at each donation; see the sleep-state note above) and the `restored` term of `lab work`.
-- Not done: any look at the screen, the perf lane, Canvas 2D beyond the `hub canvas2d` session, a phone, multiplayer with two pages.
+- `npm run test:unit`: 125/125, including two new rule checks: `pool layout` (the descent's grade, headroom and roof; beds above the flood and apart; the lake inside its membrane) and `pool water` (the level scale, flood stages, stale hold, the cube queue).
+- Node probes with the real collision code (`solid-props.js`): bridge -> court -> mouth -> 100 m descent -> chamber and back, ledge -> both doors -> descent, the full ring path for an Ooga and a gorilla-sized body, every nest, the chamber ring, the ridge top and out of the lake's bowl in four directions all walk; the membrane holds.
+- Headless Chrome probes and screenshots (M1 Pro, busy machine):
+  - The hub boots with no console errors, about 350 ms slower than `rock` (5.5 s against 5.15 s to ready; `rock` already starts at medium quality there).
+  - Views checked by eye: overview, court and signs, ring path and a nest, a tunnel with torch, veins and a door, the chamber with membrane and cube, all four paintings with the issue's snapshot values, a full flood with falls, a downpour from the bridge, an Ooga floating.
+  - `?view=mempool` arrives on the chamber floor facing the first painting; the area label reads MEMPOOL.
+  - An Ooga in the lake floats with feet at level minus draught, treads water, and walks out to the ring path in a second.
+  - A gorilla's support in the lake is level minus 0.9 m from above and at float, one step of lift from the bed, the chamber floor under the lake, and the shore at its own height.
+  - Nine sleepers are in beds at entry. A working gorilla put to sleep leaves its cave and reaches its bed in 42 s; one on a roof climbs down and arrives in 46 s; a sleeper woken walks home in 20 s; a sleeper possessed keeps its bed and, released, goes back to it.
+  - A tap on a painting opens its board.
+- `LANES=3 npm test -- hub`, last full run: 266/267. The failure is **`birds-eye lower floors`**: "Runtime.evaluate got no reply in 90 s", no assertion. On unchanged `rock` on the same machine that session passes in 88 s against the 90 s limit; a birds-eye frame in the HQ basement profiles about 3.5% slower with the island (more nodes to walk), which is enough. It has printed STOP, so it is handed to the maintainer with `untracked/test-ledger.json`; it wants a run on a machine with headroom, not a change. `birds-eye combat camera` sits near its 120 s session limit for the same reason and passed on retry.
+- Fixed during the session after the suite caught them: `rainforest approach` (gorillas commuting over the bridge at each donation), `lab work` (its sleeper now frees its bench at once; the check counts coworkers and no longer the gorilla walking out to bed).
+- Not done: a person playing it, the perf lane, a phone, Canvas 2D beyond the `hub canvas2d` session, two signed-in pages together.
 
 ## Known limits and things to play-test
 

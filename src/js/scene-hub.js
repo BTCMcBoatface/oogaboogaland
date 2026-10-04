@@ -2339,7 +2339,8 @@
     const atNode = (kind, node, radius) => addProp(kind, node, worldX(node.position.x, node.position.z), worldZ(node.position.x, node.position.z), radius);
     addChild(root, site.node);
     placed.push(site.node);
-    addTerrainSection(site.ground.geometry.cutawaySource, site.node, place.y);
+    // Capped in a cut view only when the walker the view follows is on this island or about to be.
+    addTerrainSection(site.ground.geometry.cutawaySource, site.node, place.y).when = () => Math.hypot(cutawayX - place.x, cutawayZ - place.z) < S.reach + 40;
     // The body, the smooth floors laid over its steps, the lake's membrane and the plank crossings are all walked on.
     for (const node of [site.ground, site.floor, site.membrane, ...site.crossings]) solids.add(node);
     site.floor.sightHidden = true;
@@ -4113,7 +4114,9 @@
     RENDER_OPTS.cutawayMaxY = slicing ? sliceY : 1e6;
     updateCutawayPaths(sliceY, slicing, rockMix);
     for (const entry of terrainSections) {
-      if (slicing) entry.cap.update(sliceY - entry.worldY, null, entry.paths ? CUTAWAY_PATH_STATE : null);
+      // A section with a `when` is capped only while it can be on screen: its cross-section is rebuilt at every
+      // half metre the cut moves through, which is wasted on an island the view is nowhere near.
+      if (slicing && (!entry.when || entry.when())) entry.cap.update(sliceY - entry.worldY, null, entry.paths ? CUTAWAY_PATH_STATE : null);
       else entry.cap.node.visible = false;
     }
     const caveRoofMix = 1 - cutawayBlend(cutawayHillMix, 0, 1);

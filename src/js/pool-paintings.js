@@ -33,7 +33,7 @@
   const INK = { ochre: "#d9a441", earth: "#c8643a", bone: "#f1e7cf", dim: "#cdbb96", charcoal: "#8a7c66", stale: "#8d8272", water: "#7cc8ff" };
   // How long a category's last observation counts as live.
   const FRESH_MS = { backlog: 120000, fees: 120000, block: 180000, price: 180000 };
-  const PIGMENT = 0.52, SHIMMER_SECONDS = 2.2, REFRESH_SECONDS = 1, WALL = L.CHAMBER_R - 0.03, FOOT = L.FLOOR + 0.85;
+  const PIGMENT = 0.52, SHIMMER_SECONDS = 2.2, REFRESH_SECONDS = 5, WALL = L.CHAMBER_R - 0.03, FOOT = L.FLOOR + 0.85;
   // A new block's own details may take this long to follow its height before they are called missing.
   const DETAIL_MS = 30000;
 
@@ -214,7 +214,8 @@
         if (!first) stop.shimmer = 1;
       }
     };
-    // Ages move without the feed saying anything, so the stops are read again once a second.
+    // Ages move without the feed saying anything, so the stops are read again every few seconds; a reading that
+    // changes is painted at once, from the hub's own chain subscription.
     const update = (dt) => {
       wait -= dt;
       if (wait <= 0 && snapshot) { wait = REFRESH_SECONDS; refresh(snapshot); }
