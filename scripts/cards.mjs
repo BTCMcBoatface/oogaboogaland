@@ -19,19 +19,19 @@ mkdirSync(join(root, "cards"), { recursive: true });
 // Sphere's walls load their feed under `timechain=1`.
 process.env.TZ = "UTC";
 const page = `file://${join(root, "oogaboogaland.html")}?debug=1&pos=0&hour=12&time=1200&day=80&rain=0&timechain=1`;
-const LIVE = new Set(["pool"]);
+const LIVE = new Set(["mempool"]);
 const b = await launch({ w: 1200, h: 630 });
 try {
   for (const entry of list) {
     if (!entry.image) continue;
-    await b.open(`${page}&scene=${entry.scene}${entry.place ? `&view=${entry.place}` : ""}${LIVE.has(entry.scene) ? "" : "&nosim=1"}`);
+    await b.open(`${page}&scene=${entry.scene}${entry.place ? `&view=${entry.place}` : ""}${LIVE.has(entry.path) ? "" : "&nosim=1"}`);
     const t0 = Date.now();
     while (!(await b.evaluate(`!!window.__ooga && __ooga.renderedFrames >= 2 && !document.getElementById("curtain")`).catch(() => false))) {
       if (Date.now() - t0 > 30000) throw new Error(`${entry.path || "home"}: the page did not draw`);
       await b.sleep(50);
     }
     await b.evaluate(`new Promise((resolve) => { const t0 = performance.now(); const tick = () => { if (window.BL.scene.tweenCount() === 0 || performance.now() - t0 > 6000) resolve(); else requestAnimationFrame(tick); }; tick(); })`);
-    if (LIVE.has(entry.scene)) {
+    if (LIVE.has(entry.path)) {
       const t1 = Date.now();
       while (!(await b.evaluate(`BL.chain.snapshot.height > 0 && BL.chain.snapshot.count > 0`))) {
         if (Date.now() - t1 > 30000) throw new Error(`${entry.path}: no live chain snapshot`);
