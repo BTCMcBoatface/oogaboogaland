@@ -2843,24 +2843,35 @@ const poolLayoutChecks = async () => {
   let apart = Infinity;
   for (const a of L.SLOTS) for (const b of L.SLOTS) if (a !== b) apart = Math.min(apart, Math.hypot(a.cx - b.cx, a.cz - b.cz));
   const lake = L.waterRadius(L.WATER.spill) === L.LAKE_R && L.waterRadius(L.WATER.low) < L.waterRadius(L.WATER.normal) && L.membraneY(0) === -L.MEMBRANE_DEPTH && !L.covered(2, 1, 0) && L.covered(2, -6, 0);
-  // The two links off the descent: a mouth at each end open from the descent out past its wall, a pier of rock
-  // between them, and outside the pier a gallery with a floor under it and rock over it.
-  const downAt = (f, r, lift, floor = false) => {
-    const angle = f * L.RAMP.sweep, bearing = L.RAMP.start + angle;
-    return [Math.sin(bearing) * r, (floor ? L.stepUnder(L.rampY(angle)) : L.rampY(angle)) + lift, Math.cos(bearing) * r];
-  };
-  const wall = L.RAMP.r + L.RAMP.half;
+  // The two links off the descent, walked through the layout's own queries: out through the first mouth, along
+  // the gallery outside the pier and back in through the second, sight clear at chest and near the ceiling all the
+  // way, with floor under every station and rock over it; and the pier between the mouths solid at both heights.
+  const from = {}, to = {};
+  const wall = L.RAMP.r + L.RAMP.half, outside = L.RAMP.half + L.LINK.rib + 0.6;
+  const seen = (s0, r0, s1, r1) => [1, L.LINK.head - 0.4].every((lift) => {
+    L.rampPoint(s0, r0, from); L.rampPoint(s1, r1, to);
+    return L.sightClear(from.x, from.y + lift, from.z, to.x, to.y + lift, to.z);
+  });
   const linked = L.LINKS.length === 2 && L.LINKS.every((link) => {
-    const mid = (link.from + link.to) / 2, gallery = wall + L.LINK.rib + 0.8;
-    return [link.from + 0.012, link.to - 0.012].every((f) => !L.solidAt(...downAt(f, wall + 0.5, 1)) && !L.solidAt(...downAt(f, wall + 0.5, L.LINK.head - 0.4)))
-      && L.solidAt(...downAt(mid, wall + L.LINK.rib / 2, 1)) && !L.solidAt(...downAt(mid, gallery, 1)) && L.solidAt(...downAt(mid, gallery, -0.25, true)) && L.covered(...downAt(mid, gallery, 1));
+    const s0 = link.from * L.RAMP.length + 1, s1 = link.to * L.RAMP.length - 1;
+    let ok = seen(s0, 0, s0, outside) && seen(s1, outside, s1, 0);
+    for (let s = s0; s <= s1; s += 0.5) {
+      ok &&= seen(s, outside, Math.min(s + 0.5, s1), outside);
+      L.rampPoint(s, outside, to);
+      ok &&= L.solidAt(to.x, L.stepUnder(to.y) - 0.25, to.z) && L.solidAt(to.x, to.y + L.LINK.head + 0.75, to.z);
+    }
+    for (let s = s0 + 3; s <= s1 - 3; s += 0.5) {
+      L.rampPoint(s, L.RAMP.half + L.LINK.rib / 2, to);
+      ok &&= L.solidAt(to.x, to.y + 1, to.z) && L.solidAt(to.x, to.y + L.LINK.head - 0.4, to.z);
+    }
+    return ok;
   });
   // What the outlines ask of this rock, through the layout's own sight queries: down the descent a walker sees
   // three metres ahead; from outside the cliff the rock hides a walker everywhere but at a door or a link; the
   // chamber sees up through the lake and down the shaft and not through its roof or its floor; a box in the
   // tunnel is all open, one in the cliff all rock, one across the wall neither, and off the grid there is nothing.
-  const from = {}, to = {};
-  let along = true, hidden = true, doorways = 0, mouths = 0;
+  const reach = L.LINK.mouth / L.RAMP.length, shown = [];
+  let along = true, hidden = true, doorways = 0;
   for (let s = 2; s <= 96; s++) {
     L.rampPoint(s, 0, from); L.rampPoint(s + 3, 0, to);
     along &&= L.sightClear(from.x, from.y + 1.5, from.z, to.x, to.y + 1.5, to.z);
@@ -2869,10 +2880,13 @@ const poolLayoutChecks = async () => {
     L.rampPoint(s, 0, to); L.rampPoint(s, 14, from);
     const clear = L.sightClear(from.x, to.y + 1.5, from.z, to.x, to.y + 1.5, to.z), f = s / L.RAMP.length;
     const door = Math.min(...L.DOORS.map((d) => Math.abs(s - d.at * L.RAMP.length)));
+    const link = L.LINKS.find((link) => f > link.from - 0.03 && f < link.to + 0.03);
     if (door < 1) doorways += clear ? 1 : 0;
-    else if (L.LINKS.some((link) => f > link.from - 0.03 && f < link.to + 0.03)) mouths += clear ? 1 : 0;
+    else if (link && f > link.from + reach && f < link.to - reach) hidden &&= !clear;
+    else if (link) shown[L.LINKS.indexOf(link) * 2 + (f > (link.from + link.to) / 2 ? 1 : 0)] ||= clear;
     else if (door > 2.5) hidden &&= !clear;
   }
+  const mouths = shown.filter(Boolean).length;
   const chamber = L.sightClear(3, L.FLOOR + 1, 5, 3, 12, 5) && !L.sightClear(10, L.FLOOR + 1, 0, 10, 12, 0) && L.sightClear(1, L.FLOOR + 1, 1, 1, -40, 1) && !L.sightClear(6, L.FLOOR + 1, 0, 6, -40, 0);
   L.rampPoint(40, 0, to);
   const out = Math.hypot(to.x, to.z), ux = to.x / out, uz = to.z / out;
@@ -2880,7 +2894,7 @@ const poolLayoutChecks = async () => {
   const boxes = box(L.RAMP.r, 0.8, L.boxClear) && !box(L.RAMP.r, 0.8, L.boxSolid) && box(20, 0.2, L.boxSolid) && !box(20, 0.2, L.boxClear)
     && !box(wall, 0.6, L.boxSolid) && !box(wall, 0.6, L.boxClear) && !L.boxSolid(40, 0, 40, 41, 1, 41) && L.boxClear(40, 0, 40, 41, 1, 41) && L.sightClear(40, 0, 40, 60, 5, 60);
   record("pool layout: the descent falls ten metres in a hundred at one grade with its headroom open and rock over it all the way, its two links leave it and come back by open mouths round a pier of rock, every bed stands on a nest above the highest flood a body's width from the next, the lake's water stays inside its membrane, and the rock hides a walker from outside the cliff and never from behind in the tunnel",
-    graded && open && roofed && linked && beds && apart >= 1.7 && lake && along && hidden && doorways === L.DOORS.length && mouths >= 4 && chamber && boxes,
+    graded && open && roofed && linked && beds && apart >= 1.7 && lake && along && hidden && doorways === L.DOORS.length && mouths === 2 * L.LINKS.length && chamber && boxes,
     JSON.stringify({ graded, open, roofed, linked, beds, apart, lake, slots: L.SLOTS.length, along, hidden, doorways, mouths, chamber, boxes }));
   // The water over that layout, through its own module: what the backlog floods and what it never reaches.
   Object.assign(context, { document: { createElement: () => ({ getContext: () => null }) }, performance, console });
@@ -2893,7 +2907,9 @@ const poolLayoutChecks = async () => {
   let elapsed = 0;
   const run = (seconds, now) => { for (let t = 0; t < seconds; t += 1 / 20) water.update(1 / 20, elapsed += 1 / 20, now); };
   const channel = L.CHANNELS[1], at = (r) => water.levelAt(Math.sin(channel.bearing) * r, Math.cos(channel.bearing) * r), nest = L.NESTS[2];
-  const wet = () => ({ lake: water.levelAt(3, 0) > -Infinity, shore: water.levelAt(8.7, 0) > -Infinity, lowland: water.levelAt(-10, 0.3) > -Infinity, path: water.levelAt(-11.5, 0.3) > -Infinity, channel: at(15) > -Infinity, nest: water.levelAt(nest.x, nest.z) > -Infinity, falls: water.state.falls, status: water.state.status, stage: water.state.stage });
+  // Past the cliff the channel falls: no level in the air on its line, nor on the link's lip beside the fall.
+  const brink = L.edgeAt(channel.bearing) + 1, lip = channel.bearing + 1.5 / brink;
+  const wet = () => ({ lake: water.levelAt(3, 0) > -Infinity, shore: water.levelAt(8.7, 0) > -Infinity, lowland: water.levelAt(-10, 0.3) > -Infinity, path: water.levelAt(-11.5, 0.3) > -Infinity, channel: at(15) > -Infinity, past: at(brink) > -Infinity, lip: water.levelAt(Math.sin(lip) * brink, Math.cos(lip) * brink) > -Infinity, nest: water.levelAt(nest.x, nest.z) > -Infinity, falls: water.state.falls, status: water.state.status, stage: water.state.stage });
   run(1, 1e6);
   const none = wet();
   water.apply({ backlogAt: 1e6, vsize: H.NORMAL_VB }); run(1, 1e6 + 1000);
@@ -2908,8 +2924,8 @@ const poolLayoutChecks = async () => {
   const cubes = { falling: water.state.cubes, queued: water.state.queued, dropped: water.state.dropped };
   const stages = none.status === "unavailable" && !none.lake && normal.status === "live" && normal.lake && !normal.shore && !normal.channel && !normal.falls
     && spilling.stage === 1 && spilling.shore && spilling.channel && !spilling.lowland && spilling.falls > 0 && flooded.stage === 2 && flooded.lowland && flooded.falls > spilling.falls
-    && [normal, spilling, flooded].every((row) => !row.path && !row.nest) && stale.status === "stale" && kept;
-  record("pool water: the backlog fills the lake by a rising scale to its crest and its highest flood, the shore and channels flood before the lowland while the path and the nests never do, a stale reading is held and said to be stale, and blocks found faster than they fall wait in a bounded queue",
+    && [normal, spilling, flooded].every((row) => !row.path && !row.nest && !row.past && !row.lip) && stale.status === "stale" && kept;
+  record("pool water: the backlog fills the lake by a rising scale to its crest and its highest flood, the shore and channels flood before the lowland while the path and the nests never do and a channel past the cliff holds no one up, a stale reading is held and said to be stale, and blocks found faster than they fall wait in a bounded queue",
     rising && anchors && stages && cubes.falling === W.SEQUENCES && cubes.queued === W.QUEUE && cubes.dropped === 2, JSON.stringify({ rising, anchors, none, normal, spilling, flooded, stale, kept, cubes }));
 };
 const debugActivityStatusChecks = async () => {
@@ -3637,14 +3653,14 @@ const hubRoutes = { name: "hub routes", why: "playthrough: every scene the islan
     const ahead = world(L.rampPoint(84, -1.9, point));
     B.pilot.orbit.yaw = B.pilot.orbit.tYaw = Math.atan2(ahead.x - p.x, ahead.z - p.z) + Math.PI;
     B.advance(1.5, 1 / 30);
-    out.rimInSight = B.headquarters.cameraCover.outlined;
+    out.rimInSight = B.headquarters.cameraCover.outlined; out.eyeInTunnel = !M.solidAt(eye.x, eye.y, eye.z) && !B.renderOpts.birdsEyeCutaway;
     B.pilot.release(true); B.pilot.goPreset("pile");
     return out;
   })()`);
   record("hub routes: Space at the arcade mouth enters its scene, and the same Ooga walks from the mouth down the whole descent into the chamber under the lake without leaving the island",
     reached.arcade === "arcade" && walked.scene === "hub" && walked.same && walked.steps < 900 && walked.under && Math.abs(walked.feet - walked.floor) < 0.05 && walked.r < 9, JSON.stringify({ reached, walked }));
   record("hub routes: under the Mempool island a walker behind the chamber's wall is drawn through the rock as a rim from a view in the chamber, and gets none in plain sight from behind in the tunnel",
-    walked.eyeInChamber && walked.rimBehindWall === true && walked.rimInSight === false, JSON.stringify({ eyeInChamber: walked.eyeInChamber, rimBehindWall: walked.rimBehindWall, rimInSight: walked.rimInSight }));
+    walked.eyeInChamber && walked.rimBehindWall === true && walked.eyeInTunnel && walked.rimInSight === false, JSON.stringify({ eyeInChamber: walked.eyeInChamber, rimBehindWall: walked.rimBehindWall, eyeInTunnel: walked.eyeInTunnel, rimInSight: walked.rimInSight }));
 } };
 const hubFall = { name: "hub fall", why: "rule: walking off the island drops the Ooga into the abyss and brings it back to the pile, still yours", run: async (b) => {
   await b.evaluate(`(() => { const B = window.__ooga, a = B.cavemen.get("portlandhodl"), I = B.island, ang = Math.PI / 4; if (B.crew.player !== a) B.pilot.possess(a); let r = 5; while (I.onLand(Math.sin(ang) * r, Math.cos(ang) * r)) r += 0.25; r -= 1.5; const x = Math.sin(ang) * r, z = Math.cos(ang) * r; B.pilot.navigate({ position: { x, y: I.surfaceAt(x, z), z }, yaw: ang + Math.PI, pitch: 0.4, dist: 10 }); B.advance(0.5, 1 / 60); })()`);

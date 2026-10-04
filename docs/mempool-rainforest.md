@@ -16,7 +16,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140. Its five images a
 - **`src/js/agent.js`**: a gorilla afloat dog-paddles (`SWIM`, `motion.swim`): forearms reaching forward and down in turn on a two-second cycle, hind legs trailing, chest level, blended in and out by the rig's own damping so nothing is left over on land.
 - **`src/js/crew.js`**: the HQ exit route on release starts only over the home island (`ctx.underHome`).
 - **Retired:** `scene-pool.js`; `/mempool` is now `scene: "hub", place: "mempool"`. `index.html`, `routes.js`, `scripts/cards.mjs` (the live route is keyed by its path, and its card waits out the first donation toast), `AGENTS.md`, `README.md`, `chain.js` comments and the director's feed panel updated to match.
-- **Tests (`test/run.mjs`):** pool scene registrations removed; `hubRoutes` now walks an Ooga down the whole descent into the chamber and then reads the walker's rim through the chamber wall; Node rule checks `pool layout` (the descent, the links, the beds, the lake and the sight queries) and `pool water`; `weather steps` reworded.
+- **Tests (`test/run.mjs`):** pool scene registrations removed; `hubRoutes` now walks an Ooga down the whole descent into the chamber and then reads the walker's rim through the chamber wall; Node rule checks `pool layout` (the descent; both links walked out through one mouth, along the gallery and back through the other with floor under and rock over every station; the beds; the lake; the sight queries) and `pool water` (which also holds that a channel past the cliff carries no level); `weather steps` reworded.
 
 ## Tuning constants chosen
 
@@ -35,7 +35,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140. Its five images a
 | Sleep trip stall fallback | 25 s | `clankers.js` `SLEEP_STALL` |
 | Links A and B | 56% to 65.76% and 81% to 91% of the descent; pier 1.5 m, headroom 3 m, mouths 3.5 m, floor lip 2 m and 2.75 m past the cliff | `poolLayout.LINK`, `LINKS` |
 | Gorilla paddle | 3.2 rad/s, reach 0.28, stroke 0.26, legs 0.45 with kick 0.12 | `agent.js` `SWIM` |
-| Underground lamps count as lights | only for a view under the island's ground, within 6 m past the lamp's radius | `scene-hub.js` `LAMP_REACH`, `poolShade` |
+| Underground lamps count as lights | only for a view under the island's ground or following a walker who is; a tunnel torch within 6 m past its radius, the chamber's set within 16.5 m of the room's middle, each fading over its last metres | `scene-hub.js` `LAMP_REACH`, `ROOM`, `poolShade`, `poolUnder` |
 
 ## Verification actually performed
 
@@ -66,9 +66,10 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140. Its five images a
 - `npm run test:perf` (M1 Pro, 1920x1080 at twice the pixel density, this branch and unchanged `rock` run alternately):
   - **Ordinary movement passes**: 59.8 to 60.0 fps at high quality, as `rock` does (59.4 to 60.0).
   - **Moving behind cave walls during a donation fails on this machine on both alike**: 31 to 36 fps here, 32.5 to 33.7 on `rock`, the 2D overlay taking about 40 ms a frame at that size. It is this machine's limit and it has printed STOP; it wants the maintainer's machine.
-  - **It found a real regression, now fixed.** The island's thirteen tunnel and chamber lamps burn always and counted as point lights from anywhere, so at noon the home island drew fourteen lights where `rock` draws one; every pixel pays for each light, and the ordinary pass ran at 52.6 fps after the page had dropped itself to low quality. Each such lamp now counts only for a view under the island's ground and within `LAMP_REACH` past its own radius, fading in with `poolShade`, while the open air's lamps fade out there (`updateLamps` in `scene-hub.js`).
+  - **It found a real regression, now fixed.** The island's thirteen tunnel and chamber lamps burn always and counted as point lights from anywhere, so at noon the home island drew fourteen lights where `rock` draws one; every pixel pays for each light, and the ordinary pass ran at 52.6 fps after the page had dropped itself to low quality. Each such lamp now counts only for a view under the island's ground (`poolShade`) or one following a walker who is, the roof cut open over them (`poolUnder`), and fades out by distance: a tunnel torch over the last 6 m of its reach, and the chamber's four torches and the lake's light together as one room's, lit from anywhere in the chamber and fading as the view backs out through the junction. The open air's lamps fade out under the ground (`updateLamps` in `scene-hub.js`). Counted on this machine at noon: one light on the home island, seven at a painting, six at the foot of the descent, two in the upper tunnel.
   - Standing on the island at the same size and high quality, on this machine: the ring path among the trees and the middle of the descent hold 60 fps; the court looking back over both islands runs at 51 to 55 and the chamber at about 52 (six lights), where the governor steps down a tier. The island is 481k triangles in 309 nodes: 308k in 39 canopy trees, 117k in 100 undergrowth plants.
-- Not done: a person playing it, a real phone, two signed-in pages together.
+- An independent review of the last change set (four reviewers, each finding checked by a second who tried to refute it) found the gorilla rig sound and confirmed five things, all fixed: the island's edge test had lost its ledge guard when the lips were added; chamber torches switched off across the room and popped back on; the underground lamps went dark from an eye above ground looking down through the roof cut; and the links clause and the water check could not fail on a broken link or on the flood fix.
+- Not done: a person playing it, a real phone, two signed-in pages together, `npm run test:full`.
 
 ## Known limits and things to play-test
 

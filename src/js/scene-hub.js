@@ -368,7 +368,7 @@
   let enteringTween = null, factoryDeparting = false, bifrostDeparting = false;
   let stateTimer = 0, hintTimer = 0, meterTimer = 0, now = 0, hour = 12, unsubscribeActivity = null, unsubscribeAccount = null, ownOogaClaimed = false;
   // How far under the Mempool island's ground the view is, 0 to 1: its sun and its storm stay outside.
-  let poolShade = 0;
+  let poolShade = 0, poolUnder = 0;
   let weather = null, unsubscribeMempool = null, unsubscribeChain = null, mempoolIsland = null, timechainIsland = null, bifrostIsle = null;
   // The two boards across the hole from the vine bridge, one reading the chain and one reading the
   // weather. Each holds its canvas, its panel node and the reading it last drew, so a snapshot saying
@@ -1403,7 +1403,7 @@
   const addLamp = (node, kind, x, y, z, light = true, order = lamps.length, id = `lamp:${lamps.length}`) => {
     node.glow = LAMP_OFF;
     node.flare = 0;
-    const lamp = { node, kind, x, y, z, light, order, id, k: 0, lit: false, selected: false, approximated: false, debug: null, reach: 0, gain: 1, far: false };
+    const lamp = { node, kind, x, y, z, light, order, id, k: 0, lit: false, selected: false, approximated: false, debug: null, reach: 0, fade: 1, fromX: x, fromY: y, fromZ: z, gain: 1, far: false };
     lamps.push(lamp);
     return lamp;
   };
@@ -1430,11 +1430,15 @@
       if (l.kind.hide) node.visible = lit;
       l.selected = false;
       l.approximated = false;
-      // A lamp with a reach lights a place shut in under the Mempool island's rock. It lights nothing that is
-      // seen from above that ground or from further off than its reach, and every light costs every pixel, so it
-      // counts only as the view goes under (`poolShade`), while the lamps of the open air fade out there.
-      l.gain = l.reach > 0 ? poolShade : 1 - poolShade;
-      l.far = l.gain < 0.02 || l.reach > 0 && (l.x - camera.target.x) ** 2 + (l.y - camera.target.y) ** 2 + (l.z - camera.target.z) ** 2 > l.reach * l.reach;
+      // A lamp with a reach lights a place shut in under the Mempool island's rock, and every light costs every
+      // pixel. It counts while the view is under that ground (`poolShade`) or follows a walker who is, the roof
+      // cut open over them (`poolUnder`), and fades out over `fade` metres as the view leaves its reach, measured
+      // from the lamp or from the middle of the room it lights. The lamps of the open air fade out under the ground.
+      if (l.reach > 0) {
+        const away = Math.hypot(l.fromX - camera.target.x, l.fromY - camera.target.y, l.fromZ - camera.target.z);
+        l.gain = Math.max(poolShade, poolUnder) * Math.min(1, Math.max(0, (l.reach - away) / l.fade));
+      } else l.gain = 1 - poolShade;
+      l.far = l.gain < 0.02;
       if (l.debug) {
         l.debug.factor = k;
         l.debug.lit = lit;
@@ -2390,17 +2394,24 @@
     };
     // Under the ground a torch has a tunnel or the chamber to light by itself, so it reaches further than one
     // outdoors; and the lake lights the chamber from above, blue through its membrane.
-    // They burn always, and each counts as a light only for a view under this ground and within LAMP_REACH past
-    // its own radius: from the home island the thirteen of them cost every pixel on screen and lit nothing in sight.
+    // They burn always, and each counts as a light only for a view under this ground or following someone who
+    // is: from the home island the thirteen of them cost every pixel on screen and lit nothing in sight. A
+    // tunnel torch counts within LAMP_REACH past its own radius. The chamber's four and the lake's light are one
+    // room's: they count together for a view anywhere in the room, fading as it backs out through the junction.
     const TUNNEL_TORCH = { ...LAMP.torch, radius: 10 }, CHAMBER_TORCH = { ...LAMP.torch, radius: 13 }, LAKE_LIGHT = { r: 0.3, g: 0.55, b: 1, radius: 15, glow: 0, hide: false }, LAMP_REACH = 6;
-    const shutIn = (lamp) => { lamp.always = true; lamp.reach = lamp.kind.radius + LAMP_REACH; };
+    const ROOM = { x: place.x, y: place.y + L.FLOOR + 2, z: place.z, reach: L.CHAMBER_R + 4.5, fade: 4 };
+    const shutIn = (lamp, room = null) => {
+      lamp.always = true;
+      if (room) { lamp.fromX = room.x; lamp.fromY = room.y; lamp.fromZ = room.z; lamp.reach = room.reach; lamp.fade = room.fade; }
+      else { lamp.reach = lamp.kind.radius + LAMP_REACH; lamp.fade = LAMP_REACH; }
+    };
     const wallTorch = (x, y, z, ry, id, kind) => {
       const node = fitting(P.wallTorch(), x, y, z, ry);
       node.matrixEmissiveLiving = true;
       // The flame stands 0.46 out from the wall and 0.92 up its bracket.
-      shutIn(addLamp(node, kind, worldX(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), place.y + y + 0.92, worldZ(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), true, 0, id));
+      shutIn(addLamp(node, kind, worldX(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), place.y + y + 0.92, worldZ(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), true, 0, id), kind === CHAMBER_TORCH ? ROOM : null);
     };
-    shutIn(addLamp({ glow: 0, flare: 0, visible: true }, LAKE_LIGHT, place.x, place.y - L.MEMBRANE_DEPTH - 1.6, place.z, true, 0, "pool:lake"));
+    shutIn(addLamp({ glow: 0, flare: 0, visible: true }, LAKE_LIGHT, place.x, place.y - L.MEMBRANE_DEPTH - 1.6, place.z, true, 0, "pool:lake"), ROOM);
     {
       const point = {};
       for (let s = 14.5, n = 0; s < L.RAMP.length - 3; s += 11, n++) {
@@ -6638,6 +6649,7 @@
     // By where the eye is, not what it looks at: a view from outside aimed into the rock is still outdoors.
     const sheltered = mempoolIsland.coveredAt(camera.position.x, camera.position.y, camera.position.z) ? 1 : 0;
     poolShade += clamp(sheltered - poolShade, -dt * 1.6, dt * 1.6);
+    poolUnder += clamp((cutawayPool === 2 ? 1 : 0) - poolUnder, -dt * 1.6, dt * 1.6);
     weather.update(dt, RENDER_OPTS, poolShade);
     if (poolShade > 0) {
       const keep = 1 - 0.4 * poolShade;
@@ -9460,7 +9472,7 @@
     cutawayFeet = 0;
     cutawayX = cutawayZ = cutawayHeadY = 0;
     cutawayHill = false;
-    cutawayPool = 0; poolShade = 0;
+    cutawayPool = 0; poolShade = poolUnder = 0;
     cutawayPlayer = null;
     cutawayTravelRamp = null; cutawayTravelChannel = -1; cutawayTravelStation = 0;
     CUTAWAY_PATH_STATE.lo.fill(0); CUTAWAY_PATH_STATE.hi.fill(0); CUTAWAY_PATH_STATE.mix.fill(0); CUTAWAY_PATH_STATE.windowMix.fill(0); CUTAWAY_PATH_STATE.active = 0; CUTAWAY_PATH_STATE.version++;

@@ -324,7 +324,8 @@
     if (i < 0 || k < 0 || i >= SX || k >= SZ) return false;
     if (!margin) return body().heights[i * SZ + k] > -Infinity;
     const bearing = wrap(Math.atan2(x, z)), edge = edgeAt(bearing);
-    return r + margin < edge || r + margin < edge + (lipAt(bearing, r) || LEDGE.width) && body().heights[i * SZ + k] > -Infinity;
+    const lip = lipAt(bearing, r);
+    return r + margin < edge || r + margin < edge + (lip || LEDGE.width) && (lip > 0 || onLedge(rampAngle(bearing))) && body().heights[i * SZ + k] > -Infinity;
   };
   // Whether a point of the forest floor is a path, a court, a nest, a channel or the shore: kept clear of plants.
   const keptClear = (x, z, margin = 0) => {
