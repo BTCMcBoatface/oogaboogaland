@@ -3,7 +3,7 @@ name: Check character identities
 on:
   pull_request_target:
     branches: [rock]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions:
   contents: read
@@ -27,3 +27,4 @@ jobs:
         run: node scripts/contributor-pr.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CHARACTER_BOT_LOGIN: github-actions[bot]
