@@ -1683,6 +1683,25 @@ const { contributorActivityProbe } = (() => {
       const noSyntheticActivity = applySnapshot(absentTime, at) === 0 && first.lastCommitAt === firstAt;
       absentTime.contributors[0].last_seen_at = new Date(at).toUTCString();
       const strictTimestamp = applySnapshot(absentTime, at) === 0;
+      const foundry = "oogaboogax/lightningfoundry", bananaPay = "oogaboogax/bananapayserver";
+      applySnapshot(snapshot("DrNeski/lightning-foundry", first.name, 4000), at);
+      const legacyFoundry = first.activity.get(foundry) === at - 4000;
+      applySnapshot({ meta: { org: "OogaBoogaX", schema_version: 3 }, repos: [
+        { name: "LightningFactory", contributors: [{ login: first.name, last_seen_at: new Date(at - 3000).toISOString() }] },
+        { name: "LightningFoundry", contributors: [{ login: first.name, last_seen_at: new Date(at - 5000).toISOString() }] }
+      ] }, at);
+      const foundryFanOut = first.activity.get(foundry) === at - 3000;
+      applyActivity([
+        { name: first.name, repo: "OogaBoogaX/lightning_factory", lastCommitAt: at - 2000 },
+        { name: first.name, repo: "OogaBoogaX/LightningFoundry", lastCommitAt: at - 2500 },
+        { name: first.name, repo: "OogaBoogaX/BananaPayServer", lastCommitAt: at - 1000 }
+      ], at);
+      applySnapshot(snapshot("DrNeski/LightningFactory", first.name, 6000), at);
+      const foundryAliases = legacyFoundry && foundryFanOut && first.activity.get(foundry) === at - 2000
+        && hasRecentActivity(first, foundry, at) && [...first.activity.keys()].filter(repo => /lightning/.test(repo)).join() === foundry
+        && applyActivity([{ name: first.name, repo: "someoneelse/LightningFactory", lastCommitAt: at }], at) === 0;
+      const bananaPayDistinct = first.activity.get(bananaPay) === at - 1000 && hasRecentActivity(first, bananaPay, at)
+        && first.activity.get(foundry) !== first.activity.get(bananaPay);
       const lastNotification = notifications;
       unsubscribe();
       const unsubscribed = applyActivity([{ name: first.name, lastCommitAt: at }], at) === 1 && notifications === lastNotification;
@@ -1698,7 +1717,7 @@ const { contributorActivityProbe } = (() => {
       const boundedProjects = first.activity.size === 64 && hasRecentActivity(first, "oogaboogax/project-62", at) &&
         !hasRecentActivity(first, "oogaboogax/project-63", at);
       return { boundaries, invalidStates, labels, update, invalid, expires, projects, otherRepo, orgWideV3, fanOut, orgWide, wrongOrg, noSyntheticActivity, strictTimestamp,
-        unsubscribed, debugFixture, pinnedWorks, boundedProjects, rosterUnchanged: roster.length === saved.length };
+        foundryAliases, bananaPayDistinct, unsubscribed, debugFixture, pinnedWorks, boundedProjects, rosterUnchanged: roster.length === saved.length };
     } finally {
       unsubscribe();
       roster.forEach((entry, i) => {
@@ -2373,12 +2392,38 @@ const scene = (id, { query = "", steps, perf = false, opts = {}, label = "", url
   } });
 };
 // contributors.js reads the roster from the character files, which build on math, scene and models.
-const CONTRIBUTOR_SOURCES = ["math", "scene", "models", "caves", "characters", "characters.gen", "contributors"];
+const CONTRIBUTOR_SOURCES = ["math", "scene", "models", "caves", "activity-repos", "characters", "characters.gen", "contributors"];
 const contributorActivityChecks = async () => {
   const context = { window: {}, URLSearchParams, location: { search: "" } };
   for (const name of CONTRIBUTOR_SOURCES) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
   const r = contributorActivityProbe(context.window.BL.contributors, Date.now());
   record("banana weapon activity: one-hour clank and 24-hour chill boundaries, per-project updates, org snapshots, invalid data, and debug mix", Object.values(r).every(Boolean), JSON.stringify(r));
+  const metrics = ["commits", "prs", "reviews", "issues", "comments"], early = "2026-10-01T10:00:00Z", late = "2026-10-02T11:00:00Z";
+  const repo = (name, values, contributors) => ({ name, totals: { contributors: contributors.length, ...Object.fromEntries(metrics.map((key, i) => [key, values[i]])) },
+    weekly: [{ week: "2026-W40", ...Object.fromEntries(metrics.map((key, i) => [key, values[i]])) }],
+    leaderboards: Object.fromEntries(metrics.map((key, i) => [key, [{ login: contributors[0].login, count: values[i] }]])),
+    contributors, last_activity_at: contributors.reduce((latest, row) => row.last_seen_at > latest ? row.last_seen_at : latest, "") });
+  const fixture = { meta: { org: "OogaBoogaX", schema_version: 3 }, totals: { commits: 99 },
+    contributors: [{ login: "Alice", last_seen_at: late }], leaderboards: { commits: [{ login: "Alice", count: 99 }] },
+    repos: [repo("LightningFactory", [2, 3, 4, 5, 6], [{ login: "Alice", last_seen_at: early }]),
+      repo("lightningfoundry", [7, 11, 13, 17, 19], [{ login: "ALICE", last_seen_at: late }, { login: "Bob", last_seen_at: early }]),
+      repo("BananaPayServer", [23, 29, 31, 37, 41], [{ login: "Alice", last_seen_at: late }])],
+    recent: ["LightningFactory", "lightningfoundry", "LightningFactory", "BananaPayServer"].map(repo => ({ repo, login: "Alice", type: "commit", occurred_at: late })) };
+  fixture.repos[0].contributors.push({ login: "ALICE", last_seen_at: "2099-01-01T00:00:00Z" }, { login: "Alice", last_seen_at: "yesterday" });
+  const before = JSON.stringify(fixture), normalize = input => context.window.BL.activityRepos.normalizeStats(input, Date.parse("2026-10-03T00:00:00Z")), normalized = normalize(fixture);
+  const foundry = normalized.repos.find(repo => repo.name === "lightningfoundry"), banana = normalized.repos.find(repo => repo.name === "bananapayserver");
+  const sums = [9, 14, 17, 22, 25], identities = foundry && new Map(foundry.contributors.map(row => [row.login.toLowerCase(), row.last_seen_at]));
+  const counts = foundry && metrics.every((key, i) => foundry.totals[key] === sums[i] && foundry.weekly.length === 1
+    && foundry.weekly[0].week === "2026-W40" && foundry.weekly[0][key] === sums[i]
+    && foundry.leaderboards[key].length === 1 && foundry.leaderboards[key][0].login.toLowerCase() === "alice" && foundry.leaderboards[key][0].count === sums[i]);
+  record("activity repository identities: renamed Foundry rows merge without mutating sources, losing counts or events, or merging BananaPayServer",
+    normalized.repos.length === 2 && counts && identities.size === 2 && identities.get("alice") === late && identities.get("bob") === early
+      && foundry.totals.contributors === 2 && foundry.last_activity_at === late && banana.totals.commits === 23
+      && normalized.recent.length === 4 && normalized.recent.map(row => row.repo).join() === "lightningfoundry,lightningfoundry,lightningfoundry,bananapayserver"
+      && normalized.recent.every((row, i) => row.login === fixture.recent[i].login && row.type === fixture.recent[i].type && row.occurred_at === fixture.recent[i].occurred_at)
+      && JSON.stringify(normalized.totals) === JSON.stringify(fixture.totals) && JSON.stringify(normalized.leaderboards) === JSON.stringify(fixture.leaderboards)
+      && JSON.stringify(normalized.contributors) === JSON.stringify(fixture.contributors) && JSON.stringify(fixture) === before
+      && JSON.stringify(normalize(normalized)) === JSON.stringify(normalized), JSON.stringify({ counts, repos: normalized.repos, recent: normalized.recent }));
   const liveContext = { window: {}, URLSearchParams, location: { search: "" } };
   for (const name of [...CONTRIBUTOR_SOURCES, "jumbotron-data"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), liveContext);
   const live = liveContext.window.BL, generatedAt = Date.parse(live.jumbotronData.meta.generated_at), aliases = Object.fromEntries(live.characters.all().filter((c) => c.github).map((c) => [c.handle, c.github]));
@@ -2391,7 +2436,7 @@ const contributorActivityChecks = async () => {
   const loginOf = (entry) => (aliases[entry.name] || entry.name).toLowerCase();
   const perRepo = matched.every(({ entry }) => live.jumbotronData.repos.every((repo) => {
     const row = repo.contributors.find((c) => c.login.toLowerCase() === loginOf(entry));
-    return !row || entry.activity.get(`oogaboogax/${repo.name.toLowerCase()}`) === Date.parse(row.last_seen_at);
+    return !row || entry.activity.get(live.activityRepos.keyOf(`oogaboogax/${repo.name}`)) === Date.parse(row.last_seen_at);
   }));
   // Data integrity of the committed bake itself: each repo's contributor rows
   // must be that repo's own (aligned with its contributor total), and the
@@ -2846,7 +2891,7 @@ const debugActivityStatusChecks = async () => {
     return context.window.BL.contributors;
   };
   const example = "ooga=w-s-bitcoin:clank:lab,obl,lf&ooga=portlandhodl:clank:lab,obl&ooga=DrNeski:clank:lab,lf&ooga=bc1gui:clank:lab&ooga=2140data:clank:obl&ooga=SaniExp:chill&ooga=MrHodlX:chill&ooga=Holo-Elfstone:chill&ooga=Tmmmemcee:chill&ooga=YellowBrokeIt:chill";
-  const C = load(`?debug=1&status=sleepin&${example}`), lab = "oogaboogax/entropylab", obl = "oogaboogax/oogaboogaland", lf = "drneski/lightning-foundry";
+  const C = load(`?debug=1&status=sleepin&${example}`), lab = "oogaboogax/entropylab", obl = "oogaboogax/oogaboogaland", lf = "oogaboogax/lightningfoundry";
   C.seedDebugActivity(at);
   const modes = C.roster.map(entry => C.stateFor(entry, at));
   // Neither a maintainer nor a later feed/seed may wake unlisted owners or add work caves.
@@ -2969,6 +3014,37 @@ const workCaveTrips = async (b) => {
     all.rows.length === all.lines * 2 && all.rows.some(row => row.line === 4 && row.pathLength > 12) && all.rows.some(row => row.line === 1 && row.pathLength > 12)
       && all.rows.every(row => row.connected && row.arrived && row.onPath > 0.95 && row.error < 0.45), JSON.stringify(all));
 };
+const factoryActivityRouting = { name: "factory contribution routing", why: "regression: normal repo activity must assign both the Ooga and its clanker to Factory without falling back to OBL", run: async (b) => {
+  const r = await b.evaluate(`(() => {
+    const B = __ooga, C = BL.contributors, sites = B.crew.workSites, index = sites.findIndex(site => site.mouth.id === "c2"), site = sites[index];
+    const cave = ["bc1gui", "DrNeski"].map(name => B.cavemen.get(name))
+      .find(c => c && !c.traits.maintainer && !c.contributor.maintainer && !c.camp.burning && !c.camp.rolling && !c.health.stunned);
+    const entry = cave.contributor, saved = { activity: [...entry.activity], lastCommitAt: entry.lastCommitAt, lastContributionAt: entry.lastContributionAt,
+      override: cave.override, controlOverride: cave.controlOverride }, rows = [];
+    B.pilot.release(true);
+    try {
+      for (const repo of ["OogaBoogaX/BananaPayServer", "OogaBoogaX/LightningFactory"]) {
+        entry.activity.clear(); entry.lastCommitAt = entry.lastContributionAt = 0; cave.override = cave.controlOverride = null;
+        C.applyActivity([{ name: entry.name, repo, lastCommitAt: Date.now() - 1000 }]);
+        B.pilot.possess(cave); B.crew.wakePlayer();
+        cave.override = cave.controlOverride = null;
+        B.pilot.navigate({ position: { x: 10, y: 0, z: 0 }, yaw: 0, pitch: 0.4, dist: 5 });
+        cave.weapon.workSite = -1; cave.work.plannedSite = -1;
+        B.pilot.release(true);
+        const clanker = B.clankers.list.find(e => e.owner === cave);
+        rows.push({ repo, state: cave.state, assigned: cave.work.plannedSite, clanker: clanker ? clanker.pendingSite >= 0 ? clanker.pendingSite : clanker.site : -1 });
+      }
+      return { debugRoster: C.debugRoster, debugState: C.debugState, index, repo: site?.repo, additionalRepo: site?.additionalRepo, rows };
+    } finally {
+      entry.activity.clear(); for (const [repo, stamp] of saved.activity) entry.activity.set(repo, stamp);
+      entry.lastCommitAt = saved.lastCommitAt; entry.lastContributionAt = saved.lastContributionAt;
+      cave.override = saved.override; cave.controlOverride = saved.controlOverride; B.crew.refreshStates(true);
+    }
+  })()`);
+  record("factory contribution routing: ordinary BananaPayServer and historical LightningFactory activity sends the Ooga and clanker to canonical LF",
+    !r.debugRoster && !r.debugState && r.index >= 0 && r.repo === "oogaboogax/lightningfoundry" && r.additionalRepo === "oogaboogax/bananapayserver"
+      && r.rows.length === 2 && r.rows.every(row => row.state === "working" && row.assigned === r.index && row.clanker === r.index), JSON.stringify(r));
+} };
 const npcPaths = (backend) => [`NPC paths ${backend}`, async (b) => {
   const rows = await b.evaluate(`(${npcPathWalkingProbe.toString()})()`);
   record(`NPC paths ${backend}: prefer connected trails, pass other Oogas, replan changed paths and reach off-path fireplace seats`, rows.length === 5 && rows.slice(0, 4).every((r) => r.arrived && r.distance < 1e-6 && r.stable && r.maximumStep <= 1.7 / 30 + 1e-6 && r.count > 0) && rows[0].onPath > 0.95 && rows[1].onPath > 0.65 && rows[1].separation >= 0.68 && rows[2].changed && rows[2].replans > 0 && rows[3].onPath < 0.95, JSON.stringify(rows.slice(0, 4)));
@@ -3033,7 +3109,7 @@ const gameRulesChecks = async () => {
     // The jackpot wheel, from arcade-models.js on the builders it loads with: the house wins slowly, and every
     // wedge, from a turn at rest and one far round after many spins, stops under the clapper wherever in it the spin
     // aims, after its whole turns and less than one more.
-    for (const name of ["scene", "models", "jumbotron", "hub-models", "arcade-models"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
+    for (const name of ["scene", "models", "activity-repos", "jumbotron", "hub-models", "arcade-models"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
     const { WHEEL_VALUES: V, WHEEL_COST: cost, wheelAt, wheelStop } = BL.arcadeModels;
     const ev = V.reduce((s, v) => s + v, 0) / V.length, jackpot = Math.max(...V), missed = [];
     for (const from of [0, -0.3, -1234.567]) for (let k = 0; k < V.length; k++) for (const at of [0.2, 0.5, 0.8]) {
@@ -3813,7 +3889,7 @@ const hubJetpack = { name: "hub jetpack", why: "rule: every Ooga permanently own
     && permanent.drops.length === 1 && permanent.drops[0].kind === "magazine" && permanent.drops[0].label === "+1 MAG", JSON.stringify(permanent));
 } };
 
-const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centered zoom retains its world target at the screen edge, keys rotate smoothly, and carry handoffs preserve the cursor and camera distance", run: async (b) => {
+const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: horizontal aim rotates the view around a centerline reticle, zoom retains forward targets, and carry handoffs preserve valid cursors and camera distance", run: async (b) => {
   const focusPoint = await b.evaluate(`(() => { const B = __ooga, a = B.pilot.player; B.pilot.release(true); B.advance(0.1, 1 / 60); return B.project(a.root.position.x, a.root.position.y - a.baseY + a.bodyHeight * 0.55, a.root.position.z, {}); })()`);
   await b.click(focusPoint.x, focusPoint.y);
   await b.click(focusPoint.x, focusPoint.y);
@@ -3917,8 +3993,8 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
       const baseline = sample();
       for (const offset of [0, 0.4]) {
         P.hooks.onZoom(1.2); B.advance(1, 1 / 60);
-        const point = B.project(a.root.position.x + offset, location.y + 0.01, a.root.position.z, {});
-        P.hooks.onOrbit(-1e6, -1e6); P.hooks.onOrbit(point.x, point.y); B.advance(0.2, 1 / 60);
+        const point = B.project(a.root.position.x + B.camera.up.x * offset, location.y + 0.01, a.root.position.z + B.camera.up.z * offset, {});
+        P.hooks.onOrbit(0, point.y - parseFloat(document.getElementById("weapon-reticle").style.top)); B.advance(0.2, 1 / 60);
         P.hooks.onZoom(0.001); B.advance(2, 1 / 60); const settled = sample();
         P.hooks.onOrbit(12, 0); B.advance(0.7, 1 / 60);
         rows.push({ floor: location.y, offset, baseline, settled, looking: sample() });
@@ -3963,11 +4039,13 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
   const size = await b.evaluate(`(() => { const r = document.getElementById("scene").getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
   await b.mouse("mouseMoved", size.x, size.y, { button: "none" });
   await b.evaluate(`__ooga.pilot.focusAim()`);
-  await b.mouse("mouseMoved", size.x + size.w * 0.22, size.y + size.h * 0.14, { button: "none" });
+  await b.mouse("mouseMoved", size.x + size.w * 0.22, size.y - size.h * 0.14, { button: "none" });
   await b.evaluate(`__ooga.advance(0.5, 1 / 60)`);
   const aim = await b.evaluate(`__birdsSnapshot()`);
   const turn = Math.abs(Math.atan2(Math.sin(aim.yaw - entry.after.yaw), Math.cos(aim.yaw - entry.after.yaw)));
-  record("birds-eye combat: real mouse movement changes character facing without orbiting the overhead camera", turn > 0.15 && aim.horizontal < 1e-6 && aim.down > 0.999999 && aim.up.every((n, i) => Math.abs(n - entry.after.up[i]) < 1e-6), JSON.stringify({ before: entry.after, aim, turn }));
+  const viewTurn = Math.atan2(aim.up[0] * entry.after.up[2] - aim.up[2] * entry.after.up[0], aim.up[0] * entry.after.up[0] + aim.up[2] * entry.after.up[2]);
+  record("birds-eye combat: real horizontal mouse movement turns the overhead view while the reticle stays on its forward centerline", turn > 0.15 && viewTurn < -0.15 && aim.horizontal < 1e-6 && aim.down > 0.999999
+    && Math.abs(aim.pointer[0] - size.x) < 0.02 && aim.pointer[1] >= size.y - size.h / 2 && aim.pointer[1] < size.y, JSON.stringify({ before: entry.after, aim, turn, viewTurn }));
   await b.evaluate(`if (document.pointerLockElement) document.exitPointerLock();`);
   if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the unlocked gesture probe");
   const centered = await b.evaluate(`(() => {
@@ -3979,22 +4057,22 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     // the same pixel, whether the actual hit is land or an item's raised face.
     const pointAt = (x, y) => { R.ray(x, y, B.camera, ray); const t = (a.root.position.y - a.baseY - a.hop - ray.oy) / ray.dy;
       return { x: ray.ox + ray.dx * t, y: ray.oy + ray.dy * t, z: ray.oz + ray.dz * t }; };
-    const start = { x: width * 0.84, y: height * 0.64 }, original = pointAt(start.x, start.y);
-    P.hooks.onOrbit(-1e6, -1e6); P.hooks.onOrbit(start.x, start.y);
+    const start = { x: width / 2, y: height * 0.14 }, original = pointAt(start.x, start.y);
+    P.hooks.onOrbit(0, start.y - pointer().y);
     // Scroll before another frame refreshes aim: the anchor must come from
     // this pointer position, not the previous assisted hit or cached ground ray.
     let anchor = original, center = 0, horizontal = 0, minHeight = before.height, screenError = 0, edgeError = 0, directionError = 0, boundsError = 0, inside = 0, outside = 0;
     const sample = () => {
       const s = __birdsSnapshot(), p = pointer(), projected = R.project(anchor.x, anchor.y, anchor.z, {});
       center = Math.max(center, s.center); horizontal = Math.max(horizontal, s.horizontal); minHeight = Math.min(minHeight, s.height);
-      if (projected.x >= inset && projected.x <= width - inset && projected.y >= inset && projected.y <= height - inset) {
+      if (projected.y >= inset && projected.y <= height / 2) {
         inside++; screenError = Math.max(screenError, Math.hypot(p.x - projected.x, p.y - projected.y));
       } else {
-        outside++; edgeError = Math.max(edgeError, Math.min(Math.abs(p.x - inset), Math.abs(width - inset - p.x), Math.abs(p.y - inset), Math.abs(height - inset - p.y)));
+        outside++; edgeError = Math.max(edgeError, Math.abs(p.y - inset));
         const dx = projected.x - width / 2, dy = projected.y - height / 2, px = p.x - width / 2, py = p.y - height / 2;
         directionError = Math.max(directionError, dx * px + dy * py > 0 ? Math.abs(dx * py - dy * px) / Math.hypot(dx, dy) : Infinity);
       }
-      boundsError = Math.max(boundsError, inset - p.x, p.x - (width - inset), inset - p.y, p.y - (height - inset));
+      boundsError = Math.max(boundsError, Math.abs(p.x - width / 2), -p.y, p.y - height / 2);
     };
     const zoom = (factor, frames = 60) => { P.hooks.onZoom(factor); for (let i = 0; i < frames; i++) { B.advance(1 / 60, 1 / 60); sample(); } };
     zoom(0.75); const moved = pointer(); zoom(0.8); const edge = pointer(); zoom(0.9); const repeated = pointer();
@@ -4002,21 +4080,25 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     const mouse = (dx, dy) => canvas.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: rect.left + start.x, clientY: rect.top + start.y, movementX: dx, movementY: dy }));
     mouse(0, 0); B.advance(1 / 60, 1 / 60); sample(); const zero = pointer(), zeroError = Math.hypot(zero.x - repeated.x, zero.y - repeated.y);
     zoom(1 / (0.75 * 0.8 * 0.9), 90); const returned = pointer(), returnError = Math.hypot(returned.x - start.x, returned.y - start.y);
-    zoom(0.54, 90); const clamped = pointer(), dx = -8, dy = -4;
-    // Native coordinates still describe the old cursor location; only this
-    // small relative movement should take over from the displayed edge mark.
-    mouse(dx, dy); B.advance(1 / 60, 1 / 60); const manual = pointer(), manualError = Math.hypot(manual.x - clamped.x - dx * width / rect.width, manual.y - clamped.y - dy * height / rect.height);
-    B.advance(0.2, 1 / 60); const released = pointer(), releasedError = Math.hypot(released.x - manual.x, released.y - manual.y);
+    zoom(0.54, 90); const clamped = pointer(), dx = -8, dy = 4;
+    const angle = () => Math.atan2(-B.camera.up.x, -B.camera.up.z), wrap = n => Math.atan2(Math.sin(n), Math.cos(n)), yaw = angle();
+    // Native coordinates still describe the old cursor location. Relative Y
+    // resumes from the edge, while relative X turns the view, not the reticle.
+    const wantedY = Math.max(0, Math.min(height / 2, clamped.y + dy * height / rect.height));
+    const wantedTurn = -Math.atan2(dx * width / rect.width, Math.max(inset, height * 0.1, height / 2 - wantedY));
+    mouse(dx, dy); const immediate = pointer(); B.advance(1 / 60, 1 / 60);
+    const manual = pointer(), manualError = Math.max(Math.hypot(immediate.x - clamped.x, immediate.y - clamped.y), Math.hypot(manual.x - width / 2, manual.y - wantedY));
+    B.advance(1, 1 / 60); const released = pointer(), releasedError = Math.hypot(released.x - manual.x, released.y - manual.y), mouseTurnError = Math.abs(wrap(angle() - yaw) - wantedTurn);
     anchor = pointAt(released.x, released.y); zoom(1 / 0.54, 90);
     const final = pointer(), originalScreen = R.project(original.x, original.y, original.z, {});
-    P.hooks.onOrbit(-4, -2); B.advance(1 / 60, 1 / 60); const hooked = pointer(), hookError = Math.hypot(hooked.x - final.x + 4, hooked.y - final.y + 2);
+    P.hooks.onOrbit(-4, -2); B.advance(1 / 60, 1 / 60); const hooked = pointer(), hookError = Math.hypot(hooked.x - width / 2, hooked.y - Math.max(0, Math.min(height / 2, final.y - 2)));
     return { before, center, horizontal, minHeight, restored: P.birdsEyeHeight, inside, outside, screenError, edgeError, directionError, boundsError,
-      travel: Math.hypot(moved.x - start.x, moved.y - start.y), edge, repeated, returnError, unlocked, zeroError, manualError, releasedError, hookError,
+      travel: Math.hypot(moved.x - start.x, moved.y - start.y), edge, repeated, returnError, unlocked, zeroError, manualError, releasedError, mouseTurnError, hookError,
       newTarget: Math.hypot(final.x - originalScreen.x, final.y - originalScreen.y) };
   })()`);
-  record("birds-eye combat: animated zoom keeps the character centered even while aiming off-center", centered.center < 0.02 && centered.horizontal < 1e-6 && centered.minHeight < centered.before.height - 1 && Math.abs(centered.restored - centered.before.height) < 0.02, JSON.stringify(centered));
-  record("birds-eye combat: zoom tracks the fresh world point, keeps an off-screen target at the directional edge across repeated scrolls and zero-motion events, and restores it on zoom-out", centered.inside > 30 && centered.outside > 30 && centered.screenError < 0.05 && centered.edgeError < 0.05 && centered.directionError < 0.05 && centered.boundsError < 0.01 && centered.travel > 20 && centered.zeroError < 0.02 && centered.returnError < 0.05, JSON.stringify(centered));
-  record("birds-eye combat: small native mouse and orbit gestures release the tracked target without jumping to stale absolute coordinates", centered.unlocked && centered.manualError < 0.02 && centered.releasedError < 0.02 && centered.hookError < 0.02 && centered.newTarget > 20, JSON.stringify(centered));
+  record("birds-eye combat: animated zoom keeps the character centered while aiming ahead", centered.center < 0.02 && centered.horizontal < 1e-6 && centered.minHeight < centered.before.height - 1 && Math.abs(centered.restored - centered.before.height) < 0.02, JSON.stringify(centered));
+  record("birds-eye combat: zoom tracks the fresh world point, keeps an off-screen forward target at the top edge across repeated scrolls and zero-motion events, and restores it on zoom-out", centered.inside > 30 && centered.outside > 30 && centered.screenError < 0.05 && centered.edgeError < 0.05 && centered.directionError < 0.05 && centered.boundsError < 0.01 && centered.travel > 20 && centered.zeroError < 0.02 && centered.returnError < 0.05, JSON.stringify(centered));
+  record("birds-eye combat: small native mouse and orbit gestures release the tracked target without jumping to stale absolute coordinates", centered.unlocked && centered.manualError < 0.02 && centered.releasedError < 0.02 && centered.mouseTurnError < 0.001 && centered.hookError < 0.02 && centered.newTarget > 20, JSON.stringify(centered));
   const rotation = await b.evaluate(`(() => {
     const B = __ooga, angle = () => { const s = __birdsSnapshot(); return Math.atan2(-s.up[0], -s.up[2]); }, wrap = n => Math.atan2(Math.sin(n), Math.cos(n));
     const key = (type, k) => window.dispatchEvent(new KeyboardEvent(type, { key: k }));
@@ -4049,8 +4131,7 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     P.hooks.onZoom(1.2); B.advance(1, 1 / 60); return { max, clamped, lowered, fromMax, immediate, maxStep, switchFrame, shoulder, first, back };
   })()`);
   record("birds-eye combat: a full-height inward zoom reaches the relative-height-21 shoulder handoff promptly along a continuous path, and first-person remains reachable", Math.abs(entry.after.height - 21) < 0.01 && Math.abs(zoom.max.height - zoom.clamped.height) < 0.01 && zoom.lowered.height < zoom.max.height && zoom.lowered.mode === "birds-eye" && zoom.fromMax.height > 60 && zoom.immediate < 1e-6 && zoom.maxStep < 5 && zoom.switchFrame > 0 && zoom.switchFrame < 45 && zoom.shoulder.mode === "shoulder" && zoom.first.mode === "first-person" && zoom.back.mode === "shoulder", JSON.stringify(zoom));
-  await b.mouse("mouseMoved", size.x - size.w * 0.16, size.y + size.h * 0.1, { button: "none" });
-  await b.evaluate(`__ooga.advance(0.5, 1 / 60)`);
+  await b.evaluate(`(() => { const B = __ooga, reticle = document.getElementById("weapon-reticle"); B.pilot.hooks.onOrbit(0, B.renderer.size.height * 0.25 - parseFloat(reticle.style.top)); B.advance(0.5, 1 / 60); })()`);
   const handoffs = await b.evaluate(`(() => {
     const B = __ooga, P = B.pilot, difference = (a, b) => Math.hypot(...a.map((n, i) => n - b[i]));
     window.__birdsHandoff = frames => {
@@ -4079,7 +4160,7 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     return { carry, diagonal, drag, entering, entryReversed, combat, partial, reversed };
   })()`);
   const continuous = r => Object.values(r.immediate).every(n => n < 1e-6) && r.eyeStep < 3 && r.forwardStep < 0.15 && r.upStep < 0.15 && r.projectionStep < 0.08 && r.radiusError < 0.02 && r.cursorError < 0.02 && r.fovError < 1e-6 && r.center < 0.02 && r.blended > 2;
-  record("birds-eye combat: X smoothly hands off both ways with a fixed cursor and character distance, including reversal in each direction mid-transition", [handoffs.carry, handoffs.entering, handoffs.entryReversed, handoffs.combat, handoffs.partial, handoffs.reversed].every(continuous)
+  record("birds-eye combat: X smoothly hands off both ways with a valid centerline cursor and fixed character distance, including reversal in each direction mid-transition", [handoffs.carry, handoffs.entering, handoffs.entryReversed, handoffs.combat, handoffs.partial, handoffs.reversed].every(continuous)
     && Math.hypot(handoffs.carry.before.pointer[0] - size.x, handoffs.carry.before.pointer[1] - size.y) > 20
     && [handoffs.carry, handoffs.entryReversed].every(r => r.after.mode === "orbit" && !r.after.combat && r.after.orthoMix === 0)
     && Math.abs(handoffs.carry.after.altitude - handoffs.carry.before.altitude) < 0.02 && handoffs.carry.after.down > 0.999
@@ -4091,19 +4172,24 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
     const visible = clouds.map(c => c.node.visible), diagonal = -Math.SQRT1_2;
     const key = (type, k) => window.dispatchEvent(new KeyboardEvent(type, { key: k, code: "Key" + k.toUpperCase(), bubbles: true }));
     let radius = 5; while (radius < 100 && I.onLand(diagonal * radius, diagonal * radius)) radius += 0.25;
-    const x = diagonal * (radius - 1.5), z = x, start = { position: { x, y: I.surfaceAt(x, z), z }, yaw: 0, pitch: 0.4, dist: 24 };
+    const x = diagonal * (radius - 1.5), z = x, start = { position: { x, y: I.surfaceAt(x, z), z }, yaw: Math.PI, pitch: 0.4, dist: 24 };
     const run = bird => {
       if (P.aiming) P.modeAction("mode-toggle");
       P.navigate(start); B.advance(1, 1 / 60);
       if (bird) {
-        P.modeAction("mode-toggle"); key("keydown", "n"); key("keyup", "n"); B.advance(1, 1 / 60);
-        P.hooks.onOrbit(-1e6, -1e6); P.hooks.onOrbit(B.renderer.size.width * 0.9, B.renderer.size.height * 0.9); B.advance(0.4, 1 / 60);
+        P.modeAction("mode-toggle"); key("keydown", "n"); key("keyup", "n"); B.advance(1.5, 1 / 60);
+        const reticle = document.getElementById("weapon-reticle"), halfHeight = B.renderer.size.height / 2;
+        P.hooks.onOrbit(0, halfHeight - parseFloat(reticle.style.top));
+        const reach = Math.max(parseFloat(reticle.style.getPropertyValue("--reticle-radius")), halfHeight * 0.2);
+        for (let i = 0; i < 3; i++) P.hooks.onOrbit(-reach * Math.tan(Math.PI / 3), 0);
+        B.advance(1.5, 1 / 60);
+        P.hooks.onOrbit(0, B.renderer.size.height * 0.1 - parseFloat(reticle.style.top)); B.advance(0.4, 1 / 60);
       }
       const p = a.root.position, trace = [], projected = {}, initial = [p.x, p.y, p.z];
       const aimDot = diagonal * (Math.sin(a.root.rotation.y) + Math.cos(a.root.rotation.y));
       let off = -1, back = -1, departure = null, low = Infinity, center = 0, follow = 0, clearance = Infinity, gravityError = 0, ballisticError = 0, gravityFrames = 0, shown = true;
       let lastY = p.y, lastEye = C.position.y, lastV = a.hopV;
-      key("keydown", "w"); key("keydown", "a");
+      key("keydown", "s"); key("keydown", "d");
       try {
         for (let i = 0; i < 600; i++) {
           B.advance(1 / 60, 1 / 60); const feet = p.y - a.baseY;
@@ -4113,7 +4199,7 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
           // floor. The body's world height must never jump to that support.
           if (off < 0 && feet - a.hop < -100) {
             off = i; departure = { x: p.x - initial[0], z: p.z - initial[2], vx: a.leap.vx, vz: a.leap.vz };
-            key("keyup", "w"); key("keyup", "a");
+            key("keyup", "s"); key("keyup", "d");
           } else if (off >= 0) {
             gravityFrames++; gravityError = Math.max(gravityError, Math.abs(a.hopV - lastV + 9.8 / 60));
             ballisticError = Math.max(ballisticError, Math.abs(p.y - lastY - a.hopV / 60));
@@ -4133,7 +4219,7 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
           }
           lastY = p.y; lastEye = C.position.y; lastV = a.hopV;
         }
-      } finally { key("keyup", "w"); key("keyup", "a"); }
+      } finally { key("keyup", "s"); key("keyup", "d"); }
       return { trace, initial, aimDot, off, back, departure, low, center, follow, clearance, gravityError, ballisticError, gravityFrames, shown };
     };
     try {
@@ -4163,32 +4249,34 @@ const hubBirdsEye = { name: "birds-eye combat camera", why: "regression: centere
   await b.click(size.x, size.y);
   await untilPage(b, 'document.pointerLockElement === document.getElementById("scene")');
   const hudPointer = await b.evaluate(`(() => {
-    const B = __ooga, P = B.pilot, a = P.player, canvas = document.getElementById("scene"), reticle = document.getElementById("weapon-reticle");
+    const B = __ooga, P = B.pilot, a = P.player, canvas = document.getElementById("scene"), reticle = document.getElementById("weapon-reticle"), rect = canvas.getBoundingClientRect();
     B.advance(0.1, 1 / 60);
-    const route = button => {
-      const canvasRect = canvas.getBoundingClientRect(), rect = button.getBoundingClientRect();
-      const x = (rect.left + rect.width / 2 - canvasRect.left) * B.renderer.size.width / canvasRect.width;
-      const y = (rect.top + rect.height / 2 - canvasRect.top) * B.renderer.size.height / canvasRect.height;
-      const currentX = parseFloat(reticle.style.left), currentY = parseFloat(reticle.style.top);
-      P.hooks.onOrbit(x - currentX, y - currentY); B.advance(1 / 60, 1 / 60);
-      const hit = document.elementFromPoint(P.cursor.x, P.cursor.y);
-      canvas.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerType: "mouse", pointerId: 91, isPrimary: true, button: 0, buttons: 1 }));
-      canvas.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerType: "mouse", pointerId: 91, isPrimary: true, button: 0, buttons: 0 }));
-      return hit && hit.closest("button") === button;
-    };
-    const shots = a.weapon.shotsFired, ammo = a.weapon.ammo, primary = a.weapon.primaryEquipped;
-    const secondaryHit = route(document.getElementById("weapon-hud")), equipped = a.weapon.equipped;
-    const primaryHit = route(document.getElementById("primary-hud")), restored = a.weapon.primaryEquipped;
-    const currentX = parseFloat(reticle.style.left), currentY = parseFloat(reticle.style.top);
-    P.hooks.onOrbit(B.renderer.size.width / 2 - currentX, B.renderer.size.height / 2 - currentY); B.advance(1 / 60, 1 / 60);
-    return { active: P.cursor.active, visible: P.cursor.visible, locked: document.pointerLockElement === canvas,
-      secondaryHit, primaryHit, primary, equipped, restored, shots, afterShots: a.weapon.shotsFired, ammo, afterAmmo: a.weapon.ammo,
-      reticleZ: parseInt(getComputedStyle(reticle).zIndex, 10) };
+    const sample = () => ({ x: P.cursor.x, y: P.cursor.y, reticleX: parseFloat(reticle.style.left), reticleY: parseFloat(reticle.style.top) });
+    const move = (dx, dy) => canvas.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, movementX: dx, movementY: dy }));
+    // Hidden pointer-lock input cannot independently drift the click destination
+    // before the frame updates the reticle and its weapon target together.
+    const before = sample(); move(1000, -1000); const pending = sample(); B.advance(1 / 60, 1 / 60); const top = sample();
+    move(-1000, 1000); B.advance(1 / 60, 1 / 60); const center = sample();
+    const buttonPoint = id => { const r = document.getElementById(id).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    const out = { active: P.cursor.active, visible: P.cursor.visible, locked: document.pointerLockElement === canvas, before, pending, top, center,
+      centerX: rect.left + rect.width / 2, topY: rect.top, centerY: rect.top + rect.height / 2, width: B.renderer.size.width, height: B.renderer.size.height,
+      secondary: buttonPoint("weapon-hud"), primaryButton: buttonPoint("primary-hud"), primary: a.weapon.primaryEquipped,
+      shots: a.weapon.shotsFired, ammo: a.weapon.ammo, reticleZ: parseInt(getComputedStyle(reticle).zIndex, 10) };
+    if (document.pointerLockElement) document.exitPointerLock();
+    return out;
   })()`);
-  record("birds-eye combat: the reticle sits above HUD buttons, routes clicks to them, and does not fire through them", hudPointer.active && !hudPointer.visible && hudPointer.locked
-    && hudPointer.secondaryHit && hudPointer.primaryHit && hudPointer.primary && hudPointer.equipped && hudPointer.restored
-    && hudPointer.ammo === 30 && hudPointer.afterAmmo === hudPointer.ammo
-    && hudPointer.afterShots === hudPointer.shots && hudPointer.reticleZ >= 30, JSON.stringify(hudPointer));
+  if (!await untilPage(b, "!document.pointerLockElement", 3000)) throw Error("Pointer lock did not release before the HUD button probe");
+  await b.click(hudPointer.secondary.x, hudPointer.secondary.y);
+  const equipped = await b.evaluate(`__ooga.pilot.player.weapon.equipped`);
+  await b.click(hudPointer.primaryButton.x, hudPointer.primaryButton.y);
+  const hudAfter = await b.evaluate(`(() => { const a = __ooga.pilot.player; return { restored: a.weapon.primaryEquipped, shots: a.weapon.shotsFired, ammo: a.weapon.ammo }; })()`);
+  record("birds-eye combat: the hidden cursor shares the centerline reticle, and unlocked HUD weapon clicks do not fire through buttons", hudPointer.active && !hudPointer.visible && hudPointer.locked
+    && Object.keys(hudPointer.before).every(key => Math.abs(hudPointer.before[key] - hudPointer.pending[key]) < 0.02)
+    && [hudPointer.top, hudPointer.center].every(p => Math.abs(p.x - hudPointer.centerX) < 0.02 && Math.abs(p.reticleX - hudPointer.width / 2) < 0.02)
+    && Math.abs(hudPointer.top.y - hudPointer.topY) < 0.02 && Math.abs(hudPointer.top.reticleY) < 0.02
+    && Math.abs(hudPointer.center.y - hudPointer.centerY) < 0.02 && Math.abs(hudPointer.center.reticleY - hudPointer.height / 2) < 0.02
+    && hudPointer.primary && equipped && hudAfter.restored && hudPointer.ammo === 30 && hudAfter.ammo === hudPointer.ammo
+    && hudAfter.shots === hudPointer.shots && hudPointer.reticleZ >= 30, JSON.stringify({ before: hudPointer, equipped, after: hudAfter }));
 } };
 
 const hubBirdsEyeFloors = { name: "birds-eye lower floors", why: "regression: ramp labels reversed with the camera and the HQ ceiling cut left the basement arrow covered", run: async (b) => {
@@ -5004,7 +5092,7 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
     const pointAtLower = () => {
       S.updateWorld(root); B.renderer.render(root, B.camera, B.renderOpts);
       const p = B.renderer.project(lower.node.position.x, lower.node.position.y, lower.node.position.z, {});
-      P.hooks.onOrbit(-1e6, -1e6); P.hooks.onOrbit(p.x, p.y);
+      P.hooks.onOrbit(0, p.y - parseFloat(document.getElementById("weapon-reticle").style.top));
     };
     const aim = () => {
       pointAtLower(); B.advance(0.4, 1 / 60);
@@ -5016,11 +5104,19 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
     // This fixture exercises both owned weapons, with rounds for both firing checks.
     B.crew.configureWeapon(a, 2, 12);
     if (!P.birdsEye) { P.hooks.onZoom(100); B.advance(1, 1 / 60); }
+    // The target is south of the actor. Turn through the real birds-eye input;
+    // navigate's orbit yaw does not replace an already active overhead yaw.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "n" })); window.dispatchEvent(new KeyboardEvent("keyup", { key: "n" })); B.advance(1.5, 1 / 60);
+    const reticle = document.getElementById("weapon-reticle"), halfHeight = B.renderer.size.height / 2;
+    P.hooks.onOrbit(0, halfHeight - parseFloat(reticle.style.top));
+    const reach = Math.max(parseFloat(reticle.style.getPropertyValue("--reticle-radius")), halfHeight * 0.2);
+    for (let i = 0; i < 3; i++) P.hooks.onOrbit(-reach * Math.tan(Math.PI / 3), 0);
+    B.advance(1.5, 1 / 60);
     try {
-      P.navigate({ position: { x: 6, y: H.basement.floor, z: -Math.max(6, B.crew.meleeReach(a) + 2) }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
+      P.navigate({ position: { x: 6, y: H.basement.floor, z: -Math.max(6, B.crew.meleeReach(a) + 2) }, yaw: Math.PI, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
       P.weaponAction("weapon-primary"); B.advance(0.5, 1 / 60); const far = aim(), farBefore = lower.breakable.health;
       P.weaponAction("weapon-fire"); B.advance(0.65, 1 / 60); const farAfter = lower.breakable.health;
-      P.navigate({ position: { x: 6, y: H.basement.floor, z: -0.95 }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
+      P.navigate({ position: { x: 6, y: H.basement.floor, z: -0.95 }, yaw: Math.PI, pitch: 0.3, dist: 8 }); B.advance(0.7, 1 / 60);
       const near = aim(), beforeMelee = lower.breakable.health;
       P.weaponAction("weapon-fire"); B.advance(0.65, 1 / 60); const afterMelee = lower.breakable.health;
       const jump = { peak: 0, peakTarget: false, orangeFrames: 0 }; B.crew.jumpPlayer();
@@ -5032,7 +5128,7 @@ const hubBirdsEyeTargets = { name: "birds-eye lower-floor targets", why: "rule: 
       P.weaponAction("weapon-secondary"); B.advance(0.4, 1 / 60); const firearm = aim(), shotsBefore = a.weapon.shotsFired;
       P.weaponAction("weapon-secondary"); B.advance(0.7, 1 / 60);
       const afterShot = lower.breakable.health, shots = a.weapon.shotsFired - shotsBefore, mode = P.mode;
-      P.navigate({ position: { x: 6, y: H.basement.floor, z: -2 }, yaw: 0, pitch: 0.3, dist: 8 }); B.advance(0.5, 1 / 60);
+      P.navigate({ position: { x: 6, y: H.basement.floor, z: -2 }, yaw: Math.PI, pitch: 0.3, dist: 8 }); B.advance(0.5, 1 / 60);
       P.hooks.onZoom(100); B.advance(1, 1 / 60); aim(); const fromHeight = P.birdsEyeHeight;
       P.hooks.onZoom(0.001);
       let frames = 0; for (; frames < 120 && P.mode === "birds-eye"; frames++) { pointAtLower(); B.advance(1 / 60, 1 / 60); }
@@ -5682,7 +5778,7 @@ const factoryCanvas = { name: "factory canvas2d", why: "contract: the Canvas 2D 
   record("factory canvas2d: with WebGL2 unavailable the factory still boots and paints", r.kind === "canvas2d" && r.scene === "factory" && r.colours >= 4, JSON.stringify(r));
 } };
 
-scene("hub", { steps: [{ name: `work movement lab lanes ${1 / RATES[0]}Hz`, why: "regression: work walkers left their facing-right side of the lab lane", open: "on about 4 boots in 30 the lane targets sit on the centre or far side; unfixed", run: labLanes }, donation("hub"), hubWalking, hubMapNavigation, hubRainforestSteps, hubRoutes, hubFall, trip("hub")] });
+scene("hub", { steps: [{ name: `work movement lab lanes ${1 / RATES[0]}Hz`, why: "regression: work walkers left their facing-right side of the lab lane", open: "on about 4 boots in 30 the lane targets sit on the centre or far side; unfixed", run: labLanes }, donation("hub"), hubWalking, hubMapNavigation, hubRainforestSteps, hubRoutes, hubFall, trip("hub"), factoryActivityRouting] });
 scene("hub", { query: "ooga=portlandhodl:clank:lab,obl,lf&ooga=w-s-bitcoin:clank:lab,obl,lf&ooga=bc1gui:clank:lab,obl,lf&ooga=DrNeski:clank:lab,obl,lf&ooga=2140data:clank:lab,obl,lf", steps: [{ name: "work movement cave trips", why: "regression: off-lane cave traffic aimed through obstacles and started backwards detours", run: workCaveTrips }] });
 scene("hub", { label: "room sign", query: "pos=0", steps: [{ name: "room sign copies hash", why: "rule: tapping a room sign swings it and copies its displayed eight-character code with visible confirmation", run: async (b) => {
   const point = await b.evaluate(`(() => { const B = __ooga, sign = B.headquarters.roomSigns[0], n = sign.node; Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: (value) => { window.__roomHash = value; return Promise.resolve(); } } }); window.__roomSignBefore = sign.hits; B.pilot.release(true); B.pilot.navigate({ position: { x: n.position.x, y: n.position.y, z: n.position.z }, target: { x: n.position.x, y: n.position.y - 0.2, z: n.position.z }, yaw: n.rotation.y, pitch: 0, dist: 4 }); B.advance(0.6, 1 / 60); return B.project(n.position.x, n.position.y - 0.2, n.position.z, {}); })()`);

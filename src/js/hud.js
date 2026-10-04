@@ -193,6 +193,10 @@
       modeFace: $("mode-face-icon"),
       modeHealth: $("mode-health"),
       modeHealthFill: $("mode-health-fill"),
+      ownOoga: $("own-ooga-hud"),
+      ownOogaFace: $("own-ooga-face-icon"),
+      ownOogaHealth: $("own-ooga-health"),
+      ownOogaHealthFill: $("own-ooga-health-fill"),
       modeDestinations: $("detached-destinations"),
       modeDestinationName: $("detached-destination-name"),
       modeDestinationDots: [...document.querySelectorAll("[data-detached-preset]")],
@@ -277,6 +281,7 @@
     el.primary.hidden = true;
     el.gorillaSmash.hidden = true;
     el.mode.hidden = true;
+    el.ownOoga.hidden = true;
     el.weapon.hidden = true;
     el.magazine.hidden = true;
     el.jetpack.hidden = true;
@@ -417,8 +422,49 @@
     const nextDetachedView = () => DETACHED_PRESETS[(DETACHED_PRESETS.indexOf(detachedPreset) + 1) % DETACHED_PRESETS.length];
     let gorillaEntry = null, gorillaView = "orbit", gorillaCombat = false;
     let modeName = "", modeGeometry = null, modeSelected = false, modeCombat = false, modeView = "detached", modeHealth = -1, modeHealthMax = 0, modeGorilla = false;
+    let modeCave = null, modeVisible = true, ownOoga = null, ownPortraitCave = null, ownGeometry = null, ownPortraitGeometry = null, ownHealth = -1, ownHealthMax = 0;
+    const syncOwnOoga = () => {
+      const shown = modeVisible && !!ownOoga && ownOoga !== modeCave;
+      if (el.ownOoga.hidden === shown) el.ownOoga.hidden = !shown;
+      if (!shown) return;
+      const geometry = ownOoga.parts.head.geometry, portraitGeometry = ownOoga.portraitHead;
+      if (ownOoga !== ownPortraitCave || geometry !== ownGeometry || portraitGeometry !== ownPortraitGeometry) {
+        renderFaceIcon(el.ownOogaFace, ownOoga);
+        el.ownOoga.dataset.portrait = "face-crop";
+        if (ownOoga !== ownPortraitCave) {
+          const label = `Return to ${ownOoga.traits.display}, your Ooga`;
+          el.ownOoga.setAttribute("aria-label", label);
+          el.ownOoga.title = label;
+        }
+        ownPortraitCave = ownOoga;
+        ownGeometry = geometry;
+        ownPortraitGeometry = portraitGeometry;
+      }
+      const source = ownOoga.health, max = source ? source.max : BL.crew.HEALTH_MAX;
+      const health = source ? Math.max(0, Math.min(max, source.value)) : max;
+      if (health !== ownHealth || max !== ownHealthMax) {
+        ownHealth = health; ownHealthMax = max;
+        el.ownOogaHealthFill.style.transform = `scaleY(${health / max})`;
+        el.ownOogaHealth.setAttribute("aria-valuemax", String(max));
+        el.ownOogaHealth.setAttribute("aria-valuenow", String(Math.ceil(health)));
+      }
+    };
+    const setOwnOoga = (cave) => {
+      if (cave !== ownOoga) {
+        ownOoga = cave;
+        if (!cave) {
+          ownPortraitCave = ownGeometry = ownPortraitGeometry = null;
+          ownHealth = -1; ownHealthMax = 0;
+          el.ownOogaFace.width = ICON_PX;
+        }
+      }
+      syncOwnOoga();
+    };
     const setMode = (cave, combat = false, view = cave ? "orbit" : "detached", visible = true) => {
       const gorilla = gorillaEntry ? gorillaEntry.gorilla : null;
+      modeCave = gorilla ? null : cave;
+      modeVisible = visible;
+      syncOwnOoga();
       if (gorilla) { cave = gorillaEntry.owner; combat = gorillaCombat; view = gorillaView; visible = true; }
       const selected = !!cave, name = selected ? cave.traits.name : "", shown = selected ? cave.traits.display : "";
       if (!visible) fadeDetachedName(true);
@@ -682,7 +728,7 @@
       el.jetpackFuelValue.firstChild.data = `${percent}%`;
     };
     const setGorilla = (entry, view = "orbit", combat = false) => {
-      if (entry === gorillaEntry && view === gorillaView && combat === gorillaCombat) return;
+      if (entry === gorillaEntry && view === gorillaView && combat === gorillaCombat) { syncOwnOoga(); return; }
       if (entry !== gorillaEntry) finishPrimary(true);
       gorillaEntry = entry;
       gorillaView = view;
@@ -1627,6 +1673,7 @@
       tooltip.hide();
       clearModeHold();
       modePointer = -1;
+      setOwnOoga(null);
       setGorilla(null);
       setMode(null, false, "detached", false);
       setPrimary(false, false, null);
@@ -1642,7 +1689,7 @@
       el.board.classList.remove("board-floating");
       el.board.removeAttribute("style");
     };
-    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, restoreBoards, setRosterRow, setMeter, setStats, setAct, setMode, setGorilla, setGorillaSmashPower, setDetachedView, fadeDetachedName, setAreaLabel, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
+    return { el, openFeed, closeFeed, openRecipe, closeRecipe, dismissOutside, openBoard, closeBoard, updateBoard, restoreBoards, setRosterRow, setMeter, setStats, setAct, setMode, setOwnOoga, setGorilla, setGorillaSmashPower, setDetachedView, fadeDetachedName, setAreaLabel, setPrimary, setWeapon, setMagazine, setJetpack, setSubtitle, onAction, toast, tooltip, hint, hideHint, letterSign, selectTab, onPreset, onIdentityChange, setIdentity, setDonationUrl, onAssign, onUnassign, renderInventory, dispose };
   };
   // The account line in the sheet's foot is page-level: shown only when a backend answered, and
   // the director hands every change of `BL.net.state` here, whichever scene is active.
