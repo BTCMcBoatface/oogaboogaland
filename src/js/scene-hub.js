@@ -1403,7 +1403,7 @@
   const addLamp = (node, kind, x, y, z, light = true, order = lamps.length, id = `lamp:${lamps.length}`) => {
     node.glow = LAMP_OFF;
     node.flare = 0;
-    const lamp = { node, kind, x, y, z, light, order, id, k: 0, lit: false, selected: false, approximated: false, debug: null };
+    const lamp = { node, kind, x, y, z, light, order, id, k: 0, lit: false, selected: false, approximated: false, debug: null, reach: 0, gain: 1, far: false };
     lamps.push(lamp);
     return lamp;
   };
@@ -1430,6 +1430,11 @@
       if (l.kind.hide) node.visible = lit;
       l.selected = false;
       l.approximated = false;
+      // A lamp with a reach lights a place shut in under the Mempool island's rock. It lights nothing that is
+      // seen from above that ground or from further off than its reach, and every light costs every pixel, so it
+      // counts only as the view goes under (`poolShade`), while the lamps of the open air fade out there.
+      l.gain = l.reach > 0 ? poolShade : 1 - poolShade;
+      l.far = l.gain < 0.02 || l.reach > 0 && (l.x - camera.target.x) ** 2 + (l.y - camera.target.y) ** 2 + (l.z - camera.target.z) ** 2 > l.reach * l.reach;
       if (l.debug) {
         l.debug.factor = k;
         l.debug.lit = lit;
@@ -1443,7 +1448,7 @@
       let nearest = null, distance = Infinity;
       for (let i = 0; i < lamps.length; i++) {
         const l = lamps[i];
-        if (!l.lit || !l.light || l.selected) continue;
+        if (!l.lit || !l.light || l.selected || l.far) continue;
         const dx = l.x - camera.target.x, dy = l.y - camera.target.y, dz = l.z - camera.target.z;
         const score = dx * dx + dy * dy + dz * dz - (l.centerLight ? 16 : 0);
         if (score < distance) { nearest = l; distance = score; }
@@ -1458,14 +1463,14 @@
       lights[o + 1] = l.y;
       lights[o + 2] = l.z;
       lights[o + 3] = kind.radius + (l.pileProfile ? RENDER_OPTS.lampFactor * PILE_POST_NIGHT_REACH : 0);
-      lights[o + 4] = kind.r * l.k * boost;
-      lights[o + 5] = kind.g * l.k * boost;
-      lights[o + 6] = kind.b * l.k * boost;
+      lights[o + 4] = kind.r * l.k * boost * l.gain;
+      lights[o + 5] = kind.g * l.k * boost * l.gain;
+      lights[o + 6] = kind.b * l.k * boost * l.gain;
       lights[o + 7] = l.pileProfile ? 1 : 0;
     }
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i];
-      if (!l.lit || !l.light || l.selected) continue;
+      if (!l.lit || !l.light || l.selected || l.far) continue;
       l.approximated = true;
       if (l.debug) l.debug.approximated = true;
       if (approximated < LIGHT_CAPACITY) LIGHTING_DEBUG.approximatedIds[approximated] = l.id;
@@ -2385,14 +2390,17 @@
     };
     // Under the ground a torch has a tunnel or the chamber to light by itself, so it reaches further than one
     // outdoors; and the lake lights the chamber from above, blue through its membrane.
-    const TUNNEL_TORCH = { ...LAMP.torch, radius: 10 }, CHAMBER_TORCH = { ...LAMP.torch, radius: 13 }, LAKE_LIGHT = { r: 0.3, g: 0.55, b: 1, radius: 15, glow: 0, hide: false };
+    // They burn always, and each counts as a light only for a view under this ground and within LAMP_REACH past
+    // its own radius: from the home island the thirteen of them cost every pixel on screen and lit nothing in sight.
+    const TUNNEL_TORCH = { ...LAMP.torch, radius: 10 }, CHAMBER_TORCH = { ...LAMP.torch, radius: 13 }, LAKE_LIGHT = { r: 0.3, g: 0.55, b: 1, radius: 15, glow: 0, hide: false }, LAMP_REACH = 6;
+    const shutIn = (lamp) => { lamp.always = true; lamp.reach = lamp.kind.radius + LAMP_REACH; };
     const wallTorch = (x, y, z, ry, id, kind) => {
       const node = fitting(P.wallTorch(), x, y, z, ry);
       node.matrixEmissiveLiving = true;
       // The flame stands 0.46 out from the wall and 0.92 up its bracket.
-      addLamp(node, kind, worldX(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), place.y + y + 0.92, worldZ(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), true, 0, id).always = true;
+      shutIn(addLamp(node, kind, worldX(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), place.y + y + 0.92, worldZ(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), true, 0, id));
     };
-    addLamp({ glow: 0, flare: 0, visible: true }, LAKE_LIGHT, place.x, place.y - L.MEMBRANE_DEPTH - 1.6, place.z, true, 0, "pool:lake").always = true;
+    shutIn(addLamp({ glow: 0, flare: 0, visible: true }, LAKE_LIGHT, place.x, place.y - L.MEMBRANE_DEPTH - 1.6, place.z, true, 0, "pool:lake"));
     {
       const point = {};
       for (let s = 14.5, n = 0; s < L.RAMP.length - 3; s += 11, n++) {
