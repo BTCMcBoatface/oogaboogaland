@@ -1287,9 +1287,10 @@
     return false;
   };
   const sleepMarksVisible = (cave, x, y, z) => {
-    // Nobody's sleep is seen through the Mempool island's rock from the tunnels and the chamber inside it.
+    // Nobody's sleep is seen through the Mempool island's rock: not from the tunnels and the chamber inside it,
+    // and not a gorilla's in its nest from under the island or beyond its cliffs.
     if (poolShade > 0.5) return false;
-    if (!cave) return sleepSightAt(x, y, z);
+    if (!cave) return sleepSightAt(x, y, z) && mempoolIsland.sightClear(camera.position.x, camera.position.y, camera.position.z, x, y, z);
     const bed = cave.bedroll;
     if (cave.state !== "sleeping" || cave.bedTravel.mode !== "rest" || !bed || bed.sleeper !== cave) return false;
     if (bed.sightFrame === sleepSightFrame) return bed.sightVisible;
@@ -2592,9 +2593,19 @@
         return true;
       }
     };
+    // Whether nothing of the island's own rock stands between two world points, sampled through its grid.
+    const sightClear = (ax, ay, az, bx, by, bz) => {
+      const x0 = localX(ax, az), z0 = localZ(ax, az), x1 = localX(bx, bz), z1 = localZ(bx, bz), y0 = ay - place.y, y1 = by - place.y;
+      const steps = Math.min(200, Math.ceil(Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 0.6));
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        if (L.solidAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, z0 + (z1 - z0) * t)) return false;
+      }
+      return true;
+    };
     // What is walked on here rather than walked round: the bridge and the island's own ground in all its pieces.
     const walked = new Set([site.bridge, site.ground, site.floor, site.membrane, ...site.crossings]);
-    return { site, place, centre, groundAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, floatAt, afloat, walked, layout: L, preview };
+    return { site, place, centre, groundAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, sightClear, floatAt, afloat, walked, layout: L, preview };
   };
   // Where the gorillas sleep while their Oogas do: the banana-leaf beds of the Mempool island's nests, and the dry
   // way to each from the home island, as x, z pairs: up the approach stair, over the bridge, across the court,
