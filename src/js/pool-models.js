@@ -121,6 +121,38 @@
     for (const f of geo.faces) f.supportOnly = true;
     return geo;
   });
+  // Behind the chamber's floor, wall and roof, inside the rock: where the mesher's faces meet at a T a pixel can
+  // fall between them, and in a dark room it would show the sky beyond the island. The wall's pieces are laid
+  // only where the layout is solid, so none stands in the window or where the descent comes in.
+  const chamberBacking = cached(() => {
+    const geo = { verts: [], faces: [], lines: [] }, N = 96, STEP = Math.PI * 2 / N, tone = hexToRgb(L.PALETTE[L.M.earthDark]);
+    const wallR = L.CHAMBER_R + 0.6, low = L.FLOOR - 0.25, high = L.LEVEL.shore - 1.25;
+    // The wall is tried a row of cells at a time, from the row under the floor.
+    const base = L.FLOOR - L.UNIT, rows = Math.ceil((high - base) / L.UNIT);
+    const at = (bearing, r, y) => pushVert(geo, Math.sin(bearing) * r, y, Math.cos(bearing) * r);
+    const rock = (b0, y) => {
+      for (let k = 0; k <= 4; k++) if (!L.solidAt(Math.sin(b0 + STEP * k / 4) * wallR, y, Math.cos(b0 + STEP * k / 4) * wallR)) return false;
+      return true;
+    };
+    for (let n = 0; n < N; n++) {
+      const b0 = n * STEP, b1 = b0 + STEP;
+      if (n % 3 === 0) {
+        const c0 = b0, c1 = b0 + STEP * 3;
+        face(geo, [at(c0, L.SHAFT_R + 0.6, low), at(c0, wallR, low), at(c1, wallR, low), at(c1, L.SHAFT_R + 0.6, low)], tone);
+        face(geo, [at(c0, L.LAKE_R + 0.5, high), at(c1, L.LAKE_R + 0.5, high), at(c1, wallR, high), at(c0, wallR, high)], tone);
+      }
+      for (let j = 0, from = -1; j <= rows; j++) {
+        const solid = j < rows && rock(b0, base + (j + 0.5) * L.UNIT);
+        if (solid && from < 0) from = j;
+        if (!solid && from >= 0) {
+          const y0 = Math.max(low, base + from * L.UNIT), y1 = Math.min(high, base + j * L.UNIT);
+          face(geo, [at(b0, wallR, y1), at(b1, wallR, y1), at(b1, wallR, y0), at(b0, wallR, y0)], tone);
+          from = -1;
+        }
+      }
+    }
+    return noShadow(geo);
+  });
   // The lake's underside, hung in the hole in the ground: a bowl level with the spill crest at its rim and
   // MEMBRANE_DEPTH lower in the middle. Drawn as glass from both sides, so the chamber looks up through it at
   // whoever floats above; walked on as a thin closed shell, so no one falls through it and nothing passes it.
@@ -824,6 +856,8 @@
     const floorNode = createNode({ geometry: rampFloor() });
     const bridgeNode = createNode({ position: { x: 0, y: 0, z: place.bridgeLocalZ }, geometry: bridge() });
     const membraneNode = createNode({ geometry: membrane(), sightHidden: true });
+    // Canvas 2D sorts by depth alone: the bias draws the backing before everything it lies behind.
+    const backingNode = createNode({ geometry: chamberBacking(), sightHidden: true, depthBias: 60 });
     // One crossing where the ring path meets each channel.
     const pathR = (L.RING.lowland + L.RING.path) / 2;
     const crossings = L.CHANNELS.map((channel) => createNode({
@@ -840,12 +874,12 @@
       const r = L.RAMP.r + side * (L.RAMP.half + 0.9), b = L.RAMP.start - 0.07;
       return createNode({ position: { x: Math.sin(b) * r, y: L.LEVEL.court, z: Math.cos(b) * r }, geometry: torchPost(), matrixEmissiveLiving: true });
     });
-    addChild(node, groundNode, floorNode, bridgeNode, membraneNode, signNode, ...crossings, ...beds, ...torches);
+    addChild(node, groundNode, floorNode, bridgeNode, membraneNode, backingNode, signNode, ...crossings, ...beds, ...torches);
     return { node, ground: groundNode, floor: floorNode, bridge: bridgeNode, membrane: membraneNode, sign: signNode, crossings, beds, torches };
   };
 
   BL.poolModels = {
-    SITE, UNIT, BEARING, DIR, WATER, FOAM, spot, build, latheBy, islet, rampFloor, membrane, crossing, CROSSING, NEST_BEDS, bridge, caveSign, torchPost, wallTorch, VEINS, roots,
+    SITE, UNIT, BEARING, DIR, WATER, FOAM, spot, build, latheBy, islet, rampFloor, membrane, chamberBacking, crossing, CROSSING, NEST_BEDS, bridge, caveSign, torchPost, wallTorch, VEINS, roots,
     TORCH_STEM_H, carve, carveCells, panelFrom, chainBoard, CHAIN_BOARD, infoSign, INFO_SIGN, CANOPY, fern, shrub, mossRock, deckY,
     beastRig, flowers, log,
     COLORS: { LEAF, LEAF_DK, LEAF_LT, BARK, BARK_LT, STONE, STONE_DK, MOSS, WET, GOLD }

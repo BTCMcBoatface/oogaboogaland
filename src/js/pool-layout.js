@@ -59,6 +59,9 @@
   const ORIGIN = { x: -27, y: -29, z: -27 }, SX = 108, SY = 68, SZ = 108;
   const M = { grass: 1, grassDark: 2, loam: 3, stone: 4, stoneDark: 5, path: 6, mud: 7, bed: 8, earth: 9, earthDark: 10, nest: 11, floor: 12, moss: 13 };
   const PALETTE = [null, "#3f7d34", "#346d2c", "#5a4530", "#6f6f6a", "#54544f", "#7a6243", "#5e5138", "#3f4a50", "#5b4630", "#4c3a28", "#4a6b2c", "#5e4a33", "#4d6540"];
+  // Every tone a second time under its own number: two cells of one colour that the mesher keeps as two faces.
+  const TWIN = PALETTE.length - 1;
+  PALETTE.push(...PALETTE.slice(1));
 
   const wrap = (a) => {
     a %= TAU;
@@ -178,6 +181,13 @@
       let highest = -Infinity;
       // Tones come in patches a few metres across and courses a metre and a half deep, never a speckle of cells.
       const bx = Math.floor(x / 2), bz = Math.floor(z / 2), sector = Math.floor(c.bearing / TAU * 28), stony = c.ledge || c.r > edgeAt(c.bearing) - 1.5;
+      // The wall a painting lies on is cut into metre squares: the Canvas 2D renderer sorts whole faces by depth,
+      // and one long face would draw over half the paint.
+      let wall = NaN;
+      for (const stop of STOPS) {
+        const along = x * Math.sin(stop) + z * Math.cos(stop), across = x * Math.cos(stop) - z * Math.sin(stop);
+        if (Math.abs(across) < STOP.half && along > CHAMBER_R && along < CHAMBER_R + UNIT) wall = Math.floor(across);
+      }
       for (let j = 0; j < SY; j++) {
         const y = ORIGIN.y + (j + 0.5) * UNIT;
         if (y > c.top || y < c.bottom) continue;
@@ -192,6 +202,7 @@
           const band = hash(stony ? sector : bx, Math.floor(y / 1.5), stony ? 3 : bz) % 100;
           material = band < 28 ? M.stoneDark : stony && band > 88 ? M.moss : M.stone;
         }
+        if (wall === wall && y > FLOOR && (wall + Math.floor(y)) & 1) material += TWIN;
         data[(i * SY + j) * SZ + k] = material;
         highest = y + UNIT / 2;
       }

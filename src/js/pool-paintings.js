@@ -183,7 +183,8 @@
     const stops = L.STOPS.map((bearing, i) => {
       const def = PAGES[i], sx = Math.sin(bearing), cz = Math.cos(bearing);
       // The panel is cut facing +z with x to its right: turned to face the room, x runs to the reader's right.
-      const node = createNode({ position: { x: sx * WALL + cz * width / 2, y: FOOT, z: cz * WALL - sx * width / 2 }, rotation: { x: 0, y: bearing + Math.PI, z: 0 }, sightHidden: true, glow: PIGMENT });
+      // The Canvas 2D renderer sorts faces by depth alone: the bias keeps the paint in front of the wall it lies on.
+      const node = createNode({ position: { x: sx * WALL + cz * width / 2, y: FOOT, z: cz * WALL - sx * width / 2 }, rotation: { x: 0, y: bearing + Math.PI, z: 0 }, sightHidden: true, glow: PIGMENT, depthBias: -0.6 });
       addChild(site.node, node);
       const boardCanvas = document.createElement("canvas");
       boardCanvas.width = W; boardCanvas.height = H;
