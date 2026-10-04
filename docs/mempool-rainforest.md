@@ -32,6 +32,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140. Its five images a
 | Beds | 20 (4 on each of 5 nests) for a roster of 16 | `poolLayout.SLOTS` |
 | Bed choice | dealt once a UTC day by `fnv1a` of day, name and bed, in roster order | `clankers.js` `bedsToday` |
 | Sleep trip stall fallback | 25 s | `clankers.js` `SLEEP_STALL` |
+| Underground lamps count as lights | only for a view under the island's ground, within 6 m past the lamp's radius | `scene-hub.js` `LAMP_REACH`, `poolShade` |
 
 ## Verification actually performed
 
@@ -54,7 +55,12 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140. Its five images a
   - One earlier run was lost to the machine: Chrome hung in every session (driver timeouts, no assertion), as it then did on `rock`'s own page, until the machine was restarted. Those timeouts cleared in the runs since.
 - Fixed during the session after the suite caught them: `rainforest approach` (gorillas commuting over the bridge at each donation), `lab work` (its sleeper now frees its bench at once; the check counts coworkers and no longer the gorilla walking out to bed).
 - Canvas 2D (`?canvas2d=1`), in screenshots: the court and the flooded lake, the chamber with the lake seen through the membrane, and all of a painting's rows in front of its wall (the paintings carry `depthBias` and their walls are cut small for that renderer's depth sort).
-- Not done: a person playing it, the performance lane (`npm run test:perf`; the machine was never quiet enough to trust its number), a real phone, two signed-in pages together.
+- `npm run test:perf` (M1 Pro, 1920x1080 at twice the pixel density, this branch and unchanged `rock` run alternately):
+  - **Ordinary movement passes**: 59.8 to 60.0 fps at high quality, as `rock` does (59.4 to 60.0).
+  - **Moving behind cave walls during a donation fails on this machine on both alike**: 31 to 36 fps here, 32.5 to 33.7 on `rock`, the 2D overlay taking about 40 ms a frame at that size. It is this machine's limit and it has printed STOP; it wants the maintainer's machine.
+  - **It found a real regression, now fixed.** The island's thirteen tunnel and chamber lamps burn always and counted as point lights from anywhere, so at noon the home island drew fourteen lights where `rock` draws one; every pixel pays for each light, and the ordinary pass ran at 52.6 fps after the page had dropped itself to low quality. Each such lamp now counts only for a view under the island's ground and within `LAMP_REACH` past its own radius, fading in with `poolShade`, while the open air's lamps fade out there (`updateLamps` in `scene-hub.js`).
+  - Standing on the island at the same size and high quality, on this machine: the ring path among the trees and the middle of the descent hold 60 fps; the court looking back over both islands runs at 51 to 55 and the chamber at about 52 (six lights), where the governor steps down a tier. The island is 481k triangles in 309 nodes: 308k in 39 canopy trees, 117k in 100 undergrowth plants.
+- Not done: a person playing it, a real phone, two signed-in pages together.
 
 ## Known limits and things to play-test
 
