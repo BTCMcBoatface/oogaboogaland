@@ -2316,10 +2316,11 @@
     fx.sayAt(beast.wx, beast.wy + (kind === "toucan" ? 0.9 : 1.1), beast.wz, cries[fnv1a(`${kind}/${Math.floor(now * 3)}`) % cries.length], 1.8);
     mempoolIsland.wildlife.startle(beast);
   };
-  // The Mempool island off the west rim: jungle floor, a vine bridge and the cave that reads the
-  // chain. Everything solid, so an Ooga walks across and in. The scatter is claimed off the crossing.
+  // The Mempool island off the east rim: a rainforest round a lake, a vine bridge, and the tunnels and chamber
+  // under the lake. Everything solid, so an Ooga walks across, in and all the way down without a scene change.
+  // `pool-layout.js` says where everything is; the scatter is claimed off the crossing.
   const buildMempoolIsland = () => {
-    const P = poolModels, S = P.SITE, DIR = P.DIR, SITE_SHAFT_REACH = S.shaftR + 1.2;
+    const P = poolModels, S = P.SITE, DIR = P.DIR, L = BL.poolLayout;
     // How much ground an animal keeps to itself, measured against each plant's own footprint.
     const BEAST_CLEAR = 1.3;
     const place = P.spot(island, {});
@@ -2329,20 +2330,23 @@
     const cos = Math.cos(place.ry), sin = Math.sin(place.ry);
     const worldX = (lx, lz) => place.x + lx * cos + lz * sin;
     const worldZ = (lx, lz) => place.z - lx * sin + lz * cos;
+    const localX = (wx, wz) => (wx - place.x) * cos - (wz - place.z) * sin;
+    const localZ = (wx, wz) => (wx - place.x) * sin + (wz - place.z) * cos;
     const atNode = (kind, node, radius) => addProp(kind, node, worldX(node.position.x, node.position.z), worldZ(node.position.x, node.position.z), radius);
     addChild(root, site.node);
     placed.push(site.node);
     addTerrainSection(site.ground.geometry.cutawaySource, site.node, place.y);
-    solids.add(site.ground);
+    // The body, the smooth floors laid over its steps, the lake's membrane and the plank crossings are all walked on.
+    for (const node of [site.ground, site.floor, site.membrane, ...site.crossings]) solids.add(node);
+    site.floor.sightHidden = true;
+    for (const node of site.crossings) node.sightHidden = true;
     addProp("poolbridge", site.bridge, worldX(0, place.bridgeLocalZ + S.span / 2), worldZ(0, place.bridgeLocalZ + S.span / 2), S.width);
     addLamp(site.bridge, LAMP.lantern, worldX(0, place.bridgeLocalZ), place.y + 3.4, worldZ(0, place.bridgeLocalZ), false, 0, "poolbridge:lanterns").nightOnly = true;
-    atNode("poolstair", site.stair, SITE_SHAFT_REACH);
     atNode("poolsign", site.sign, 1.4);
-    // The bridge arrives along local +z and the cave sign stands between it and the hole, so both boards
-    // go on the far side at -z: with no turn at all their faces already look back up the crossing. They
-    // stand a little apart and toe in, so from the bridge head the pair reads as one post.
-    const B = P.CHAIN_BOARD;
-    const boardNode = createNode({ position: { x: 0, y: 0, z: -(S.shaftR + 2.6) }, geometry: P.chainBoard() });
+    // The chain board stands along the court's far edge, turned to the bridge, with the weather key at the lake end
+    // of the court: both are read on the way in, before the forest closes round the path.
+    const B = P.CHAIN_BOARD, boardBearing = L.COURT.from + 0.05;
+    const boardNode = createNode({ position: { x: Math.sin(boardBearing) * 17.7, y: L.LEVEL.court, z: Math.cos(boardBearing) * 17.7 }, rotation: { x: 0, y: Math.PI / 2 + boardBearing, z: 0 }, geometry: P.chainBoard() });
     // The panel is centred on the face from the board's own numbers, so resizing the board moves it.
     const panelNode = createNode({
       position: { x: -CHAIN_PANEL_W * B.px / 2, y: B.y + (B.h - CHAIN_PANEL_H * B.px) / 2, z: B.d / 2 + 0.02 }
@@ -2350,10 +2354,8 @@
     addChild(boardNode, panelNode);
     addChild(site.node, boardNode);
     atNode("chainsign", boardNode, B.w * 0.55);
-    // A small post beside it: the weather is the other half of what the chain is saying here.
-    const infoNode = createNode({
-      position: { x: B.w / 2 + 1, y: 0, z: -(S.shaftR + 2.6) }, rotation: { x: 0, y: -0.3, z: 0 }, geometry: P.infoSign()
-    });
+    // A small post beside the way to the lake: the weather is the other half of what the chain is saying here.
+    const infoNode = createNode({ position: { x: Math.sin(-0.17) * 14.4, y: L.LEVEL.court, z: Math.cos(-0.17) * 14.4 }, rotation: { x: 0, y: 0.25, z: 0 }, geometry: P.infoSign() });
     addChild(site.node, infoNode);
     atNode("weathersign", infoNode, 1);
     {
@@ -2363,58 +2365,111 @@
       // willReadFrequently: every refresh reads the panel back, and without it Chrome warns.
       chainSign = { node: panelNode, ctx2d: canvas.getContext("2d", { alpha: false, willReadFrequently: true }), printed: "" };
     }
-    for (const torch of site.torches) atNode("torch", torch, 0.5);
+    // Fire: the two torches of the court either side of the mouth, then one down each stretch of the descent on the
+    // wall its veins leave free, and four round the chamber between the paintings. The ones under the ground burn
+    // always; all of them join the lamps, so whichever are nearest the view cast the light a tier allows.
+    for (const torch of site.torches) {
+      atNode("torch", torch, 0.5);
+      addLamp(torch, LAMP.torch, worldX(torch.position.x, torch.position.z), place.y + torch.position.y + 1.75, worldZ(torch.position.x, torch.position.z), true, 0, `pool:court:${lamps.length}`);
+    }
+    const fitting = (geometry, x, y, z, ry) => {
+      const node = createNode({ position: { x, y, z }, rotation: { x: 0, y: ry, z: 0 }, geometry, sightHidden: true });
+      addChild(site.node, node);
+      return node;
+    };
+    const wallTorch = (x, y, z, ry, id) => {
+      const node = fitting(P.wallTorch(), x, y, z, ry);
+      node.matrixEmissiveLiving = true;
+      // The flame stands 0.46 out from the wall and 0.92 up its bracket.
+      addLamp(node, LAMP.torch, worldX(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), place.y + y + 0.92, worldZ(x + Math.sin(ry) * 0.46, z + Math.cos(ry) * 0.46), true, 0, id).always = true;
+    };
+    {
+      const point = {};
+      for (let s = 14.5, n = 0; s < L.RAMP.length - 3; s += 11, n++) {
+        const side = n % 2 ? -1 : 1;
+        L.rampPoint(s, side * (L.rampHalf(s / L.RAMP.r) - 0.02), point);
+        wallTorch(point.x, point.y + 1.55, point.z, point.bearing + (side > 0 ? Math.PI : 0), `pool:ramp:${n}`);
+      }
+      for (let k = 0; k < 4; k++) {
+        const bearing = Math.PI / 4 + k * Math.PI / 2, r = L.CHAMBER_R - 0.05;
+        wallTorch(Math.sin(bearing) * r, L.FLOOR + 1.9, Math.cos(bearing) * r, bearing + Math.PI, `pool:chamber:${k}`);
+      }
+      // Roots hang through the roof just inside the mouth and inside each door.
+      L.rampPoint(2.4, 0, point);
+      fitting(P.roots(), point.x, point.y + L.RAMP.head - 0.05, point.z, point.bearing);
+      for (const door of L.DOORS) {
+        L.rampPoint(door.at * L.RAMP.length, L.RAMP.bay + 1.2, point);
+        fitting(P.roots(), point.x, point.y + L.DOOR.height - 0.05, point.z, point.bearing);
+      }
+    }
+    // Where an animal may stand and walk: the forest floor and the ring path, never a nest, a channel, the court,
+    // the shore or the ledge.
+    const beastGround = (x, z) => L.groundAt(x, z);
+    const beastSpot = (x, z) => {
+      if (L.groundAt(x, z) !== L.LEVEL.ground || Math.hypot(x, z) < L.RING.lowland + 0.4) return false;
+      const d = L.turn(Math.atan2(x, z), 0);
+      return !(d > L.COURT.from - 0.2 && d < L.RAMP.start + 0.2 && Math.hypot(x, z) > L.RING.path - 0.5);
+    };
     // The animals' starting spots are claimed before the scatter, so no plant is seeded where one stands; they
     // come alive once the forest is placed (`pool-wildlife.js`), since they walk round its trunks and climb them.
-    const ANIMALS = [
-      ["jaguar", -7.4, 5.2, 2.1], ["jaguar", 8.1, 6.6, -0.6],
-      ["monkey", 5.6, -7.8, 1.2], ["monkey", -8.6, -3.4, -2.3],
-      ["toucan", -4.2, -8.6, 0.4], ["toucan", 9.4, 1.8, 2.7]
-    ];
+    const beastRand = mulberry32(4343), ANIMALS = [];
+    for (const kind of ["jaguar", "jaguar", "monkey", "monkey", "toucan", "toucan"]) {
+      for (let n = 0; n < 200; n++) {
+        const a = beastRand() * Math.PI * 2, r = L.RING.lowland + 1 + beastRand() * (S.isletR - L.RING.lowland - 2), x = Math.sin(a) * r, z = Math.cos(a) * r;
+        if (!beastSpot(x, z) || L.keptClear(x, z, -0.2) && r > L.RING.path || ANIMALS.some((b) => Math.hypot(x - b[1], z - b[2]) < 6)) continue;
+        ANIMALS.push([kind, x, z, beastRand() * Math.PI * 2]);
+        break;
+      }
+    }
     const claimed = ANIMALS.map(([, x, z]) => ({ x, z, r: BEAST_CLEAR }));
-    // What the animals keep off, in the island group's frame: the stairwell, the pond, the boards, the cave
-    // sign and its torches, then every trunk, rock and log the scatter places.
+    // What the animals keep off, in the island group's frame: the boards and the sign, then every trunk, rock and
+    // log the scatter places.
     const obstacles = [
-      { x: 0, z: 0, r: S.shaftR + 1.2 }, { x: 6.4, z: -4.6, r: 2.8 },
-      { x: -2.6, z: -(S.shaftR + 2.6), r: 1.1 }, { x: 0, z: -(S.shaftR + 2.6), r: 1.1 }, { x: 2.6, z: -(S.shaftR + 2.6), r: 1.1 }, { x: B.w / 2 + 1, z: -(S.shaftR + 2.6), r: 0.7 },
-      { x: 0, z: S.shaftR + 2.1, r: 1.3 }, { x: -(S.shaftR + 1.5), z: S.shaftR * 0.7, r: 0.4 }, { x: S.shaftR + 1.5, z: S.shaftR * 0.7, r: 0.4 }
+      { x: boardNode.position.x, z: boardNode.position.z, r: B.w / 2 }, { x: infoNode.position.x, z: infoNode.position.z, r: 0.7 },
+      { x: site.sign.position.x, z: site.sign.position.z, r: 1.3 }
     ];
     const trees = [], logs = [];
     // Rainforest: three canopy heights, ferns and shrubs under them, each species one shared geometry
     // and one prop kind, so every plant answers a tap the way the home island's own scatter does.
-    // `r` is both the footprint it claims and the radius a pointer picks it by.
+    // `r` is both the footprint it claims and the radius a pointer picks it by; `clear` is how far it
+    // keeps off the paths, the nests, the channels and the court, so only its crown ever reaches over them.
     const SCATTER = [
-      { upTo: 0.30, kind: "canopy", r: 0.6 },
-      { upTo: 0.50, kind: "bush", r: 0.55 },
-      { upTo: 0.72, kind: "poolfern", r: 0.5 },
-      { upTo: 0.88, kind: "flower", r: 0.6 },
-      { upTo: 0.95, kind: "poolrock", r: 0.7 },
-      { upTo: 2, kind: "poollog", r: 1.7 }
+      { upTo: 0.36, kind: "canopy", r: 0.6, clear: 0.55 },
+      { upTo: 0.54, kind: "bush", r: 0.55, clear: 0.35 },
+      { upTo: 0.76, kind: "poolfern", r: 0.5, clear: 0.2 },
+      { upTo: 0.88, kind: "flower", r: 0.6, clear: 0.3 },
+      { upTo: 0.95, kind: "poolrock", r: 0.7, clear: 0.7 },
+      { upTo: 2, kind: "poollog", r: 1.7, clear: 1.6 }
     ];
     const rand = mulberry32(4242);
     const geometryFor = (kind) => kind === "canopy" ? P.CANOPY[(rand() * P.CANOPY.length) | 0]()
       : kind === "bush" ? P.shrub() : kind === "poolfern" ? P.fern() : kind === "flower" ? P.flowers()
       : kind === "poolrock" ? P.mossRock() : P.log();
-    for (let i = 0; i < 74; i++) {
-      const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * (S.isletR - 1.6);
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      // Keep the stairwell, its approach from the bridge and the pond clear.
-      if (Math.hypot(x, z) < S.shaftR + 4) continue;
-      if (Math.abs(x) < S.width / 2 + 2.1 && z > 0) continue;
-      if (Math.hypot(x - 6.4, z + 4.6) < 3.2) continue;
-      const roll = rand();
-      const pick = SCATTER.find((e) => roll < e.upTo);
-      // Nothing grows through an animal. Plants still crowd each other, which is what makes it jungle.
+    const inner = L.RING.lowland * L.RING.lowland, outer = (S.isletR + 0.8) * (S.isletR + 0.8), trunks = [];
+    for (let i = 0; i < 1100; i++) {
+      const a = rand() * Math.PI * 2, r = Math.sqrt(inner + rand() * (outer - inner));
+      const x = Math.sin(a) * r, z = Math.cos(a) * r, roll = rand();
+      const pick = SCATTER.find((e) => roll < e.upTo), ground = L.groundAt(x, z);
+      // Dry forest floor and the ridge only, clear of everything that is walked, slept on or flooded, and off the rim.
+      if (!(ground >= L.LEVEL.ground) || L.keptClear(x, z, pick.clear) || r + pick.r > L.edgeAt(a) - 0.5) continue;
+      // Level ground under the whole footprint: nothing stands half over a terrace's step.
+      if (L.groundAt(x + pick.r * 0.6, z) !== ground || L.groundAt(x - pick.r * 0.6, z) !== ground || L.groundAt(x, z + pick.r * 0.6) !== ground || L.groundAt(x, z - pick.r * 0.6) !== ground) continue;
+      // Nothing grows through an animal, and trunks keep a body's width apart. Plants still crowd each other,
+      // which is what makes it jungle.
       if (claimed.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + pick.r)) continue;
+      if (pick.kind === "canopy" || pick.kind === "poolrock" || pick.kind === "poollog") {
+        if (trunks.some((t) => Math.hypot(x - t.x, z - t.z) < t.r + pick.r + 1)) continue;
+        trunks.push({ x, z, r: pick.r });
+      }
       const geometry = geometryFor(pick.kind);
       // A little scale and turn per copy: free variety, since every copy shares one cached build.
       const k = 0.82 + rand() * 0.45;
-      const node = createNode({ position: { x, y: 0, z }, rotation: { x: 0, y: rand() * Math.PI * 2, z: 0 }, scale: { x: k, y: 0.9 + rand() * 0.3, z: k }, geometry });
+      const node = createNode({ position: { x, y: ground, z }, rotation: { x: 0, y: rand() * Math.PI * 2, z: 0 }, scale: { x: k, y: 0.9 + rand() * 0.3, z: k }, geometry });
       // Undergrowth stays out of the outline registry, as the home scatter's bushes and flowers do.
       if (pick.kind === "bush" || pick.kind === "poolfern" || pick.kind === "flower") node.sightHidden = true;
       addChild(site.node, node);
       atNode(pick.kind, node, pick.r * k);
-      const feature = { x, z, ry: node.rotation.y, k, sy: node.scale.y, geometry };
+      const feature = { x, y: ground, z, ry: node.rotation.y, k, sy: node.scale.y, geometry };
       if (pick.kind === "canopy") { trees.push(feature); obstacles.push({ x, z, r: 0.45 * k }); }
       else if (pick.kind === "poolrock") obstacles.push({ x, z, r: 0.75 * k });
       else if (pick.kind === "poollog") {
@@ -2425,36 +2480,73 @@
     }
     const WORLD_AT = (lx, lz, out) => { out.x = worldX(lx, lz); out.z = worldZ(lx, lz); return out; };
     const wildlife = BL.poolWildlife.create({
-      parent: site.node, obstacles, trees, logs, baseY: place.y, toWorld: WORLD_AT,
+      parent: site.node, obstacles, trees, logs, baseY: place.y, toWorld: WORLD_AT, groundAt: beastGround, spotOk: beastSpot,
       animals: ANIMALS.map(([kind, x, z, heading]) => ({ kind, x, z, heading })),
       sleepy: () => phase === "night" || phase === "midnight"
     });
     // Each animal answers a tap through its body part, and its pick owner follows it about the island.
     for (const beast of wildlife.list) {
-      beast.wx = worldX(beast.x, beast.z); beast.wy = place.y; beast.wz = worldZ(beast.x, beast.z);
+      beast.wx = worldX(beast.x, beast.z); beast.wy = place.y + beast.base; beast.wz = worldZ(beast.x, beast.z);
       beast.owner = addProp(beast.kind, beast.node, beast.wx, beast.wz, 0.7);
       beasts.set(beast.node, beast);
+    }
+    // The water, and the paintings on the chamber's wall, each a pick target that opens the board behind it.
+    const water = BL.poolWater.create({ site, renderer, seaY: SEA_Y - place.y });
+    const paintings = BL.poolPaintings.create({ site, renderer });
+    for (const stop of paintings.stops) {
+      stop.owner = addProp("poolpainting", stop.node, worldX(stop.x, stop.z), worldZ(stop.x, stop.z), 2.6);
+      stop.owner.stop = stop;
     }
     // The islet and the rim-to-bridge-head walk are claimed after the home scatter, not before it.
     // Claiming first made the scatter's seeded retries draw different numbers, reshuffling trees all
     // over the island; claiming after leaves the scatter exactly as it is without this island, and
     // reflow then hides only what actually stands on the walk.
     const claimGround = () => {
-      claim(place.x, place.z, S.isletR + 1);
+      claim(place.x, place.z, S.reach);
       for (let r = S.approachFrom; r <= place.rimRadius; r += 1.5) claim(DIR.x * r, DIR.z * r, S.width / 2 + 2.1);
     };
-    // Look down the stairwell from just above the kerb.
-    presets.pool = { yaw: -2.1, pitch: 0.62, dist: 11, target: { x: place.x, y: place.y - 1.2, z: place.z } };
-    // The weather stands over this island: its centre, its top face, and the ground the rain lands on.
+    // The weather stands over this island: its centre, its top datum, and what the rain lands on, which is the
+    // ground's own terraces, the water wherever it stands, and the home island under the near end of the cell.
+    // Past all of those a drop has nothing to land on and falls out of sight.
     const centre = { x: place.x, y: place.y, z: place.z };
     const groundAt = (gx, gz) => {
-      const dx = gx - place.x, dz = gz - place.z, d2 = dx * dx + dz * dz;
-      // Rain that finds the stairwell falls all the way to the landing at the bottom of it.
-      if (d2 <= S.shaftR * S.shaftR) return place.y - S.shaftDepth + 0.1;
-      if (d2 <= S.isletR * S.isletR) return place.y;
-      return island.surfaceAt(gx, gz);
+      const lx = localX(gx, gz), lz = localZ(gx, gz), r = Math.hypot(lx, lz);
+      if (r < S.reach) {
+        const ground = r < L.LAKE_R ? L.membraneY(r) : L.groundAt(lx, lz);
+        if (ground > -Infinity) return place.y + Math.max(ground, water.levelAt(lx, lz));
+      }
+      return island.onLand(gx, gz) ? island.surfaceAt(gx, gz) : -Infinity;
     };
-    return { site, place, centre, groundAt, worldX, worldZ, cos, sin, claimGround, wildlife };
+    // Whether a world point is over the island, and whether rock or the lake stands over it: the tunnels, the
+    // chamber and its shaft. Height decides it, so someone under the forest is not standing in the forest.
+    const overAt = (wx, wz, margin = 0) => {
+      const dx = wx - place.x, dz = wz - place.z;
+      return dx * dx + dz * dz < S.reach * S.reach && L.onIsland(localX(wx, wz), localZ(wx, wz), margin);
+    };
+    const coveredAt = (wx, wy, wz) => {
+      const dx = wx - place.x, dz = wz - place.z;
+      return dx * dx + dz * dz < S.reach * S.reach && L.covered(localX(wx, wz), wy - place.y, localZ(wx, wz));
+    };
+    // Where the water carries a body whose feet are at `y`: `draught` under the surface, wherever that is clear
+    // of the bed. Only for someone in the water itself, so a walker in the chamber under the lake stays on its
+    // floor; and never more than `rise` above the feet in one step, so rising water lifts a body, never throws it.
+    const floatAt = (wx, wz, y, rise, draught) => {
+      const dx = wx - place.x, dz = wz - place.z;
+      if (dx * dx + dz * dz > S.reach * S.reach) return -Infinity;
+      const lx = localX(wx, wz), lz = localZ(wx, wz), level = water.levelAt(lx, lz);
+      if (level === -Infinity) return -Infinity;
+      const r = Math.hypot(lx, lz), bed = r < L.LAKE_R ? L.membraneY(r) : L.groundAt(lx, lz), feet = y - place.y;
+      if (feet < bed - STEP_MAX || level - draught <= bed) return -Infinity;
+      return place.y + Math.min(level - draught, Math.max(feet, bed) + Math.max(rise, 0.05));
+    };
+    // Whether a point of the water's surface is over someone: for the pose, not the footing.
+    const afloat = (wx, wz, y, draught) => {
+      const dx = wx - place.x, dz = wz - place.z;
+      if (dx * dx + dz * dz > S.reach * S.reach) return false;
+      const level = water.levelAt(localX(wx, wz), localZ(wx, wz));
+      return level > -Infinity && Math.abs(y - place.y - (level - draught)) < 0.12;
+    };
+    return { site, place, centre, groundAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, floatAt, afloat, layout: L };
   };
   const buildTimechainIsland = () => {
     const T = BL.timechainModels, site = T.build(island), p = site.place;
