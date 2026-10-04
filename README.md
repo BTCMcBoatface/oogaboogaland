@@ -99,7 +99,7 @@ npm run build
 
 Writes `oogaboogaland.html`, one self-contained page with the content policy pinned to its hashes. CI commits it back after each merge to `rock`, and GitHub Pages serves it at https://oogaboogax.github.io/oogaboogaland/.
 
-Two Cloudflare Workers serve the same site with GitHub sign-in, the shared island and voice: https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev deploys on every merge to `rock`, and https://oogabooga.land (production) by hand; `docs/cloudflare-setup.md` covers the setup and local development with `wrangler dev`, and `docs/auth-and-presence.md` the sign-in flow.
+Two Cloudflare Workers serve the same site with GitHub sign-in, the shared island and voice: https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev and https://oogabooga.land (production) both deploy by hand through GitHub Actions; `docs/cloudflare-setup.md` covers the setup and local development with `wrangler dev`, and `docs/auth-and-presence.md` the sign-in flow.
 
 ### Deploying to Cloudflare
 
@@ -107,7 +107,7 @@ Deploy only through GitHub Actions, and keep Cloudflare's Git connection (Worker
 
 | Environment | URL | Deploys |
 |---|---|---|
-| Staging | https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev | automatically on every merge to `rock` (**Deploy Cloudflare staging**) |
+| Staging | https://oogaboogaland-staging.wickedsmartbitcoin.workers.dev | by hand: **Actions → Deploy Cloudflare staging → Run workflow** on `rock` |
 | Production | https://oogabooga.land | by hand once staging looks right: **Actions → Deploy Cloudflare production → Run workflow** on `rock` |
 
 Each workflow builds the site (`npm run build:site`), runs the Worker's checks, applies D1 migrations and deploys with `wrangler.<env>.jsonc`. A deploy drops live connections for a moment, and players reconnect on their own.
