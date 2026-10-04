@@ -66,7 +66,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140. Its five images a
 6. At low water the membrane's rim is a **transparent bank** that walkers stand on.
 7. Rain lands on the dense middle of every tree crown (`rainAt` in `buildMempoolIsland`, a dome per crown over the layout's grid), on the ground between the trees, and on the water. A crown's outer fifth lets drops through. About half the forest floor outside the ring path is under a crown.
 8. The swim pose is minimal: a floating Ooga treads water with its arms out (`floatPose` in `scene-hub.js`, local, crew and remote bodies alike). A gorilla floats on all fours to its chest and its walking gait is its paddle; standing still it floats still.
-9. Outlines and the rock cover cap (`rock-guides`, `camera-cover`) still know only the home island. Underground on this island the close camera collides with the rock and birds-eye and orbit views cut the roof away; there is no x-ray outline.
+9. Outlines and the rock cover cap (`rock-guides`, `camera-cover`) still know only the home island. Underground on this island the follow camera stays inside the tunnel behind the walker (seen in screenshots mid-descent and in the chamber, both readable) and the overhead views cut the roof away; there is no x-ray outline of someone behind this island's rock.
 10. The epoch painting says its age is unknown, because the snapshot has no stamp for it.
 11. The `mempool` preview card was retaken (`npm run cards`, keeping only `cards/mempool.jpg`): the chamber's WAITING painting with that moment's live readings. Its route keeps the feeds on and the hub shows the simulator's donations, so `scripts/cards.mjs` now waits the first donation's toast and ticker out before it takes a live route's card.
 
