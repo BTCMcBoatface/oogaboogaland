@@ -8,7 +8,7 @@ import { missingCharacters, characterSource } from "../../scripts/sync-character
 import { identityAdvice } from "../../scripts/contributor-pr.mjs";
 import { declaredIdentity, mayAuthorIdentity } from "../../scripts/character-identity.mjs";
 import { CharacterRejection, parseSafeCharacter, scanCharacter, safeCharacterSource, checkOwner } from "../../scripts/character-safety.mjs";
-import { due, inspectSubmission, manifestPath, readManifest, reviewDecision } from "../../scripts/character-submissions.mjs";
+import { digest, due, inspectSubmission, manifestPath, readManifest, reviewDecision } from "../../scripts/character-submissions.mjs";
 import { createCoordinator } from "../../scripts/character-bundles.mjs";
 import { OPERATORS, isOperator } from "../../scripts/character-operators.mjs";
 
@@ -91,6 +91,38 @@ test("Actions-token merges explicitly dispatch the post-merge build and recover 
   const dispatches = calls.filter((call) => call.path.endsWith("/dispatches"));
   assert.equal(dispatches.length, 1);
   assert.deepEqual(dispatches[0].data, { ref: "rock", inputs: { merge_sha: pr.merge_commit_sha } });
+});
+
+test("an otherwise validated overdue daily bundle never calls merge when conflicted or its mergeability is unknown", async () => {
+  const bot = "github-actions[bot]", repo = "example/land", rock = "a".repeat(40), sourceHead = "b".repeat(40), head = "c".repeat(40);
+  const path = "src/characters/owner.js", source = safeCharacterSource({ handle: "owner", joined: 1, lastCommit: 2 });
+  const entry = { pr: 7, head: sourceHead, author: "owner", path, base: null, hash: digest(source), lane: "daily" };
+  const state = { version: 1, lane: "daily", openedOn: "2026-10-03", entries: [entry] };
+  const bundle = { number: 8, user: { login: bot }, mergeable: false, mergeable_state: "dirty",
+    head: { sha: head, ref: "automation/characters-daily-round", repo: { full_name: repo } }, base: { ref: "rock", repo: { full_name: repo } } };
+  let merges = 0;
+  const gh = { repo, tree: async () => new Map(),
+    list: async (url) => url.endsWith("/reviews") ? [] : [bundle],
+    file: async (sha, filename) => sha === rock ? null : filename === manifestPath("daily") ? { source: JSON.stringify(state) } : { source, sha },
+    api: async (url, method) => {
+      if (url === "git/ref/heads/rock") return { object: { sha: rock } };
+      if (url === "pulls/8") return bundle;
+      if (url === "pulls/7") return { number: 7, state: "closed", user: { login: "owner" }, base: { ref: "rock" }, head: { sha: sourceHead } };
+      if (url.startsWith("collaborators/")) return { permission: "read" };
+      if (url.startsWith("statuses/")) return {};
+      if (url === `commits/${head}`) return { author: { login: bot }, commit: { verification: { verified: true } } };
+      if (url === `commits/${sourceHead}?per_page=100`) return { author: { login: "owner" }, parents: [{ sha: rock }], files: [{ filename: path, status: "added" }] };
+      if (url.startsWith("compare/")) return { merge_base_commit: { sha: rock }, total_commits: 1, commits: [{ sha: sourceHead }], behind_by: 0,
+        files: [{ filename: path, status: "added" }, ...(url.endsWith(head) ? [{ filename: manifestPath("daily"), status: "added" }] : [])] };
+      if (url.endsWith("/merge") && method === "PUT") { merges++; return { merged: true }; }
+      throw new Error(`Unexpected API call ${url}`);
+    }
+  };
+  const coordinator = createCoordinator(gh, bot, () => new Date(NOW));
+  await assert.rejects(coordinator.mergeDaily(), /not mergeable/);
+  bundle.mergeable = null; bundle.mergeable_state = "unknown";
+  await assert.rejects(coordinator.mergeDaily(), /not mergeable/);
+  assert.equal(merges, 0);
 });
 
 test("the scanner checks earlier character revisions and extracts only character files from mixed PRs", async () => {
