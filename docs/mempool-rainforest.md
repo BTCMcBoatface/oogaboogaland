@@ -1,6 +1,6 @@
 # Issue #140: Mempool rainforest, working notes and handoff
 
-**Status: feature-complete draft on branch `mempool-rainforest`.** The build is clean, the unit tier passes (125/125) and the `hub` scene passes 267 of 268 checks; the one that does not is a time limit, described under Verification. It has been looked at in headless screenshots and driven by probes, never played by a person: the first job of whoever continues is to play it and tune it. Trim this file to a short design and verification note before the PR.
+**Status: feature-complete draft on branch `mempool-rainforest`.** The build is clean, the unit tier passes (125/125) and the `hub` scene's last full run passed 266 of 268 checks: one is a time limit and one passed when its session was run again, both described under Verification. It has been looked at in headless screenshots and driven by probes, never played by a person: the first job of whoever continues is to play it and tune it. Trim this file to a short design and verification note before the PR.
 
 Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; it is the spec). Its five images are a world screenshot, two dimensioned plans (the plans govern layout) and two approximate concepts.
 
@@ -55,10 +55,12 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
   - Nine sleepers are in beds at entry. A working gorilla put to sleep leaves its cave and reaches its bed in 42 s; one on a roof climbs down and arrives in 46 s; a sleeper woken walks home in 20 s; a sleeper possessed keeps its bed and, released, goes back to it.
   - A tap on a painting opens its board.
   - From the chamber, an Ooga floating in the lake at 45 MvB shows through the skin and the water, with the clouds and the canopy behind it; from above, the bowl and the paintings below show through the lake.
-- `LANES=3 npm test -- hub`, last full run: 267/268 (the same result two runs running). The failure is **`birds-eye lower floors`**: "Runtime.evaluate got no reply in 90 s", no assertion. On unchanged `rock` on the same machine that session passes in 88 s against the 90 s limit; a birds-eye frame in the HQ basement profiles about 3.5% slower with the island (more nodes to walk), which is enough. It has printed STOP, so it is handed to the maintainer with `untracked/test-ledger.json`; it wants a run on a machine with headroom, not a change. `birds-eye combat camera` sits near its 120 s session limit for the same reason and passed on retry.
+- `LANES=3 npm test -- hub`, last full run (on the latest commit, after a restart of the machine): **266/268**.
+  - **`birds-eye lower floors`** fails every run here: "Runtime.evaluate got no reply in 90 s", no assertion. On unchanged `rock` on the same machine that session passes in 88 s against the 90 s limit; a birds-eye frame in the HQ basement profiles about 3.5% slower with the island (more nodes to walk), which is enough. It has printed STOP, so it is handed to the maintainer with `untracked/test-ledger.json`; it wants a run on a machine with headroom, not a change. `birds-eye combat camera` sits near its 120 s session limit for the same reason and passes on retry.
+  - **`work movement cave trips`** failed once in that run: of five workers on the home island, one (portlandhodl) made a single avoidance hop (`jumps: 1`, a 0.28 m step) where the check allows none. Nothing changed since the runs it passed in touches walking (the changes were colours, a depth bias and a hidden backing mesh), and its session run again alone (`ONLY="work movement cave trips" LANES=3 npm test -- hub`) passed. The crew draws some choices from the crypto dice, so trips differ run to run; treat it as intermittent and watch it. It passed in the seven full runs before.
+  - The run before that one was lost to the machine: Chrome hung in every session (driver timeouts, no assertion), as it then did on `rock`'s own page, until the machine was restarted. Those timeouts cleared in the run above.
 - Fixed during the session after the suite caught them: `rainforest approach` (gorillas commuting over the bridge at each donation), `lab work` (its sleeper now frees its bench at once; the check counts coworkers and no longer the gorilla walking out to bed).
 - Canvas 2D (`?canvas2d=1`), in screenshots: the court and the flooded lake, the chamber with the lake seen through the membrane, and all of a painting's rows in front of its wall (the paintings carry `depthBias` and their walls are cut small for that renderer's depth sort).
-- **Run the hub once more before the PR.** The painted walls' metre squares, the paint's depth bias and the chamber backing came after the last good run. They have the unit tier, Node probes of the mesh and screenshots on both renderers behind them, but the hub run started after them was lost: the machine stalled and Chrome hung in every session (eleven driver timeouts, no assertion), and from then on headless Chrome hung on `rock`'s own built page too, with the clock shifted or not. `untracked/test-ledger.json` carries those timeouts; they are the machine's, not checks to fix.
 - Not done: a person playing it, the perf lane, a phone, two signed-in pages together.
 
 ## Known limits and things to play-test
@@ -73,7 +75,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
 8. The swim pose is minimal: a floating Ooga treads water with its arms out (`floatPose` in `scene-hub.js`, local, crew and remote bodies alike). Gorillas keep their walking pose.
 9. Outlines and the rock cover cap (`rock-guides`, `camera-cover`) still know only the home island. Underground on this island the close camera collides with the rock and birds-eye and orbit views cut the roof away; there is no x-ray outline.
 10. The epoch painting says its age is unknown, because the snapshot has no stamp for it.
-11. The `mempool` preview card (`npm run cards`) has not been retaken.
+11. The `mempool` preview card was retaken (`npm run cards`, keeping only `cards/mempool.jpg`): the chamber's WAITING painting with that moment's live readings. Its route keeps the feeds on, so the simulator's donation toast happened to be in frame; retake it or replace it with hand-made art if that matters.
 
 ## Previews (under `?debug=1`)
 
