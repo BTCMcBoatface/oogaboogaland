@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
+    inputs:
+      merge_sha:
+        description: 'Merged character bundle SHA (the bot explicitly dispatches after its merge)'
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -27,16 +32,19 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
           package-manager-cache: false
       - uses: actions/configure-pages@v5
       - name: Reconcile contributor files on OBL merges
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.merge_sha != ''
         run: node scripts/sync-characters.mjs --merge
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CHARACTER_BOT_LOGIN: github-actions[bot]
+          CHARACTER_MERGE_SHA: ${{ inputs.merge_sha }}
       - name: Refresh Oogatron activity snapshot
         run: node scripts/jumbotron-data.mjs "$OOGATRON_STATS_URL"
         env:
@@ -60,14 +68,17 @@ jobs:
 
   artifact:
     name: Artifact · commit the built page after merge
-    if: github.ref == 'refs/heads/rock' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/rock' && (github.event_name == 'push' || inputs.merge_sha != '')
     needs: [deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
+      statuses: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
       - name: Download the page that was deployed
         uses: actions/download-artifact@v4
         with:
@@ -86,4 +97,14 @@ jobs:
             exit 0
           fi
           git commit -m "Reconcile contributors and rebuild site artifact [skip ci]"
-          git push
+          # Publish the object before attaching statuses, then fast-forward rock.
+          # A concurrent rock update fails instead of overwriting newer work.
+          artifact_branch="automation/site-artifact-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git push origin "HEAD:refs/heads/$artifact_branch"
+          for context in 'Character identity ownership' 'Character intake' 'Character bundle safety'; do
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$(git rev-parse HEAD)" -f state=success -f context="$context" -f description='Trusted generated-character and site artifact commit'
+          done
+          git push origin HEAD:rock
+          git push origin --delete "$artifact_branch"
+        env:
+          GH_TOKEN: ${{ github.token }}

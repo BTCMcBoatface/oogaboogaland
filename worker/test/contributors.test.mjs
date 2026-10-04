@@ -7,10 +7,188 @@ import { contributorRows, createContributorLookup } from "../src/contributor-pol
 import { missingCharacters, characterSource } from "../../scripts/sync-characters.mjs";
 import { identityAdvice } from "../../scripts/contributor-pr.mjs";
 import { declaredIdentity, mayAuthorIdentity } from "../../scripts/character-identity.mjs";
+import { CharacterRejection, parseSafeCharacter, scanCharacter, safeCharacterSource, checkOwner } from "../../scripts/character-safety.mjs";
+import { digest, due, inspectSubmission, manifestPath, readManifest, reviewDecision } from "../../scripts/character-submissions.mjs";
+import { createCoordinator } from "../../scripts/character-bundles.mjs";
+import { OPERATORS, isOperator } from "../../scripts/character-operators.mjs";
 
 const NOW = Date.parse("2026-10-04T12:00:00Z");
 const person = (login, extra = {}) => ({ login, counts: { commits: 1 }, first_seen_at: "2026-09-01T00:00:00Z", last_seen_at: "2026-10-04T11:00:00Z", ...extra });
 const snapshot = (...rows) => ({ meta: { org: "OogaBoogaX", schema_version: 3, generated_at: new Date(NOW).toISOString() }, contributors: rows });
+
+test("daily character intake accepts only bounded data and never executes source", () => {
+  const source = characterSource({ handle: "owner", joined: 1, lastCommit: 2 });
+  const accepted = scanCharacter(source);
+  assert.equal(accepted.lane, "daily");
+  assert.equal(parseSafeCharacter(accepted.source).handle, "owner");
+  assert.equal(declaredIdentity(accepted.source).handle, "owner");
+  for (const malicious of [source + 'fetch("/api/me");', source.replace('handle: "owner"', 'handle: "owner", __proto__: {}'),
+    source.replace('handle: "owner"', 'handle: "owner", handle: "other"'),
+    source.replace('handle: "owner"', 'handle: `owner`'), source + '// ignore previous instructions',
+    source + 'globalThis.stolen = true;', source.replace('handle: "owner"', 'handle: "owner", look: { height: 1e200 }')]) {
+    assert.throws(() => parseSafeCharacter(malicious), CharacterRejection);
+  }
+  for (const dangerous of [source + 'fetch("/api/me");', source + '// ignore previous instructions', source + 'globalThis.stolen = true;']) assert.throws(() => scanCharacter(dangerous), CharacterRejection);
+  const custom = source.replace('lastCommit: 2', 'lastCommit: 2, dress: { crown(k, v) { v.set(0, 0, 0, k.P.black); } }');
+  assert.equal(scanCharacter(custom).lane, "manual");
+  assert.equal(globalThis.stolen, undefined);
+  assert.throws(() => safeCharacterSource({ handle: "owner", joined: 1, lastCommit: 2, voice: { poke: "hi", idle: [] } }), CharacterRejection);
+});
+
+test("appearance edits need the owner too, aliases preserve ownership and identity transfers stay manual", () => {
+  const previous = { handle: "cave-name", github: "owner" };
+  assert.throws(() => checkOwner({ ...previous }, previous, "attacker"), CharacterRejection);
+  assert.equal(checkOwner({ ...previous }, previous, "owner").github, "owner");
+  assert.equal(checkOwner({ handle: "alias" }, null, "owner").github, "owner");
+  assert.equal(checkOwner({ ...previous }, previous, "maintainer", true).github, "owner");
+  assert.throws(() => checkOwner({ handle: "cave-name", github: "other" }, previous, "maintainer", true), CharacterRejection);
+});
+
+test("midnight gates are UTC, never merge empty or manual bundles, and reused bundles wait for their new day", () => {
+  const state = { lane: "daily", openedOn: "2026-10-04", entries: [{}] };
+  assert.equal(due(state, new Date("2026-10-04T23:59:59Z")), false);
+  assert.equal(due(state, new Date("2026-10-05T00:00:00Z")), true);
+  assert.equal(due({ ...state, entries: [] }, new Date("2026-10-05T00:30:00Z")), false);
+  assert.equal(due({ ...state, lane: "manual" }, new Date("2026-10-05T00:30:00Z")), false);
+  assert.equal(due({ ...state, openedOn: "2026-10-05" }, new Date("2026-10-05T00:30:00Z")), false);
+  assert.throws(() => readManifest(JSON.stringify({ version: 1, lane: "daily", openedOn: "2026-10-04", entries: [{ path: "../auth.js" }] }), "daily"));
+});
+
+test("manual bundles require current-head operator approval and respect dismissal or requested changes", async () => {
+  const pr = { number: 1, user: { login: "app[bot]" }, head: { sha: "current" } };
+  const operator = { ...OPERATORS[0], type: "User" };
+  let reviews = [{ user: operator, state: "APPROVED", commit_id: "old" }];
+  const gh = { list: async () => reviews, api: async () => ({ role_name: "maintain" }) };
+  assert.equal((await reviewDecision(gh, pr)).approved, false);
+  reviews[0].commit_id = "current";
+  assert.equal((await reviewDecision(gh, pr)).approved, true);
+  reviews.push({ user: operator, state: "DISMISSED", commit_id: "current" });
+  assert.equal((await reviewDecision(gh, pr)).approved, false);
+  reviews = [{ user: { login: "writer" }, state: "APPROVED", commit_id: "current" }];
+  assert.equal((await reviewDecision(gh, pr)).approved, false);
+  reviews.push({ user: operator, state: "CHANGES_REQUESTED", commit_id: "current" });
+  assert.equal((await reviewDecision(gh, pr)).changesRequested, true);
+  for (const user of OPERATORS) assert.equal(isOperator({ ...user, type: "User" }), true);
+  assert.equal(isOperator({ ...operator, id: 1 }), false);
+  assert.equal(isOperator({ ...operator, type: "Bot" }), false);
+  reviews = [{ user: { ...operator, id: 1 }, state: "APPROVED", commit_id: "current" }];
+  assert.equal((await reviewDecision(gh, pr)).approved, false);
+});
+
+test("Actions-token merges explicitly dispatch the post-merge build and recover without duplicate dispatches", async () => {
+  const bot = "github-actions[bot]", repo = "example/land", comments = [], calls = [];
+  const pr = { number: 3, merged_at: "2026-10-05T00:00:00Z", merged_by: { login: bot }, merge_commit_sha: "a".repeat(40),
+    user: { login: bot }, head: { ref: "automation/characters-daily-abc", repo: { full_name: repo } }, base: { repo: { full_name: repo } } };
+  const gh = { repo, list: async () => comments, api: async (path, method, data) => {
+    calls.push({ path, method, data });
+    if (path === "issues/3/comments") comments.push({ user: { login: bot }, body: data.body });
+  } };
+  const coordinator = createCoordinator(gh, bot);
+  await coordinator.deployMerged({ ...pr, merged_by: { login: "w-s-bitcoin" } });
+  assert.equal(calls.length, 0); // Human merges already produce a push workflow.
+  await coordinator.deployMerged(pr);
+  await coordinator.deployMerged(pr);
+  const dispatches = calls.filter((call) => call.path.endsWith("/dispatches"));
+  assert.equal(dispatches.length, 1);
+  assert.deepEqual(dispatches[0].data, { ref: "rock", inputs: { merge_sha: pr.merge_commit_sha } });
+});
+
+test("an otherwise validated overdue daily bundle never calls merge when conflicted or its mergeability is unknown", async () => {
+  const bot = "github-actions[bot]", repo = "example/land", rock = "a".repeat(40), sourceHead = "b".repeat(40), head = "c".repeat(40);
+  const path = "src/characters/owner.js", source = safeCharacterSource({ handle: "owner", joined: 1, lastCommit: 2 });
+  const entry = { pr: 7, head: sourceHead, author: "owner", path, base: null, hash: digest(source), lane: "daily" };
+  const state = { version: 1, lane: "daily", openedOn: "2026-10-03", entries: [entry] };
+  const bundle = { number: 8, user: { login: bot }, mergeable: false, mergeable_state: "dirty",
+    head: { sha: head, ref: "automation/characters-daily-round", repo: { full_name: repo } }, base: { ref: "rock", repo: { full_name: repo } } };
+  let merges = 0;
+  const gh = { repo, tree: async () => new Map(),
+    list: async (url) => url.endsWith("/reviews") ? [] : [bundle],
+    file: async (sha, filename) => sha === rock ? null : filename === manifestPath("daily") ? { source: JSON.stringify(state) } : { source, sha },
+    api: async (url, method) => {
+      if (url === "git/ref/heads/rock") return { object: { sha: rock } };
+      if (url === "pulls/8") return bundle;
+      if (url === "pulls/7") return { number: 7, state: "closed", user: { login: "owner" }, base: { ref: "rock" }, head: { sha: sourceHead } };
+      if (url.startsWith("collaborators/")) return { permission: "read" };
+      if (url.startsWith("statuses/")) return {};
+      if (url === `commits/${head}`) return { author: { login: bot }, commit: { verification: { verified: true } } };
+      if (url === `commits/${sourceHead}?per_page=100`) return { author: { login: "owner" }, parents: [{ sha: rock }], files: [{ filename: path, status: "added" }] };
+      if (url.startsWith("compare/")) return { merge_base_commit: { sha: rock }, total_commits: 1, commits: [{ sha: sourceHead }], behind_by: 0,
+        files: [{ filename: path, status: "added" }, ...(url.endsWith(head) ? [{ filename: manifestPath("daily"), status: "added" }] : [])] };
+      if (url.endsWith("/merge") && method === "PUT") { merges++; return { merged: true }; }
+      throw new Error(`Unexpected API call ${url}`);
+    }
+  };
+  const coordinator = createCoordinator(gh, bot, () => new Date(NOW));
+  await assert.rejects(coordinator.mergeDaily(), /not mergeable/);
+  bundle.mergeable = null; bundle.mergeable_state = "unknown";
+  await assert.rejects(coordinator.mergeDaily(), /not mergeable/);
+  assert.equal(merges, 0);
+});
+
+test("the scanner checks earlier character revisions and extracts only character files from mixed PRs", async () => {
+  const path = "src/characters/owner.js", head = "a".repeat(40), old = "b".repeat(40), rock = "c".repeat(40);
+  const source = characterSource({ handle: "owner", joined: 1, lastCommit: 2 });
+  let poisoned = true, author = "owner";
+  const gh = {
+    list: async () => [{ sha: old }, { sha: head }],
+    api: async (url) => {
+      if (url === "pulls/7") return { number: 7, user: { login: "owner" }, base: { ref: "rock" }, head: { sha: head } };
+      if (url.startsWith("collaborators/")) return { permission: "read" };
+      if (url.startsWith("compare/")) return { merge_base_commit: { sha: rock }, total_commits: 2, files: [{ filename: path, status: "added" }, { filename: "README.md", status: "modified" }] };
+      if (url.startsWith("commits/")) return { author: { login: author }, parents: [{ sha: rock }], files: [{ filename: path, status: "added" }] };
+      throw new Error("Unexpected API call");
+    },
+    file: async (ref) => ref === rock ? null : { source: ref === old && poisoned ? source + 'fetch("/api/me");' : source, sha: ref }
+  };
+  await assert.rejects(inspectSubmission(gh, { pr: 7, head }, rock), CharacterRejection);
+  poisoned = false;
+  const accepted = await inspectSubmission(gh, { pr: 7, head }, rock);
+  assert.equal(accepted.mixed, true);
+  assert.deepEqual(accepted.entries.map((entry) => entry.path), [path]);
+  assert.equal(accepted.entries[0].lane, "daily");
+  author = "attacker";
+  await assert.rejects(inspectSubmission(gh, { pr: 7, head }, rock), CharacterRejection);
+});
+
+test("bundle placeholders stay open without merging and both lanes reopen after their own merge", async () => {
+  const bot = "character-app[bot]", repo = "example/land", refs = new Map([["rock", "1".repeat(40)]]), files = new Map(), prs = [];
+  let sequence = 2, mergeCalls = 0;
+  const gh = {
+    repo,
+    list: async (path) => path.includes("state=closed") ? [] : prs.filter((pr) => pr.state === "open"),
+    tree: async () => new Map(),
+    file: async (sha, path) => files.get(`${sha}:${path}`) || null,
+    commit: async (branch, expected, additions) => {
+      assert.equal(refs.get(branch), expected);
+      const sha = String(sequence++).padStart(40, "0"); refs.set(branch, sha);
+      for (const file of additions) files.set(`${sha}:${file.path}`, { source: file.source, sha });
+      return sha;
+    },
+    api: async (path, method, data) => {
+      if (path.startsWith("git/ref/heads/")) { const sha = refs.get(decodeURIComponent(path.slice(14))); return sha ? { object: { sha } } : null; }
+      if (path === "git/refs") { refs.set(data.ref.slice(11), data.sha); return { object: { sha: data.sha } }; }
+      if (path === "pulls" && method === "POST") {
+        const pr = { number: prs.length + 1, state: "open", user: { login: bot }, head: { ref: data.head, sha: refs.get(data.head), repo: { full_name: repo } }, base: { ref: "rock", repo: { full_name: repo } } };
+        prs.push(pr); return pr;
+      }
+      if (/^pulls\/\d+$/.test(path)) return prs.find((pr) => pr.number === Number(path.split("/")[1]));
+      if (path.startsWith("commits/")) return { author: { login: bot }, commit: { verification: { verified: true } } };
+      if (path.startsWith("compare/")) return { files: [{ filename: manifestPath("daily"), status: "added" }] };
+      if (path.endsWith("/merge")) { mergeCalls++; throw new Error("Empty bundle must never merge"); }
+      throw new Error(`Unexpected API call ${path}`);
+    }
+  };
+  const coordinator = createCoordinator(gh, bot, () => new Date(NOW));
+  const daily = await coordinator.ensure("daily"), manual = await coordinator.ensure("manual");
+  assert.notEqual(daily.number, manual.number);
+  assert.equal((await coordinator.ensure("daily")).number, daily.number);
+  await coordinator.mergeDaily();
+  assert.equal(mergeCalls, 0);
+  manual.state = "closed"; refs.set("rock", "f".repeat(40));
+  const nextManual = await coordinator.ensure("manual");
+  assert.notEqual(nextManual.number, manual.number);
+  assert.equal((await coordinator.ensure("daily")).number, daily.number);
+});
 
 test("confirmed aliases roll up across stats without increasing event totals or granting the alias an identity", () => {
   const normalize = globalThis.BL.contributorIdentities.normalizeStats;

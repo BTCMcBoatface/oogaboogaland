@@ -1,0 +1,51 @@
+name: Character bundles
+
+on:
+  pull_request_target:
+    branches: [rock]
+    types: [opened, synchronize, reopened, ready_for_review, edited, closed]
+  workflow_run:
+    workflows: [Character submission push]
+    types: [completed]
+  schedule:
+    - cron: '0 0 * * *'
+    # Recover delayed schedules, API failures and superseded pending events.
+    - cron: '17,37,57 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+  checks: read
+  actions: write
+
+concurrency:
+  group: character-bundles
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    if: >-
+      vars.CHARACTER_BUNDLES_ENABLED == 'true' &&
+      (github.event_name != 'workflow_dispatch' ||
+       ((github.actor_id == '95375789' || github.actor_id == '72945059') &&
+        (github.triggering_actor == 'w-s-bitcoin' || github.triggering_actor == '2140data')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Only trusted rock code ever sees the write token, including fork PRs
+          # and workflow_run events. Never checkout the event's source SHA.
+          ref: rock
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Scan, route and reconcile character submissions
+        run: node scripts/character-bundles.mjs
+        env:
+          CHARACTER_TOKEN: ${{ github.token }}
+          CHARACTER_BOT_LOGIN: github-actions[bot]
