@@ -120,8 +120,8 @@
       const cave = player();
       if (cave && !crew.sleeping && controlModes.get(cave.traits.name) !== cave.weapon.aiming) controlModes.set(cave.traits.name, cave.weapon.aiming);
     };
-    // Carry still owns an orbit. Combat's overhead view owns only height and
-    // a screen-space pointer; neither mouse movement nor zoom rotates it.
+    // Carry still owns an orbit. Combat's overhead pointer stays on the upper
+    // centreline: vertical input sets its reach, horizontal input turns the view.
     const overheadMin = ctx.birdsEyeMin ?? OVERHEAD_MIN;
     // A scene with no follow (the mine) never carries an Ooga, so it never reads this.
     const carryOrbitMin = follow ? Math.max(DIST_MIN, clamp(close ? close.trailingDist : follow.min, follow.min, follow.max)) : DIST_MIN;
@@ -769,8 +769,7 @@
       overheadX = renderer.size.width / 2; overheadY = renderer.size.height / 2;
       if (preserve) {
         const rect = canvas.getBoundingClientRect();
-        overheadX = (carryCursor.x - rect.left) * renderer.size.width / rect.width;
-        overheadY = (carryCursor.y - rect.top) * renderer.size.height / rect.height;
+        overheadY = clamp((carryCursor.y - rect.top) * renderer.size.height / rect.height, 0, renderer.size.height / 2);
         positionReticle(overheadX, overheadY);
       }
       const dx = camera.target.x - camera.position.x, dy = camera.target.y - camera.position.y, dz = camera.target.z - camera.position.z;
@@ -789,8 +788,16 @@
       // Resume from the visible edge, not the retained target's off-screen
       // projection, so a small inward movement immediately takes over.
       overheadPointerMoved = true;
-      overheadX = clamp(overheadX + dx, 0, renderer.size.width);
-      overheadY = clamp(overheadY + dy, 0, renderer.size.height);
+      const halfHeight = renderer.size.height / 2;
+      overheadX = renderer.size.width / 2;
+      overheadY = clamp(overheadY + dy, 0, halfHeight);
+      if (dx) {
+        // Turn toward the pixel the mouse would have reached. Keep a finite
+        // lever arm near the Ooga so crossing the centre cannot flip the view.
+        const reach = Math.max(AIM_RETICLE_RADIUS, halfHeight * 0.2, halfHeight - overheadY);
+        overheadTargetYaw -= Math.atan2(dx, reach);
+        overheadNorthUp = false;
+      }
       assistedTargetWait = 0;
     };
     const overheadRay = (cave, x, y) => {
@@ -822,27 +829,27 @@
     };
     const updateBirdsEyeAim = (cave, dt) => {
       const p = cave.root.position, feet = p.y - cave.baseY;
-      let rayX = overheadX, rayY = overheadY;
+      const halfWidth = renderer.size.width / 2, halfHeight = renderer.size.height / 2;
+      overheadX = halfWidth;
+      overheadY = clamp(overheadY, 0, halfHeight);
+      let rayY = overheadY;
       const projected = overheadPointerMoved || projectAim(overheadAim);
       if (!overheadPointerMoved) {
-        if (projected) { rayX = assistedTargetScreen.x; rayY = assistedTargetScreen.y; }
-        const halfWidth = renderer.size.width / 2, halfHeight = renderer.size.height / 2;
-        const margin = Math.min(AIM_RETICLE_RADIUS, halfWidth / 2, halfHeight / 2);
-        let dx = projected ? rayX - halfWidth : aimProjection[0], dy = projected ? rayY - halfHeight : -aimProjection[1];
-        if (!projected && Math.hypot(dx, dy) < 1e-7) { dx = 0; dy = -1; }
-        const scale = 1 / Math.max(projected ? 1 : 0, Math.abs(dx) / (halfWidth - margin), Math.abs(dy) / (halfHeight - margin));
-        // Clamp only the display along the target's direction. Picking keeps
-        // the full projection, so zooming back out finds the original point.
-        // A point behind the eye still has an edge bearing, but no forward ray.
-        overheadX = halfWidth + dx * scale; overheadY = halfHeight + dy * scale;
+        const margin = Math.min(AIM_RETICLE_RADIUS, halfHeight / 2);
+        rayY = projected ? Math.min(halfHeight, assistedTargetScreen.y) : 0;
+        // Zoom retains the full forward projection beyond the top edge, so
+        // zooming back out finds the same point. Neither display nor picking
+        // may drift sideways or behind the Ooga as it walks or the view turns.
+        overheadY = clamp(rayY, margin, halfHeight);
       }
       // Refresh the revealed floor even while an anchor has no forward ray;
       // the query below remains disabled until that anchor returns in front.
-      overheadRay(cave, rayX, rayY);
-      if (overheadPointerMoved && cursorRay.dy < -1e-5) {
-        const distance = Math.max(0, (feet - cursorRay.oy) / cursorRay.dy);
+      overheadRay(cave, overheadX, rayY);
+      if (projected && cursorRay.dy < -1e-5) {
+        const floor = overheadPointerMoved ? feet : overheadAim.y;
+        const distance = Math.max(0, (floor - cursorRay.oy) / cursorRay.dy);
         overheadAim.x = cursorRay.ox + cursorRay.dx * distance;
-        overheadAim.y = feet;
+        overheadAim.y = floor;
         overheadAim.z = cursorRay.oz + cursorRay.dz * distance;
       }
       assistedTargetWait -= dt;
@@ -1163,6 +1170,8 @@
         if (e.repeat) return;
         resumePose();
         overheadNorthUp = true;
+        overheadPointerMoved = true;
+        assistedTargetWait = 0;
         overheadTargetYaw = overheadYaw + Math.atan2(Math.sin(-overheadYaw), Math.cos(-overheadYaw));
         return;
       }
@@ -2070,9 +2079,13 @@
       }
       if (a.yaw || a.pitch) stopCarryExit();
       if (birdsEye()) {
-        if (a.orbitYaw) overheadNorthUp = false;
+        if (a.orbitYaw) {
+          overheadNorthUp = false;
+          overheadPointerMoved = true;
+          assistedTargetWait = 0;
+        }
         overheadTargetYaw += a.orbitYaw * YAW_RATE * dt;
-        if (a.yaw || a.pitch) moveOverheadPointer(a.yaw * 500 * dt, a.pitch * 500 * dt);
+        if (a.yaw || a.pitch) moveOverheadPointer(-a.yaw * 500 * dt, a.pitch * 500 * dt);
         return;
       }
       if (!aimView() && lying && (a.yaw || a.pitch)) {
