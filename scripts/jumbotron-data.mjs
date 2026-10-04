@@ -37,6 +37,7 @@ if (stats.repos.some((r) => (Array.isArray(r.contributors) ? r.contributors : []
 }
 
 const context = { window: {} };
+vm.runInNewContext(readFileSync(join(root, "src", "js", "contributor-identities.js"), "utf8"), context);
 vm.runInNewContext(readFileSync(join(root, "src", "js", "activity-repos.js"), "utf8"), context);
 stats = context.window.BL.activityRepos.normalizeStats(stats);
 

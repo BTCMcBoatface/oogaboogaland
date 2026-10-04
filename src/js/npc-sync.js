@@ -36,7 +36,7 @@
 
   const create = ({ crew, fx, onPlan, onHit, onModelChange }) => {
     const net = BL.net;
-    const list = crew.list, n = list.length;
+    const list = crew.list.filter((cave) => !cave.contributor.temporary), n = list.length;
     const index = new Map(list.map((cave, i) => [cave, i]));
     const signature = fnv1a(list.map((cave) => cave.traits.name).join(",")) >>> 0;
     const out = new Float32Array(HEADER + n * RECORD), outHeader = new Uint32Array(out.buffer, 0, HEADER);

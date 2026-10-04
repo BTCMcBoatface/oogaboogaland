@@ -79,10 +79,19 @@ It does not deduplicate Oogatron's stored events: the public snapshot omits even
 IDs, and distinct commits can share a login and timestamp. Any duplicate history
 caused by repository renames must be repaired in Oogatron using those IDs.
 
+Confirmed contribution identities normalize through `contributor-identities.js`
+before repository grouping. Counts, weekly history, recent-event logins and
+activity timestamps roll into the attributed owner without increasing event
+totals. Oogatron user filters show the owner once, and saved alias selections map
+to that owner. This is contribution attribution, not an OAuth identity alias;
+see [Contributor onboarding](contributor-onboarding.md#confirmed-contribution-attribution).
+
 GitHub handles match without case;
 the public aliases `ottoz0r` and `drneski` map to the `bc1gui` and `DrNeski`
 characters (each declared as `github` in its character file). Unknown handles
-do not create new characters. Each character stores at most 64 repositories.
+do not create new characters through the activity adapter. Merge reconciliation
+and the server-verified sign-in fallback handle onboarding separately; see
+[Contributor onboarding](contributor-onboarding.md). Each character stores at most 64 repositories.
 Malformed, future, repeated, and older timestamps do not replace newer activity.
 
 `BL.contributors.hasRecentActivity(contributor, "oogaboogax/entropylab")` is the

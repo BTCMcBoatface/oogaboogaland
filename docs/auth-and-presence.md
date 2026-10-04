@@ -2,6 +2,10 @@
 
 How a visitor becomes a player on the Cloudflare-hosted island. Everything here lives in `worker/` and `src/js/net.js`; the page served anywhere else (GitHub Pages, a file, `npm run serve`) finds no backend and behaves exactly as before.
 
+New Oogatron contributors can receive a server-verified default character before
+their file reaches a deployed bundle. Eligibility, merge-time generation and the
+PR ownership check are described in [Contributor onboarding](contributor-onboarding.md).
+
 ## Pieces
 
 | Piece | Where | Job |

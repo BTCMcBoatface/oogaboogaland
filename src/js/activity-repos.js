@@ -31,6 +31,7 @@
   // safely deduplicate historical credits here: preserve every supplied count
   // and recent row, including multiple events sharing an author and timestamp.
   const normalizeStats = (input, at = Date.now()) => {
+    input = BL.contributorIdentities.normalizeStats(input, at);
     if (!input || input.meta?.schema_version !== 3 || !Array.isArray(input.repos)) return input;
     const groups = new Map();
     for (const repo of input.repos) {
