@@ -1,16 +1,8 @@
-# Issue #140: Mempool rainforest, working notes and handoff
+# Mempool rainforest (issue #140): design and verification notes
 
-**Status: feature-complete draft on branch `mempool-rainforest`.** The build is clean, the unit tier passes (125/125) and the `hub` scene's last full run passed 267 of 268 checks; the one that does not is a time limit, described under Verification. It has been looked at in headless screenshots and driven by probes, never played by a person: the first job of whoever continues is to play it and tune it. Trim this file to a short design and verification note before the PR.
+**Status: feature complete, not yet play-tested.** The build is clean, the unit tier passes (125/125) and the `hub` scene's last full run passed 267 of 268 checks; the one that does not is a time limit, described under Verification. It has been looked at in headless screenshots and driven by scripted probes, never played by a person, so play-testing and tuning come next.
 
-Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; it is the spec). Its five images are a world screenshot, two dimensioned plans (the plans govern layout) and two approximate concepts.
-
-## Rules for whoever continues
-
-- Read `AGENTS.md` first and follow it. Vanilla JS, classic IIFEs on `window.BL`, no dependencies, allocation-free frame loop, pooled and capped effects.
-- Verification the maintainer (Harry) approved for this task: Node probes of the pure modules and `npm run test:unit` as you go, then `npm test -- hub` at the end. No per-edit browser runs. Never weaken a check. On a busy machine run it as `LANES=3 npm test -- hub`.
-- Every change ends with `npm run build` and `node --check` on each touched file.
-- Git: push only to the maintainer's fork (`origin` = `hotpixelgroup/oogaboogaland`), branch `mempool-rainforest`. Commits are authored as the maintainer with **no AI attribution anywhere**: no `Co-Authored-By` trailer, no "generated with" line, in commits, PRs, issues or comments. Never commit `oogaboogaland.html` or `src/js/characters.gen.js` (build output). The PR goes to `OogaBoogaX/oogaboogaland` `rock` only when he asks.
-- Do not name branches with `codex/`.
+Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140. Its five images are a world screenshot, two dimensioned plans (the plans govern layout) and two approximate concepts.
 
 ## What is built
 
@@ -22,7 +14,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
 - **`src/js/clankers.js`**: the sleep lifecycle (`updateSleep`, `updateWake`, `reserveBed`): a gorilla whose Ooga sleeps reserves a bed, walks hub -> approach stair -> bridge -> court -> ring path -> nest, lies down, breathes and marks sleep, and walks home when its Ooga wakes. Sleepers found asleep at page entry are placed in bed. Possession wakes it; release while its Ooga sleeps walks it back. Sleep follows `crew.stateOf(cave)` (the override, else the contribution age), not the momentary `cave.state`, which flips when a sleeper stirs for a donation or a fire: keyed to that, every gorilla commuted over the bridge at each donation. A sleeper inside the lab frees its bench at once and then walks out; the walk home ends in the meadow below the approach stair, not at the bridge's head.
 - **`src/js/scene-hub.js`**: new `buildMempoolIsland` and its handle (`groundAt`, `overAt`, `coveredAt`, `floatAt`, `water`, `paintings`, `layout`, `preview`); floating support for Oogas and gorillas; `navigate("mempool")`; pool-aware camera (`belowHome`), cutaway and voice zone (`cave-mempool`); daylight dimmed and weather sheltered underground; the weather key board rewritten with a lake page; `clankerBeds()` (beds and paths).
 - **`src/js/crew.js`**: the HQ exit route on release starts only over the home island (`ctx.underHome`).
-- **Retired:** `scene-pool.js`; `/mempool` is now `scene: "hub", place: "mempool"`. `index.html`, `routes.js`, `scripts/cards.mjs`, `AGENTS.md`, `README.md`, `chain.js` comments and the director's feed panel updated to match.
+- **Retired:** `scene-pool.js`; `/mempool` is now `scene: "hub", place: "mempool"`. `index.html`, `routes.js`, `scripts/cards.mjs` (the live route is keyed by its path, and its card waits out the first donation toast), `AGENTS.md`, `README.md`, `chain.js` comments and the director's feed panel updated to match.
 - **Tests (`test/run.mjs`):** pool scene registrations removed; `hubRoutes` now walks an Ooga down the whole descent into the chamber; a Node rule check `pool layout`; `weather steps` reworded.
 
 ## Tuning constants chosen
@@ -62,7 +54,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
   - One earlier run was lost to the machine: Chrome hung in every session (driver timeouts, no assertion), as it then did on `rock`'s own page, until the machine was restarted. Those timeouts cleared in the runs since.
 - Fixed during the session after the suite caught them: `rainforest approach` (gorillas commuting over the bridge at each donation), `lab work` (its sleeper now frees its bench at once; the check counts coworkers and no longer the gorilla walking out to bed).
 - Canvas 2D (`?canvas2d=1`), in screenshots: the court and the flooded lake, the chamber with the lake seen through the membrane, and all of a painting's rows in front of its wall (the paintings carry `depthBias` and their walls are cut small for that renderer's depth sort).
-- Not done: a person playing it, the perf lane, a phone, two signed-in pages together.
+- Not done: a person playing it, the performance lane (`npm run test:perf`; the machine was never quiet enough to trust its number), a real phone, two signed-in pages together.
 
 ## Known limits and things to play-test
 
@@ -76,7 +68,7 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
 8. The swim pose is minimal: a floating Ooga treads water with its arms out (`floatPose` in `scene-hub.js`, local, crew and remote bodies alike). A gorilla floats on all fours to its chest and its walking gait is its paddle; standing still it floats still.
 9. Outlines and the rock cover cap (`rock-guides`, `camera-cover`) still know only the home island. Underground on this island the close camera collides with the rock and birds-eye and orbit views cut the roof away; there is no x-ray outline.
 10. The epoch painting says its age is unknown, because the snapshot has no stamp for it.
-11. The `mempool` preview card was retaken (`npm run cards`, keeping only `cards/mempool.jpg`): the chamber's WAITING painting with that moment's live readings. Its route keeps the feeds on, so the simulator's donation toast happened to be in frame; retake it or replace it with hand-made art if that matters.
+11. The `mempool` preview card was retaken (`npm run cards`, keeping only `cards/mempool.jpg`): the chamber's WAITING painting with that moment's live readings. Its route keeps the feeds on and the hub shows the simulator's donations, so `scripts/cards.mjs` now waits the first donation's toast and ticker out before it takes a live route's card.
 
 ## Previews (under `?debug=1`)
 
@@ -90,7 +82,7 @@ __ooga.poolIsland.preview.sleep("portlandhodl", true)   // put an Ooga to sleep:
 
 ## Probe loader
 
-Probes live in the ignored `untracked/issue-140/` on the original machine. To recreate one, run the classic scripts in a `vm` context with a `window` stub, in `index.html` order:
+The probes were throwaway scripts kept outside the repository. To recreate one, run the classic scripts in a `vm` context with a `window` stub, in `index.html` order:
 
 ```js
 import { readFileSync } from "node:fs";

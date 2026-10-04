@@ -37,6 +37,13 @@ try {
         if (Date.now() - t1 > 30000) throw new Error(`${entry.path}: no live chain snapshot`);
         await b.sleep(250);
       }
+      // The hub shows the simulator's first donation a few seconds in. Its toast is waited in and out, and its
+      // ticker after it, so the card is taken in the quiet before the next one.
+      for (const showing of [true, false]) {
+        const t2 = Date.now();
+        while ((await b.evaluate(`!document.getElementById("toast").hidden`)) !== showing && Date.now() - t2 < 12000) await b.sleep(250);
+      }
+      await b.sleep(2500);
     }
     await b.sleep(1500);
     // JPEG at 85 keeps a card near a fifth of its PNG with no visible loss at preview sizes.
