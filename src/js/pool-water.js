@@ -188,7 +188,8 @@
     {
       const point = {}, RAMP = L.RAMP;
       for (let s = 9, n = 0; s < RAMP.length - 4; s += 11, n++) {
-        const side = n % 2 ? 1 : -1, half = L.rampHalf(s / RAMP.r);
+        // Inner wall where a link has opened the outer one.
+        const side = n % 2 && !L.linkAt(s / RAMP.r) ? 1 : -1, half = L.rampHalf(s / RAMP.r);
         L.rampPoint(s, side * (half - 0.02), point);
         const node = hidden({ position: { x: point.x, y: point.y - 0.1, z: point.z }, rotation: { x: 0, y: point.bearing + (side > 0 ? Math.PI : 0), z: 0 }, geometry: P.VEINS[n % 2]() });
         veins.push({ node, phase: n * 0.41 });
@@ -381,7 +382,8 @@
         const bearing = Math.atan2(x, z);
         let inChannel = false;
         for (const channel of L.CHANNELS) if (r <= channel.to && Math.abs(L.turn(bearing, channel.bearing) * r) < L.CHANNEL.low) { inChannel = true; break; }
-        if (!inChannel) return -Infinity;
+        // Past the cliff the channel has no bed: the water falls there, and holds up no one, on a ledge or in the air.
+        if (!inChannel || L.groundAt(x, z) < L.LEVEL.bed) return -Infinity;
       }
       return L.groundAt(x, z) < floodY - 0.02 ? floodY : -Infinity;
     };

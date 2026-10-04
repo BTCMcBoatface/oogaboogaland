@@ -42,6 +42,14 @@
   const JUNCTION = { before: 0.15, after: 0.25, height: 3.5 };
   // The ledge down the outside of the cliff, beside the descent and at its height, to the lower door.
   const LEDGE = { width: 3.2, lead: 0.12, tail: 0.2, to: 0.5, thick: 2.5, lip: 1 };
+  // The plan's links A and B: two loops off the descent on its cliff side, as fractions of the sweep. Each leaves by
+  // a mouth through the outer wall, runs behind a pier of rock along a gallery cut into the cliff's face and open to
+  // the sea, and comes back in by a second mouth. There is no room in the shell for a walled tunnel beside the
+  // descent, so the gallery's own outer wall is the open air. A's mouths stand under the falls of the second and
+  // third channels. `lip` is the floor carried out past the cliff where the rock alone is too thin, `shy` its notch
+  // under a fall, `rib` the pier's thickness.
+  const LINK = { rib: 1.5, head: 3, mouth: 3.5, shy: 1.25 };
+  const LINKS = [{ from: 0.56, to: 0.6576, lip: 2 }, { from: 0.81, to: 0.91, lip: 2.75 }];
   // Four reading stops on the chamber's wall, square to the grid so each is a flat face to paint on: its
   // bearing, and its half width along the wall.
   const STOPS = [0, 90, 180, 270].map((deg) => deg * DEG), STOP = { half: 3.01 };
@@ -97,6 +105,18 @@
   // The rock over the descent while it is shallow: a ridge that keeps `roof` on it, falling as it falls.
   const ridgeTop = (a) => Math.min(LEVEL.peak, up(rampY(a) + RAMP.head + RAMP.roof + 0.25));
 
+  // The link a descent angle lies in, its mouths included, and how far its floor is carried past the cliff there.
+  const linkAt = (a) => {
+    for (const link of LINKS) if (a > link.from * RAMP.sweep - DOOR.half / 18 && a < link.to * RAMP.sweep + DOOR.half / 18) return link;
+    return null;
+  };
+  const lipAt = (bearing, r = edgeAt(bearing)) => {
+    const a = rampAngle(bearing), link = linkAt(a);
+    if (!link || a <= link.from * RAMP.sweep || a >= link.to * RAMP.sweep) return 0;
+    for (const channel of CHANNELS) if (channel.falls && Math.abs(turn(bearing, channel.bearing)) * r < LINK.shy) return 0;
+    return link.lip;
+  };
+
   // One column of ground: its top (a cell top, or -Infinity where there is none), its underside, the material it
   // wears, and the gaps cut through it as [from, to) pairs in `gaps`.
   const COLUMN = { top: 0, bottom: 0, material: 0, gaps: new Float64Array(10), count: 0, r: 0, bearing: 0, a: 0, ledge: false };
@@ -111,10 +131,11 @@
     if (r < SHAFT_R) return c;
     if (r >= edge) {
       // Outside the cliff only the ledge stands: a shelf hanging on the rock, thinner toward its lip.
-      if (r > edge + LEDGE.width || !onLedge(a)) return c;
+      const lip = lipAt(bearing, r), width = lip || LEDGE.width;
+      if (r > edge + width || !lip && !onLedge(a)) return c;
       c.ledge = true;
-      c.top = stepUnder(ledgeY(a));
-      c.bottom = c.top - (LEDGE.thick - (r - edge) / LEDGE.width * (LEDGE.thick - LEDGE.lip));
+      c.top = stepUnder(lip ? rampY(a) : ledgeY(a));
+      c.bottom = c.top - (LEDGE.thick - (r - edge) / width * (LEDGE.thick - LEDGE.lip));
       c.material = M.path;
       return c;
     }
@@ -166,6 +187,12 @@
     // The level bay where the descent meets the chamber, through the wall between them.
     if (wrap(bearing - RAMP.start - RAMP.sweep + JUNCTION.before) <= JUNCTION.before + JUNCTION.after && r >= CHAMBER_R - 0.5 && r < RAMP.r + RAMP.bay) gap(FLOOR, FLOOR + JUNCTION.height);
     for (const door of DOORS) if (Math.abs(a - door.at * RAMP.sweep) * 18 < DOOR.half && r >= RAMP.r) gap(stepUnder(rampY(a)), stepUnder(rampY(a)) + DOOR.height);
+    // A link: open from the descent out through each mouth, and along the gallery outside the pier.
+    const link = linkAt(a);
+    if (link) {
+      const mouth = a < link.from * RAMP.sweep + LINK.mouth / 18 || a > link.to * RAMP.sweep - LINK.mouth / 18;
+      if (r >= (mouth ? RAMP.r : RAMP.r + RAMP.half + LINK.rib)) gap(stepUnder(rampY(a)), up(rampY(a) + LINK.head));
+    }
     if (Math.abs(a - WINDOW.at * RAMP.sweep) * 12.5 < WINDOW.half && r >= CHAMBER_R - 0.5 && r <= RAMP.r) gap(stepUnder(rampY(a)) + WINDOW.sill, stepUnder(rampY(a)) + WINDOW.top);
     return c;
   };
@@ -224,11 +251,70 @@
   const covered = (x, y, z) => {
     const r = Math.hypot(x, z);
     if (r < LAKE_R) return y < membraneY(r);
+    // A link counts as under the rock all the way out to its lip, though the lip itself stands under the sky:
+    // daylight, the weather and the roof cut would otherwise change with every step along it.
+    if (r >= RAMP.r) {
+      const bearing = wrap(Math.atan2(x, z)), a = rampAngle(bearing), link = linkAt(a);
+      if (link && r <= edgeAt(bearing) + link.lip && y > rampY(a) - 1 && y < rampY(a) + LINK.head + 1) return true;
+    }
     const i = cellX(x), k = cellZ(z);
     if (i < 0 || k < 0 || i >= SX || k >= SZ) return false;
     const data = body().data;
     for (let j = Math.max(0, Math.floor((y - ORIGIN.y) / UNIT) + 1); j < SY; j++) if (data[(i * SY + j) * SZ + k]) return true;
     return false;
+  };
+  // What the outlines ask of this rock, as the home island's terrain answers for its own: whether a line of
+  // sight misses every solid cell, and whether a box is all rock or all open. Exact walks of the grid; a line or
+  // a box that leaves the grid finds nothing there, so it is clear and it is not solid.
+  const clampCell = (v, most) => v < 0 ? 0 : v > most ? most : v;
+  const sightClear = (x, y, z, toX, toY, toZ) => {
+    const dx = toX - x, dy = toY - y, dz = toZ - z;
+    if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < 1e-12) return !solidAt(x, y, z);
+    let lo = 0, hi = 1;
+    for (let axis = 0; axis < 3; axis++) {
+      const start = axis === 0 ? x : axis === 1 ? y : z, speed = axis === 0 ? dx : axis === 1 ? dy : dz;
+      const min = axis === 0 ? ORIGIN.x : axis === 1 ? ORIGIN.y : ORIGIN.z, max = min + (axis === 0 ? SX : axis === 1 ? SY : SZ) * UNIT;
+      if (!speed) { if (start < min || start >= max) return true; }
+      else {
+        const a = (min - start) / speed, b = (max - start) / speed;
+        lo = Math.max(lo, Math.min(a, b)); hi = Math.min(hi, Math.max(a, b));
+        if (lo >= hi - 1e-12) return true;
+      }
+    }
+    const data = body().data;
+    let gx = clampCell(Math.floor((x + dx * lo - ORIGIN.x) / UNIT), SX - 1), gy = clampCell(Math.floor((y + dy * lo - ORIGIN.y) / UNIT), SY - 1), gz = clampCell(Math.floor((z + dz * lo - ORIGIN.z) / UNIT), SZ - 1);
+    const sx = Math.sign(dx), sy = Math.sign(dy), sz = Math.sign(dz);
+    const stepX = dx ? UNIT / Math.abs(dx) : Infinity, stepY = dy ? UNIT / Math.abs(dy) : Infinity, stepZ = dz ? UNIT / Math.abs(dz) : Infinity;
+    let tx = dx ? (ORIGIN.x + (gx + (dx > 0 ? 1 : 0)) * UNIT - x) / dx : Infinity, ty = dy ? (ORIGIN.y + (gy + (dy > 0 ? 1 : 0)) * UNIT - y) / dy : Infinity, tz = dz ? (ORIGIN.z + (gz + (dz > 0 ? 1 : 0)) * UNIT - z) / dz : Infinity;
+    let t = lo;
+    for (let step = 0; step < SX + SY + SZ + 3; step++) {
+      const end = Math.min(tx, ty, tz, hi);
+      if (end > t + 1e-12 && data[(gx * SY + gy) * SZ + gz]) return false;
+      if (end >= hi - 1e-12) break;
+      if (tx <= end + 1e-12) { gx += sx; tx += stepX; }
+      if (ty <= end + 1e-12) { gy += sy; ty += stepY; }
+      if (tz <= end + 1e-12) { gz += sz; tz += stepZ; }
+      if (gx < 0 || gx >= SX || gy < 0 || gy >= SY || gz < 0 || gz >= SZ) break;
+      t = end;
+    }
+    return true;
+  };
+  const boxSolid = (x0, y0, z0, x1, y1, z1) => {
+    const i0 = Math.floor((x0 - 1e-7 - ORIGIN.x) / UNIT), i1 = Math.floor((x1 + 1e-7 - ORIGIN.x) / UNIT), j0 = Math.floor((y0 - 1e-7 - ORIGIN.y) / UNIT), j1 = Math.floor((y1 + 1e-7 - ORIGIN.y) / UNIT), k0 = Math.floor((z0 - 1e-7 - ORIGIN.z) / UNIT), k1 = Math.floor((z1 + 1e-7 - ORIGIN.z) / UNIT);
+    if (i0 < 0 || j0 < 0 || k0 < 0 || i1 >= SX || j1 >= SY || k1 >= SZ) return false;
+    const data = body().data;
+    for (let i = i0; i <= i1; i++) for (let k = k0; k <= k1; k++) for (let j = j0; j <= j1; j++) if (!data[(i * SY + j) * SZ + k]) return false;
+    return true;
+  };
+  // A column whose top lies under the box is passed over whole.
+  const boxClear = (x0, y0, z0, x1, y1, z1) => {
+    const i0 = Math.max(0, Math.floor((x0 - 1e-7 - ORIGIN.x) / UNIT)), i1 = Math.min(SX - 1, Math.floor((x1 + 1e-7 - ORIGIN.x) / UNIT)), j0 = Math.max(0, Math.floor((y0 - 1e-7 - ORIGIN.y) / UNIT)), j1 = Math.min(SY - 1, Math.floor((y1 + 1e-7 - ORIGIN.y) / UNIT)), k0 = Math.max(0, Math.floor((z0 - 1e-7 - ORIGIN.z) / UNIT)), k1 = Math.min(SZ - 1, Math.floor((z1 + 1e-7 - ORIGIN.z) / UNIT));
+    const grid = body(), data = grid.data, heights = grid.heights;
+    for (let i = i0; i <= i1; i++) for (let k = k0; k <= k1; k++) {
+      if (heights[i * SZ + k] < y0 - 1e-7) continue;
+      for (let j = j0; j <= j1; j++) if (data[(i * SY + j) * SZ + k]) return false;
+    }
+    return true;
   };
   // Whether a point is over the island's own ground, its lake or its ledge.
   const onIsland = (x, z, margin = 0) => {
@@ -238,7 +324,7 @@
     if (i < 0 || k < 0 || i >= SX || k >= SZ) return false;
     if (!margin) return body().heights[i * SZ + k] > -Infinity;
     const bearing = wrap(Math.atan2(x, z)), edge = edgeAt(bearing);
-    return r + margin < edge || r + margin < edge + LEDGE.width && onLedge(rampAngle(bearing)) && body().heights[i * SZ + k] > -Infinity;
+    return r + margin < edge || r + margin < edge + (lipAt(bearing, r) || LEDGE.width) && body().heights[i * SZ + k] > -Infinity;
   };
   // Whether a point of the forest floor is a path, a court, a nest, a channel or the shore: kept clear of plants.
   const keptClear = (x, z, margin = 0) => {
@@ -268,9 +354,9 @@
   for (const nest of NESTS) { nest.x = Math.sin(nest.bearing) * NEST.r; nest.z = Math.cos(nest.bearing) * NEST.r; nest.y = LEVEL.nest; }
 
   BL.poolLayout = {
-    UNIT, R, LAKE_R, CHAMBER_R, SHAFT_R, FLOOR, MEMBRANE_DEPTH, LEVEL, WATER, RING, RAMP, DOORS, DOOR, BAYS, WINDOW, JUNCTION, LEDGE, STOPS, STOP, COURT, NEST, NESTS,
+    UNIT, R, LAKE_R, CHAMBER_R, SHAFT_R, FLOOR, MEMBRANE_DEPTH, LEVEL, WATER, RING, RAMP, DOORS, DOOR, BAYS, WINDOW, JUNCTION, LEDGE, LINK, LINKS, linkAt, lipAt, STOPS, STOP, COURT, NEST, NESTS,
     CHANNEL, CHANNELS, HILLS, SLOT_GRID: SLOT, SLOTS, ORIGIN, SX, SY, SZ, M, PALETTE,
     wrap, turn, edgeAt, membraneY, waterRadius, rampAngle, rampY, rampHalf, stepUnder, roofUnder, onLedge, ledgeY, ridgeTop, column, body,
-    groundAt, solidAt, covered, onIsland, keptClear, rampPoint
+    groundAt, solidAt, covered, sightClear, boxSolid, boxClear, onIsland, keptClear, rampPoint
   };
 })();

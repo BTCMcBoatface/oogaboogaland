@@ -1842,7 +1842,7 @@
         drive: { x: 0, z: 0, climbAxis: 0, climbSide: 0, heading: NaN, climbExitHeading: NaN, climbExitLook: NaN, climbTurnTimer: 0,
           run: false, jumpHeld: false, jumpDown: false, jumpPressed: false, jumpBuffer: 0, jumps: 0, avoidSide: 0, avoidHeading: 0, avoidTime: 0,
           cancelled: false, vx: 0, vy: 0, vz: 0, airborne: false, passiveFall: false, wallRelease: false, grounded: true, resume: false, motionRecover: 0, motionEnvelope: false },
-        motion: { poundCharge: 0, takeoff: 0, landing: 0, supportOffset: 0, supportEntry: null,
+        motion: { poundCharge: 0, takeoff: 0, landing: 0, supportOffset: 0, supportEntry: null, swim: 0,
           groundRects: { flat: { x: 0, y: 0, z: 0, heading: 0 }, angled: { x: 0, y: 0, z: 0, heading: 0, groundX: 0, groundZ: 0, steep: false, walkable: true } },
           walkPhase: NaN, roll: 0, rollAngle: 0, rollSide: 0, smash: false, dragging: false, throwProgress: 0,
           climbGripX: NaN, climbGripY: NaN, climbGripZ: NaN, climbGripStride: 0, climbGripDirection: 0, climbGripSide: 0, climbGripRelease: 0,

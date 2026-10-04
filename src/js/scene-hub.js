@@ -2404,7 +2404,8 @@
     {
       const point = {};
       for (let s = 14.5, n = 0; s < L.RAMP.length - 3; s += 11, n++) {
-        const side = n % 2 ? -1 : 1;
+        // Inner wall where a link has opened the outer one.
+        const side = n % 2 || L.linkAt(s / L.RAMP.r) ? -1 : 1;
         L.rampPoint(s, side * (L.rampHalf(s / L.RAMP.r) - 0.02), point);
         wallTorch(point.x, point.y + 1.55, point.z, point.bearing + (side > 0 ? Math.PI : 0), `pool:ramp:${n}`, TUNNEL_TORCH);
       }
@@ -2621,19 +2622,21 @@
         return true;
       }
     };
-    // Whether nothing of the island's own rock stands between two world points, sampled through its grid.
-    const sightClear = (ax, ay, az, bx, by, bz) => {
-      const x0 = localX(ax, az), z0 = localZ(ax, az), x1 = localX(bx, bz), z1 = localZ(bx, bz), y0 = ay - place.y, y1 = by - place.y;
-      const steps = Math.min(200, Math.ceil(Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 0.6));
-      for (let i = 1; i < steps; i++) {
-        const t = i / steps;
-        if (L.solidAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, z0 + (z1 - z0) * t)) return false;
-      }
-      return true;
+    // What the outlines ask of this island's rock, in the world: whether nothing of it stands between two points,
+    // whether a point is in it, and whether a box is all rock or all open. The layout's grid answers exactly. A
+    // world box is asked as the island-frame box that holds it, so "all rock" and "all open" both stay proofs.
+    const sightClear = (ax, ay, az, bx, by, bz) => L.sightClear(localX(ax, az), ay - place.y, localZ(ax, az), localX(bx, bz), by - place.y, localZ(bx, bz));
+    const solidAt = (wx, wy, wz) => L.solidAt(localX(wx, wz), wy - place.y, localZ(wx, wz));
+    const turned = Math.abs(cos), across = Math.abs(sin);
+    const boxIn = (test) => (minX, minY, minZ, maxX, maxY, maxZ) => {
+      const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, hx = (maxX - minX) / 2, hz = (maxZ - minZ) / 2;
+      const lx = localX(cx, cz), lz = localZ(cx, cz), rx = turned * hx + across * hz, rz = across * hx + turned * hz;
+      return test(lx - rx, minY - place.y, lz - rz, lx + rx, maxY - place.y, lz + rz);
     };
+    const boxSolid = boxIn(L.boxSolid), boxClear = boxIn(L.boxClear);
     // What is walked on here rather than walked round: the bridge and the island's own ground in all its pieces.
     const walked = new Set([site.bridge, site.ground, site.floor, site.membrane, ...site.crossings]);
-    return { site, place, centre, groundAt, rainAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, sightClear, floatAt, afloat, walked, layout: L, preview };
+    return { site, place, centre, groundAt, rainAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, sightClear, solidAt, boxSolid, boxClear, floatAt, afloat, walked, layout: L, preview };
   };
   // Where the gorillas sleep while their Oogas do: the banana-leaf beds of the Mempool island's nests, and the dry
   // way to each from the home island, as x, z pairs: up the approach stair, over the bridge, across the court,
@@ -6700,6 +6703,8 @@
     }
     for (let i = 0; i < clankers.list.length; i++) {
       const entry = clankers.list[i], p = entry.root.position;
+      // Afloat in the Mempool island's water a gorilla paddles: the rig poses it, this only says so.
+      entry.motion.swim = entry.active && mempoolIsland.afloat(p.x, p.z, p.y, GORILLA_DRAUGHT) ? 1 : 0;
       if (!entry.active || p.y >= ABYSS_RESPAWN_Y || island.supportAt(p.x, p.z, p.y, 0, ABYSS_FLOOR) !== ABYSS_FLOOR) continue;
       if (!entry.controlled) { clankers.respawn(entry); continue; }
       // Use the character's pile arrival and abyss threshold. Keep possession
@@ -6939,6 +6944,21 @@
   const guideSegmentClear = (x, y, z, toX, toY, toZ) => island.sightClearAt(x, y, z, toX, toY, toZ);
   guideSegmentClear.boxClear = (minX, minY, minZ, maxX, maxY, maxZ) => island.sightBoxClearAt(minX, minY, minZ, maxX, maxY, maxZ);
   guideSegmentClear.boxSolid = (minX, minY, minZ, maxX, maxY, maxZ) => island.sightBoxSolidAt(minX, minY, minZ, maxX, maxY, maxZ);
+  // Sight for someone on or under the Mempool island, asked only for the walker's own rim: both islands' rock
+  // answers, and only the rock a roof cut leaves standing. The outline registry remembers its answer by which
+  // seam asked, so there are two alike and the one in use changes whenever the cut's height does.
+  const poolSeamOf = () => {
+    const seam = (x, y, z, toX, toY, toZ) => island.sightClearAt(x, y, z, toX, toY, toZ) && mempoolIsland.sightClear(x, y, z, toX, toY, toZ);
+    seam.boxSolid = (minX, minY, minZ, maxX, maxY, maxZ) => maxY <= RENDER_OPTS.cutawayMaxY
+      && (island.sightBoxSolidAt(minX, minY, minZ, maxX, maxY, maxZ) || mempoolIsland.boxSolid(minX, minY, minZ, maxX, maxY, maxZ));
+    return seam;
+  };
+  const POOL_SEAMS = [poolSeamOf(), poolSeamOf()];
+  let poolSeamIndex = 0, poolSeamCut = NaN;
+  const poolSeam = () => {
+    if (RENDER_OPTS.cutawayMaxY !== poolSeamCut) { poolSeamCut = RENDER_OPTS.cutawayMaxY; poolSeamIndex ^= 1; }
+    return POOL_SEAMS[poolSeamIndex];
+  };
   const GUIDE_RAMP_COLUMN = { floor: 0, ceiling: 0 };
   const exteriorRampGuides = (player) => {
     const eye = camera.position, p = player.root.position, feet = p.y - player.baseY;
@@ -8297,7 +8317,15 @@
       sightGuides.state.structure = sightGuides.state.structures = null;
       bananaGuides.state.structure = bananaGuides.state.structures = null;
       if (rockGuides) rockGuides.resetSurface();
-      cameraCover.draw(camera, null, false, false, cameraRockAt, cameraRockMaterialAt, null, dt);
+      // Under the Mempool island the cut takes the roof and leaves the tunnel's walls, which from a low view still
+      // hide the walker: then the walker's rim is drawn through them, and nothing else. Not from an eye that is
+      // itself inside that rock, whose back faces are not drawn, so the walker is already in plain sight.
+      const eye = camera.position;
+      const buried = !combatBirdsEye && cutawayPool === 2 && !!player && !pilot.closeWanted && pilot.closeMix < 1
+        && (eye.y > RENDER_OPTS.cutawayMaxY || !mempoolIsland.solidAt(eye.x, eye.y, eye.z))
+        && (collectViewObjects(), !objectGuides.actorVisible(player, poolSeam()));
+      cameraCover.state.opacity = 0.22 * (1 - pilot.closeMix);
+      cameraCover.draw(camera, buried ? player.root : null, false, buried, cameraRockAt, cameraRockMaterialAt, null, dt);
       return;
     }
     const insideMirror = !!player && playerCaveIndex === matrixCave.caveIndex;
@@ -8321,11 +8349,15 @@
       const objects = uiGuideObjects || collectViewObjects();
       exteriorRamp = !pilot.closeWanted && pilot.closeMix < 1 && exteriorRampGuides(player);
       const viewEligible = !pilot.closeWanted && pilot.closeMix < 1;
-      const actorVisible = viewEligible && objectGuides.actorVisible(player, guideSegmentClear);
-      const rockSection = viewEligible && touchesRock && actorVisible && !exteriorRamp;
-      const objectsEnabled = viewEligible && (exteriorRamp || rockSection || !actorVisible);
+      // On the Mempool island only the walker's own rim is drawn through its rock: the whole island is one owner
+      // in the outline registry, crowns and all, and the full pass over it is not paid for there.
+      // Nor is a rim drawn from an eye inside this rock, which sees the walker through its own undrawn back faces.
+      const actorVisible = viewEligible && (cutawayPool ? mempoolIsland.solidAt(camera.position.x, camera.position.y, camera.position.z) || objectGuides.actorVisible(player, poolSeam())
+        : objectGuides.actorVisible(player, guideSegmentClear));
+      const rockSection = viewEligible && !cutawayPool && touchesRock && actorVisible && !exteriorRamp;
+      const objectsEnabled = viewEligible && !cutawayPool && (exteriorRamp || rockSection || !actorVisible);
       const bananaEnabled = bananaCover.state.cameraInPile;
-      occluded = objectsEnabled;
+      occluded = cutawayPool ? viewEligible && !actorVisible : objectsEnabled;
       guides = sightGuides.update(player, null, objects, camera, aspect, dt, objectsEnabled, rockSection, SIGHT_RECOMPUTE_HZ);
       // Keep a separate cap pass so split objects stay legible in fruit.
       // It must not change the visibility rules in the clear part of the view.
@@ -8349,7 +8381,7 @@
       GUIDE_ACTOR_FORWARD[0] = (t.x - p.x) / length; GUIDE_ACTOR_FORWARD[1] = (t.y - p.y) / length; GUIDE_ACTOR_FORWARD[2] = (t.z - p.z) / length;
     }
     cameraCover.state.opacity = 0.22 * (1 - pilot.closeMix);
-    cameraCover.draw(camera, bananaActor ? null : player?.root, touchesRock, occluded, cameraRockAt, cameraRockMaterialAt, guides, dt, MATRIX_WORLD.active ? 1 : 0, CAMERA_GLYPHS, exteriorRamp ? guideActorVisibleAt : null);
+    cameraCover.draw(camera, bananaActor ? null : player?.root, touchesRock, occluded, cameraRockAt, cameraRockMaterialAt, cutawayPool && player ? null : guides, dt, MATRIX_WORLD.active ? 1 : 0, CAMERA_GLYPHS, exteriorRamp ? guideActorVisibleAt : null);
     bananaCover.draw(camera, player, dt, guideActorVisibleAt, bananaGuides.state, CAMERA_GLYPHS);
     drawFirstPersonFire(player);
   };
@@ -8431,7 +8463,7 @@
     clock = daylight.createClock({ hour: hourParam, daylen: daylenParam, day: dayParam, time: timeParam, now: new Date() });
     phase = null;
     island = terrain.island({ seed: SEED });
-    guideSegmentClear.boxGrid = island.sightGrid;
+    guideSegmentClear.boxGrid = POOL_SEAMS[0].boxGrid = POOL_SEAMS[1].boxGrid = island.sightGrid;
     buildCameraRamps();
     cameraCaveIndex = 0;
     cameraEntranceIndex = 0;
@@ -9120,7 +9152,7 @@
     mirrorGuides = mirrorCave.guides = BL.mirrorGuides.create({ mirror: mirrorCave, stand: matrixControl.button });
     // Scenery may receive outlines, but only island rock activates the hidden character view.
     // Banana interiors keep their separate covered-view pass.
-    objectGuides = headquarters.objectGuides = BL.objectGuides.create({ roots: root.children, crew, actorRoots: clankers.list.map((entry) => entry.root), exclude: [...terrainRampRoof.geometries, pathNode.geometry], providers: [pileGuides, platformGuides, mirrorGuides], propsBlockActor: false, perceptionThrough: (actor) => inBananas(actor) ? pile.core : null });
+    objectGuides = headquarters.objectGuides = BL.objectGuides.create({ roots: root.children, crew, actorRoots: clankers.list.map((entry) => entry.root), exclude: [...terrainRampRoof.geometries, pathNode.geometry, mempoolIsland.site.ground.geometry], providers: [pileGuides, platformGuides, mirrorGuides], propsBlockActor: false, perceptionThrough: (actor) => inBananas(actor) ? pile.core : null });
     const guideOptions = { segmentClear: guideSegmentClear, objectClear: objectGuides.cameraClear, actorClear: objectGuides.perceptionClear, eyeAt: guideEyeAt, ownerBoundary: objectGuides.ownerBoundaryAt, ownerPerceived: objectGuides.perceived, ownerConcealed: objectGuides.concealed, ownerDistance: objectGuides.distance, ownerInView: objectGuides.inView, ownerClear: objectGuides.ownerClear, getProvider: objectGuides.getProvider };
     sightGuides = BL.sightGuides.create(guideOptions);
     bananaGuides = BL.sightGuides.create(guideOptions);
