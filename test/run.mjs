@@ -2392,7 +2392,7 @@ const scene = (id, { query = "", steps, perf = false, opts = {}, label = "", url
   } });
 };
 // contributors.js reads the roster from the character files, which build on math, scene and models.
-const CONTRIBUTOR_SOURCES = ["math", "scene", "models", "caves", "activity-repos", "characters", "characters.gen", "contributors"];
+const CONTRIBUTOR_SOURCES = ["math", "scene", "models", "caves", "contributor-identities", "activity-repos", "characters", "characters.gen", "contributors"];
 const contributorActivityChecks = async () => {
   const context = { window: {}, URLSearchParams, location: { search: "" } };
   for (const name of CONTRIBUTOR_SOURCES) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
@@ -3109,7 +3109,7 @@ const gameRulesChecks = async () => {
     // The jackpot wheel, from arcade-models.js on the builders it loads with: the house wins slowly, and every
     // wedge, from a turn at rest and one far round after many spins, stops under the clapper wherever in it the spin
     // aims, after its whole turns and less than one more.
-    for (const name of ["scene", "models", "activity-repos", "jumbotron", "hub-models", "arcade-models"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
+    for (const name of ["scene", "models", "contributor-identities", "activity-repos", "jumbotron", "hub-models", "arcade-models"]) runInNewContext(await readFile(new URL(`../src/js/${name}.js`, import.meta.url), "utf8"), context);
     const { WHEEL_VALUES: V, WHEEL_COST: cost, wheelAt, wheelStop } = BL.arcadeModels;
     const ev = V.reduce((s, v) => s + v, 0) / V.length, jackpot = Math.max(...V), missed = [];
     for (const from of [0, -0.3, -1234.567]) for (let k = 0; k < V.length; k++) for (const at of [0.2, 0.5, 0.8]) {
@@ -3761,11 +3761,20 @@ const hubJumbotron = { name: "hub jumbotron", why: "rule: the island rotation st
     j.goToView(0);
     const reader = j.createReader();
     reader.setFilter("repos", [data.repos[0].name]); reader.go(1);
+    const filtered = reader.view.name === "repo" && reader.view.params.name === data.repos[0].name;
+    const aliases = Object.keys(BL.contributorIdentities.OWNERS), owner = BL.contributorIdentities.ownerOf(aliases[0]);
+    j.refreshData({ ...data, contributors: [{ login: owner }, ...aliases.map(login => ({ login }))] });
+    const restored = j.createReader({ screen: { name: "recent" }, filters: { users: aliases } });
+    const restoredOwner = restored.filters.users.length === 1 && restored.filters.users[0] === owner;
+    reader.setFilter("users", [...aliases, owner]);
+    const ownerOnly = reader.users.length === 1 && reader.users[0].login === owner
+      && reader.filters.users.length === 1 && reader.filters.users[0] === owner;
+    reader.dispose(); restored.dispose(); j.refreshData(data);
     return { count: j.count, captions, wrapped, differs: plain !== drafted,
-      filtered: reader.view.name === "repo" && reader.view.params.name === data.repos[0].name };
+      filtered, ownerOnly, restoredOwner };
   })()`);
   const orgBoards = ["commits", "prs", "reviews", "comments", "issues"].map((t) => "org · " + t);
-  record("hub jumbotron: the island rotates recent activity, org totals and five org leaderboards, while filtered readers show repository pages", r.count === 7 && r.captions[0] === "Recent activity" && r.captions[1] === "Org totals" && orgBoards.every((c, i) => r.captions[2 + i] === c) && r.wrapped === "Recent activity" && r.filtered, JSON.stringify(r));
+  record("hub jumbotron: the island rotates org activity, readers filter repositories, and attributed users appear once with saved alias selections restored", r.count === 7 && r.captions[0] === "Recent activity" && r.captions[1] === "Org totals" && orgBoards.every((c, i) => r.captions[2 + i] === c) && r.wrapped === "Recent activity" && r.filtered && r.ownerOnly && r.restoredOwner, JSON.stringify(r));
   record("hub jumbotron: a draft PR draws a different ticker row than the same PR undrafted", r.differs, JSON.stringify({ differs: r.differs }));
 } };
 // The healthiest of its kind, so a prop an earlier step shot at is never the one measured.

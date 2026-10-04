@@ -28,6 +28,23 @@
   const activeRoster = solo ? roster.filter((entry) => entry.name.toLowerCase() === character) : roster;
   const byName = new Map(roster.map((contributor) => [contributor.name.toLowerCase(), contributor]));
   characters.forEach((c, i) => { if (c.github) byName.set(c.github.toLowerCase(), roster[i]); });
+  // One server-vouched-for default per page, installed before the first scene.
+  // Append rather than reorder: the bundled crew keeps its indices and NPC signature.
+  let temporary = null;
+  const addTemporary = (row, login) => {
+    if (temporary || !row || typeof row.handle !== "string" || typeof login !== "string"
+      || row.handle !== login.toLowerCase() || !/^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/.test(row.handle)
+      || row.handle.includes("--") || BL.characters.get(row.handle)
+      || !Number.isSafeInteger(row.joined) || !Number.isSafeInteger(row.lastCommit)
+      || row.joined <= 0 || row.lastCommit < row.joined || row.lastCommit * 1000 > Date.now()) return false;
+    BL.characters.add({ handle: row.handle, joined: row.joined, lastCommit: row.lastCommit, temporary: true });
+    temporary = { name: row.handle, display: row.handle, lastCommitAt: row.lastCommit * 1000,
+      lastContributionAt: row.lastCommit * 1000, activity: new Map(), maintainer: false, temporary: true };
+    roster.push(temporary);
+    if (solo && character === row.handle) activeRoster.push(temporary);
+    byName.set(row.handle, temporary);
+    return true;
+  };
   const listeners = new Set(), snapshotRepos = new Set();
   const repositoryOf = BL.activityRepos.keyOf;
   // Repeatable debug-only fixture: ooga=handle:clank:lab,obl,lf (or chill/sleep).
@@ -131,7 +148,8 @@
     // One sub-snapshot per repository key, so the per-key first-snapshot
     // bookkeeping below stays uniform across all three intake shapes.
     const intakes = [];
-    for (const snapshot of Array.isArray(snapshots) ? snapshots : [snapshots]) {
+    for (const input of Array.isArray(snapshots) ? snapshots : [snapshots]) {
+      const snapshot = BL.contributorIdentities.normalizeStats(input, at);
       if (!snapshot || !snapshot.meta) continue;
       const version = snapshot.meta.schema_version;
       if (version === 1) {
@@ -234,5 +252,5 @@
     if (look.height) traits.height = look.height;
     return traits;
   };
-  BL.contributors = { roster, activeRoster, solo, debugState, debugRoster, stateFor, ageLabel, contributionStateFor, contributionAgeLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
+  BL.contributors = { roster, activeRoster, solo, debugState, debugRoster, addTemporary, stateFor, ageLabel, contributionStateFor, contributionAgeLabel, traitsFor, voiceFor, hasRecentActivity, applyActivity, applySnapshot, subscribe, seedDebugActivity };
 })();

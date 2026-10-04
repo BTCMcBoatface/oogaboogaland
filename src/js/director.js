@@ -290,7 +290,7 @@
   };
   const frameInterval = () => (elapsed > WARMUP && !document.hasFocus() && !active.inMotion ? UNFOCUSED_INTERVAL : 0);
 
-  const housekeep = () => renderer.releaseUnused(liveGeometry());
+  const housekeep = () => { if (active) renderer.releaseUnused(liveGeometry()); };
 
   let elapsed = 0;
   let lastTime = performance.now();
@@ -342,6 +342,7 @@
     if (e.type === "blur" || e.key === "Shift" && (e.code === "ShiftRight" || e.location === 2)) rightShift = false;
   };
   const onKeyDown = (e) => {
+    if (!active) return;
     if (e.key === "Shift" && (e.code === "ShiftRight" || e.location === 2)) rightShift = true;
     if (e.repeat) return;
     const typing = e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA");
@@ -430,13 +431,13 @@
   const net = window.BL.net;
   const unsubscribeAccount = net.subscribe(window.BL.hud.showAccount);
   const unsubscribeVoice = window.BL.voice.subscribe(() => window.BL.hud.showAccount(net.state));
-  if (!params.has("nosim") && params.get("net") !== "0") net.start();
+  const accountReady = !params.has("nosim") && params.get("net") !== "0" ? net.start() : Promise.resolve();
   // A tab opened in the background waits for its first look before it holds any socket.
   if (document.hidden) {
     mempool.setHidden(true);
     chain.setHidden(true);
   }
-  const unsubscribeDonations = donations.subscribe((donation) => active.onDonation(donation), { identity: () => game.state });
+  const unsubscribeDonations = donations.subscribe((donation) => { if (active) active.onDonation(donation); }, { identity: () => game.state });
   // The feed panel: the Konami code toggles a page-wide readout of the socket, its counters and its last events.
   // It subscribes and ticks only while open, and its text nodes change only with their value.
   const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
@@ -495,7 +496,12 @@
   const sceneId = requestedScene === "lab" && !DEBUG ? null : requestedScene;
   // Building the first scene holds the main thread with nothing painted yet.
   // Run boot from a task after the first frame so the leaf curtain is on screen, not the previous page.
-  const boot = () => {
+  let destroyed = false;
+  const boot = async () => {
+    // A signed-in newcomer must join before crew construction, including direct routes.
+    // net.start is bounded; an unavailable backend leaves the static island usable.
+    await accountReady;
+    if (destroyed) return;
     const built = performance.now();
     enter(Object.hasOwn(scenes, sceneId) ? scenes[sceneId] : scenes[Object.keys(scenes)[0]], routed && routed.place);
     mark("ready");
@@ -555,6 +561,7 @@
     window.__ooga = ooga;
   }
   const destroy = () => {
+    destroyed = true;
     window.cancelAnimationFrame(raf);
     window.clearInterval(housekeepTimer);
     unsubscribeDonations();
@@ -573,7 +580,7 @@
     window.removeEventListener("keyup", clearRightShift);
     window.removeEventListener("blur", clearRightShift);
     document.removeEventListener("visibilitychange", onVisibility);
-    active.leave();
+    if (active) active.leave();
     renderer.dispose();
   };
   window.addEventListener("pagehide", (e) => {

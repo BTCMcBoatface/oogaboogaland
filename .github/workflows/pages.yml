@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
   pages: write
   id-token: write
 
@@ -31,6 +32,11 @@ jobs:
           node-version: '22'
           package-manager-cache: false
       - uses: actions/configure-pages@v5
+      - name: Reconcile contributor files on OBL merges
+        if: github.event_name == 'push'
+        run: node scripts/sync-characters.mjs --merge
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Refresh Oogatron activity snapshot
         run: node scripts/jumbotron-data.mjs "$OOGATRON_STATS_URL"
         env:
@@ -41,7 +47,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: oogaboogaland-page
-          path: oogaboogaland.html
+          path: |
+            oogaboogaland.html
+            src/js/jumbotron-data.js
+            untracked/new-characters/
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
@@ -65,12 +74,16 @@ jobs:
           name: oogaboogaland-page
       - name: Commit the built page
         run: |
+          if [ -d untracked/new-characters ]; then
+            find untracked/new-characters -name '*.js' -exec cp {} src/characters/ \;
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f oogaboogaland.html
+          git add src/characters src/js/jumbotron-data.js
           if git diff --cached --quiet; then
             echo "Built page is unchanged; nothing to commit."
             exit 0
           fi
-          git commit -m "Rebuild site artifact [skip ci]"
+          git commit -m "Reconcile contributors and rebuild site artifact [skip ci]"
           git push

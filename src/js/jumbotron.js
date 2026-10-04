@@ -738,6 +738,7 @@
       return normalized;
     };
     const repoFilters = (values) => values === null ? null : [...new Set(values.map(BL.activityRepos.nameOf))];
+    const userFilters = (values) => values === null ? null : [...new Set(values.map(BL.contributorIdentities.ownerOf))];
     const indexOfView = (selected, pages = cycle()) => {
       const params = viewParams(selected.params);
       for (let i = 0; i < pages.length; i++) {
@@ -763,7 +764,7 @@
         const canvas = document.createElement("canvas");
         canvas.width = BOARD_W; canvas.height = BOARD_H;
         const context = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
-        let filters = { repos: repoFilters(state?.filters?.repos ?? null), users: state?.filters?.users ?? null, types: state?.filters?.types ?? null };
+        let filters = { repos: repoFilters(state?.filters?.repos ?? null), users: userFilters(state?.filters?.users ?? null), types: state?.filters?.types ?? null };
         let rollup = state?.rollup === true;
         let source = filteredModel(model, filters), pages = buildCycle(source, source !== model, filters.repos);
         const recentParams = { rows: [] };
@@ -792,7 +793,7 @@
           get users() { return model ? model.contributors : []; },
           get types() { return RECENT_TYPES; },
           setFilter(kind, values) {
-            filters = { ...filters, [kind]: kind === "repos" ? repoFilters(values) : values };
+            filters = { ...filters, [kind]: kind === "repos" ? repoFilters(values) : kind === "users" ? userFilters(values) : values };
             source = filteredModel(model, filters);
             refreshRecent();
             pages = buildCycle(source, source !== model, filters.repos);
