@@ -54,14 +54,14 @@ Issue: https://github.com/OogaBoogaX/oogaboogaland/issues/140 (read it in full; 
 
 ## Known limits and things to play-test
 
-1. **Never seen on screen.** Colours, forest density, torch light, the glass alphas (membrane 0.3, water 0.5), painting size and glow, and the cube's look are all first guesses.
-2. A gorilla that starts its sleep trip **on a roof** does not climb down for it: after the 25 s stall it is placed in its bed. From the ground or a cave the trip is walked.
+1. **Seen only in headless screenshots** (the overview, the court, the ring path, a nest, a tunnel, the chamber, the paintings with the issue's snapshot values, a flood, a storm, the cube), never played by a person. Colours, forest density, torch light and the glass alphas (membrane 0.3, water 0.5) have had one pass.
+2. A gorilla that starts its sleep trip on high ground climbs or hops down and walks; where it cannot find a way within 25 s (one roof in the probes) it is placed in its bed.
 3. **Beds are chosen per page**, not replicated: a seeded choice among free beds in the least full nests. Two signed-in pages can show the same gorilla in different beds. `npc-sync.js` record offsets 101-111 are free for a bed index (bump `FORMAT`) if that matters.
 4. Tunnel **walls are voxel**, like the rest of the island; only the floors are smooth.
 5. The tunnel network is the descent, the ledge and its two doors, and the window. The plan's A/B links are not built.
 6. At low water the membrane's rim is a **transparent bank** that walkers stand on.
 7. Rain lands on the ground and the water, not on tree crowns.
-8. There is **no swim pose**: a floating body keeps its walking pose. `mempoolIsland.afloat(...)` exists for one.
+8. The swim pose is minimal: a floating Ooga treads water with its arms out (`floatPose` in `scene-hub.js`, local, crew and remote bodies alike). Gorillas keep their walking pose.
 9. Outlines and the rock cover cap (`rock-guides`, `camera-cover`) still know only the home island. Underground on this island the close camera collides with the rock and birds-eye and orbit views cut the roof away; there is no x-ray outline.
 10. The epoch painting says its age is unknown, because the snapshot has no stamp for it.
 11. The `mempool` preview card (`npm run cards`) has not been retaken.

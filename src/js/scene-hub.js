@@ -2441,14 +2441,17 @@
     // and one prop kind, so every plant answers a tap the way the home island's own scatter does.
     // `r` is both the footprint it claims and the radius a pointer picks it by; `clear` is how far it
     // keeps off the paths, the nests, the channels and the court, so only its crown ever reaches over them.
+    // `most` caps each kind: the crowns make the forest, and every fern and shrub is a thousand faces or two,
+    // so the undergrowth is kept to what frames the paths rather than carpeting the floor.
     const SCATTER = [
-      { upTo: 0.36, kind: "canopy", r: 0.6, clear: 0.55 },
-      { upTo: 0.54, kind: "bush", r: 0.55, clear: 0.35 },
-      { upTo: 0.76, kind: "poolfern", r: 0.5, clear: 0.2 },
-      { upTo: 0.88, kind: "flower", r: 0.6, clear: 0.3 },
-      { upTo: 0.95, kind: "poolrock", r: 0.7, clear: 0.7 },
-      { upTo: 2, kind: "poollog", r: 1.7, clear: 1.6 }
+      { upTo: 0.36, kind: "canopy", r: 0.6, clear: 0.55, most: 44 },
+      { upTo: 0.54, kind: "bush", r: 0.55, clear: 0.35, most: 26 },
+      { upTo: 0.76, kind: "poolfern", r: 0.5, clear: 0.2, most: 38 },
+      { upTo: 0.88, kind: "flower", r: 0.6, clear: 0.3, most: 36 },
+      { upTo: 0.95, kind: "poolrock", r: 0.7, clear: 0.7, most: 14 },
+      { upTo: 2, kind: "poollog", r: 1.7, clear: 1.6, most: 8 }
     ];
+    const grown = { canopy: 0, bush: 0, poolfern: 0, flower: 0, poolrock: 0, poollog: 0 };
     const rand = mulberry32(4242);
     const geometryFor = (kind) => kind === "canopy" ? P.CANOPY[(rand() * P.CANOPY.length) | 0]()
       : kind === "bush" ? P.shrub() : kind === "poolfern" ? P.fern() : kind === "flower" ? P.flowers()
@@ -2470,6 +2473,7 @@
       const a = rand() * Math.PI * 2, r = Math.sqrt(inner + rand() * (outer - inner)), roll = rand();
       const x = fixed ? fixed.x : Math.sin(a) * r, z = fixed ? fixed.z : Math.cos(a) * r;
       const pick = fixed ? SCATTER[0] : SCATTER.find((e) => roll < e.upTo), ground = L.groundAt(x, z);
+      if (grown[pick.kind] >= pick.most) continue;
       if (!fixed) {
         // Undergrowth takes the lowland's damp ground too; everything else wants the dry forest floor or the ridge.
         const soft = pick.kind === "poolfern" || pick.kind === "bush" || pick.kind === "flower";
@@ -2485,6 +2489,7 @@
           trunks.push({ x, z, r: pick.r });
         }
       }
+      grown[pick.kind]++;
       const geometry = geometryFor(pick.kind);
       // A little scale and turn per copy: free variety, since every copy shares one cached build.
       const k = 0.82 + rand() * 0.45;
@@ -2553,7 +2558,7 @@
     };
     // Where the water carries a body whose feet are at `y`: `draught` under the surface, wherever that is clear
     // of the bed. Only for someone in the water itself, so a walker in the chamber under the lake stays on its
-    // floor; and never more than `rise` above the feet in one step, so rising water lifts a body, never throws it.
+    // floor; and never more than `rise` above standing feet in one step, so rising water lifts a body, never throws it.
     const floatAt = (wx, wz, y, rise, draught) => {
       const dx = wx - place.x, dz = wz - place.z;
       if (dx * dx + dz * dz > S.reach * S.reach) return -Infinity;
@@ -2561,7 +2566,10 @@
       if (level === -Infinity) return -Infinity;
       const r = Math.hypot(lx, lz), bed = r < L.LAKE_R ? L.membraneY(r) : L.groundAt(lx, lz), feet = y - place.y;
       if (feet < bed - STEP_MAX || level - draught <= bed) return -Infinity;
-      return place.y + Math.min(level - draught, Math.max(feet, bed) + Math.max(rise, 0.05));
+      // A body standing deeper than a step under where it would float is lifted a step at a time; one falling
+      // in lands at its float.
+      const up = level - draught;
+      return place.y + (rise > 0 && up > feet + rise ? feet + rise : up);
     };
     // Whether a point of the water's surface is over someone: for the pose, not the footing.
     const afloat = (wx, wz, y, draught) => {
@@ -2583,7 +2591,9 @@
         return true;
       }
     };
-    return { site, place, centre, groundAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, floatAt, afloat, layout: L, preview };
+    // What is walked on here rather than walked round: the bridge and the island's own ground in all its pieces.
+    const walked = new Set([site.bridge, site.ground, site.floor, site.membrane, ...site.crossings]);
+    return { site, place, centre, groundAt, worldX, worldZ, localX, localZ, cos, sin, claimGround, wildlife, water, paintings, overAt, coveredAt, floatAt, afloat, walked, layout: L, preview };
   };
   // Where the gorillas sleep while their Oogas do: the banana-leaf beds of the Mempool island's nests, and the dry
   // way to each from the home island, as x, z pairs: up the approach stair, over the bridge, across the court,
@@ -3287,6 +3297,16 @@
   // How far under the surface the Mempool island's water carries each kind of body, so its head stays above:
   // an Ooga to its neck, by its own height, and a gorilla on all fours to its chest.
   const OOGA_DRAUGHT = 0.55, GORILLA_DRAUGHT = 0.9;
+  // Afloat in the Mempool island's water a body treads it: arms out and sculling, nothing more. The same pose
+  // for the visitor's Ooga, the crew's and another player's, from where each already stands.
+  const floatPose = (cave, feet, height, phase, time) => {
+    const p = cave.root.position;
+    if (!mempoolIsland || !mempoolIsland.afloat(p.x, p.z, feet, height * OOGA_DRAUGHT)) return;
+    const parts = cave.parts, s = Math.sin(time * 2.4 + phase), c = Math.cos(time * 2.4 + phase);
+    parts.armL.rotation.z = 1.15 + s * 0.16; parts.armR.rotation.z = -1.15 - s * 0.16;
+    parts.armL.rotation.x = parts.armR.rotation.x = -0.25 + c * 0.22;
+    parts.legL.rotation.x = c * 0.3; parts.legR.rotation.x = -c * 0.3;
+  };
   const waterSupportAt = (x, z, y, rise, player) => mempoolIsland ? mempoolIsland.floatAt(x, z, y, rise, player ? player.bodyHeight * OOGA_DRAUGHT : CLOSE_VIEW.eyeHeight * OOGA_DRAUGHT) : -Infinity;
   const playerSupportAt = (x, z, y = 0, previousY = y, player = pilot?.player, dockEntry = false, ignoreClanker = false) => {
     const step = player ? player.hop === 0 && player.hopV <= 0 : !pilot.freeFalling;
@@ -6670,6 +6690,10 @@
       timechainIsland.show(dt);
     }
     crew.update(dt, elapsed);
+    for (let i = 0; i < crew.list.length; i++) {
+      const cave = crew.list[i];
+      if (cave.root.visible) floatPose(cave, cave.root.position.y - cave.baseY, cave.bodyHeight, cave.phase, elapsed);
+    }
     npcSync.update(dt);
     shareDrivenOoga();
     remotes.update(dt);
@@ -8572,8 +8596,9 @@
     shared.shoulderObstacle = (cave, fx, fz, reach, out) => {
       const p = cave.root.position;
       if (!solids.shoulderAt(p.x, p.y - cave.baseY + STEP_MAX, p.z, fx, fz, PLAYER_RADIUS, Math.max(0, cave.bodyHeight - STEP_MAX), reach, out, p.y - cave.baseY + 1e-7)) return false;
-      if (!out.node.sightSolid && out.node !== mempoolIsland.site.bridge) return true;
-      // A level probe can hit later stair treads or a bridge deck above the current feet.
+      if (!out.node.sightSolid && !mempoolIsland.walked.has(out.node)) return true;
+      // A level probe can hit later stair treads, a bridge deck above the current feet, or the Mempool island's
+      // own ground rising ahead: a terrace, the lake's bowl, a ramp. That ground is walked on, never passed round.
       // Follow ordinary support in short swept steps before treating the
       // whole staircase as a tall prop that must be passed sideways.
       const steps = Math.max(1, Math.ceil(reach / 0.125));
@@ -8592,7 +8617,7 @@
       const p = cave.root.position, feet = p.y - cave.baseY + 1e-5;
       // A bridge pass may have started before its next tread was reachable. Use the same raised-foot
       // clearance as walking to release that pass, rather than sweeping feet straight into the deck edge.
-      if (cave.shoulder.obstacle.node === mempoolIsland.site.bridge) return walkable(p.x, p.z, x, z, p.y - cave.baseY, cave.bodyHeight, cave);
+      if (mempoolIsland.walked.has(cave.shoulder.obstacle.node)) return walkable(p.x, p.z, x, z, p.y - cave.baseY, cave.bodyHeight, cave);
       return (cave === pilot.player ? solids.escapeSegmentClear : solids.segmentClear)(p.x, feet, p.z, x, feet, z, PLAYER_RADIUS, cave.bodyHeight - 1e-5);
     };
     shared.onBodyMove = moveCampBody;
@@ -8781,7 +8806,7 @@
     shared.outsideActorHeight = REMOTE_BODY_HEIGHT;
     shared.localOnline = localOnline;
     crew = shared.crew = crewMod.create(shared);
-    remotes = BL.remotePlayers.create({ root, crew });
+    remotes = BL.remotePlayers.create({ root, crew, posed: (cave, feet) => floatPose(cave, feet, cave.bodyHeight || 1.4, 0, now) });
     // Signed-in pages keep the crew in step: one runs it for everyone, the others follow its frames. The
     // crew's effects, shots and work hooks pass through the sync, which notes them while this page hosts;
     // a following page replays them into the same effects and gorillas.
