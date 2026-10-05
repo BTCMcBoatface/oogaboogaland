@@ -1043,6 +1043,9 @@
         if (step.done) { planQueue.shift(); finishBedRoute(cave, step.value); }
       }
     };
+    // Feet below the home island's surface mean its headquarters only over the home island itself: a scene with
+    // ground lower than that elsewhere (the Mempool island's chamber) says where through `ctx.underHome`.
+    const underHome = (x, z) => !ctx.underHome || ctx.underHome(x, z);
     const startBedRoute = (cave, bed, toBed) => {
       const travel = cave.bedTravel;
       cave.avoidance.tx = NaN;
@@ -2800,7 +2803,7 @@
       cave.act.until = elapsed + (cave.state === "chilling" ? chillPause(cave) : 1.5);
       cave.act.said = true;
       const p = cave.root.position, feet = p.y - cave.baseY;
-      if (ctx.bedRoute && feet < -0.5 && (!ctx.abyssAt || !ctx.abyssAt(p.x, p.z, feet, cave))) startBedRoute(cave, null, false);
+      if (ctx.bedRoute && feet < -0.5 && underHome(p.x, p.z) && (!ctx.abyssAt || !ctx.abyssAt(p.x, p.z, feet, cave))) startBedRoute(cave, null, false);
       else if (resumeWalk) {
         cave.walk = resumeWalk;
         cave.act.kind = resumeWalk.to === "spot" ? "wander" : "rush";
@@ -5280,7 +5283,7 @@
       cave.act.until = elapsed + (cave.state === "chilling" ? chillPause(cave) : 1.5);
       cave.act.said = true;
       cave.act.trips = 0;
-      if (!cave.camp.burning && ctx.bedRoute && cave.root.position.y - cave.baseY < -0.5 && (!ctx.abyssAt || !ctx.abyssAt(cave.root.position.x, cave.root.position.z, cave.root.position.y - cave.baseY, cave))) startBedRoute(cave, null, false);
+      if (!cave.camp.burning && ctx.bedRoute && cave.root.position.y - cave.baseY < -0.5 && underHome(cave.root.position.x, cave.root.position.z) && (!ctx.abyssAt || !ctx.abyssAt(cave.root.position.x, cave.root.position.z, cave.root.position.y - cave.baseY, cave))) startBedRoute(cave, null, false);
       cave.override = cave.controlOverride;
       if (ctx.playerName) return;
       applyState(cave, stateOf(cave));
