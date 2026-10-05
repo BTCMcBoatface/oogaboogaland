@@ -8848,6 +8848,15 @@ const unitChecks = async () => {
   // Scene state built directly instead of booted; seed 1 matches scene-hub.js.
   // Sealed cave guides need the hub's seal nodes, so probes reading them stay in the browser tier.
   const island = BL.terrain.island({ seed: 1 });
+  {
+    const beds = BL.headquartersSleep.outdoorBeds(island, BL.caves.slots);
+    const caves = new Set(beds.map(b => b.caveId));
+    const supported = beds.every(b => b.outdoor && b.y >= island.surfaceAt(b.x, b.z) && b.y > 3);
+    const separate = beds.every((a, i) => beds.every((b, j) => i === j || Math.hypot(a.x - b.x, a.z - b.z) >= 1.79));
+    const blocked = BL.headquartersSleep.outdoorBeds(island, BL.caves.slots, () => false).length === 0;
+    record("outdoor sleep: open cave roofs provide separate supported anchors and reject blocked footprints", beds.length >= 8 && caves.size >= 3 && supported && separate && blocked,
+      JSON.stringify({ count: beds.length, caves: [...caves], supported, separate, blocked }));
+  }
 
   {
     // #93: compare the actual weld against independent coordinates, not a fixed hash of trig-built terrain.
@@ -8975,6 +8984,58 @@ const unitChecks = async () => {
       const reserved = !!bed.sleeper && crew.list.filter(c => c.bedroll === bed).length === 1;
       record("crew capacity: full HQ uses separate safe waiting spots, hides overflow, retries vacancies, and wakes away contributors", separated && noOrigin && away && recovered && returned && reserved,
         JSON.stringify({ separated, noOrigin, away, recovered, returned, reserved }));
+    } finally {
+      if (crew) crew.dispose();
+      C.roster.forEach((c, i) => Object.assign(c, saved[i]));
+    }
+  }
+  {
+    // Bed priority must work both on entry and when a vacancy opens mid-session.
+    const S = BL.scene, root = S.createNode(), noop = () => {}, C = BL.contributors, now = Date.now();
+    const saved = C.roster.map(c => ({ lastCommitAt: c.lastCommitAt, lastContributionAt: c.lastContributionAt, maintainer: c.maintainer }));
+    C.roster.forEach((c, i) => { c.lastCommitAt = c.lastContributionAt = now - 48 * 3600000 - (C.roster.length - i) * 60000; c.maintainer = false; });
+    const d = BL.headquartersModels.MATTRESS;
+    const bed = { x: 40, y: 0, z: 40, sr: 0, cr: 1, node: { rotation: { y: 0 } }, sleep: d,
+      collisionBoxes: new Float64Array([-d.width / 2, 0, -d.depth / 2, d.width / 2, d.surface, d.depth / 2,
+        -0.45, d.surface, d.pillowZ - 0.25, 0.45, d.pillowTop, d.pillowZ + 0.25]) };
+    const outdoors = C.roster.map((c, i) => ({ x: 10 + i * 4, y: 8, z: 10, outdoor: true, node: { rotation: { y: 0 } } }));
+    let crew;
+    try {
+      crew = BL.crew.create({ root, world: { level: 0 }, input: { add: noop, remove: noop }, hud: { setRosterRow: noop },
+        game: { state: { assignments: {}, inventory: [] } }, pile: { footprintEdge: 1, pileEdge: () => 1 }, viewYaw: 0,
+        buildSpots: [], walkIn: { x: 0, z: 3 }, groundAt: () => 0, walkable: () => true, bedrolls: [bed], outdoorBedrolls: outdoors,
+        bedRoute: () => null, fx: { say: noop, zzzAt: noop, burst: noop, puff: noop, spawnParticle: noop, damageNumber: noop }
+      });
+      const oldest = crew.list[0], newest = crew.list.at(-1), next = crew.list.at(-2), item = S.createNode();
+      item.swag = {};
+      oldest.swagNodes.push(item); S.addChild(oldest.parts.hat, item);
+      crew.refreshStates(true);
+      const initial = bed.sleeper === newest && oldest.bedroll.outdoor;
+      crew.poseWeapon(oldest);
+      const hiddenGear = !oldest.sleepWeapons.visible && !item.visible && oldest.parts.gun.parent === oldest.sleepWeapons;
+      const roofSleep = crew.list.filter(c => c.bedroll?.outdoor).every(c => c.bedTravel.mode === "rest" && c.root.visible && c.root.position.y >= 8
+        && c.root.quaternion && c.parts.head.geometry === c.headClosed);
+      const savedNet = BL.net;
+      let sync, sharedGear = false;
+      try {
+        BL.net = { state: { room: "live", hostId: "host", selfId: "host", followers: 1, npcVersion: 1 }, sendNpc(bytes) { this.npcFrame = bytes.slice().buffer; } };
+        sync = BL.npcSync.create({ crew, fx: {}, onPlan: noop, onHit: noop, onModelChange: noop });
+        sync.update(0.3);
+        BL.net.state.selfId = "follower";
+        item.visible = oldest.sleepWeapons.visible = true;
+        sync.update(0.3);
+        sharedGear = !item.visible && !oldest.sleepWeapons.visible && oldest.remoteOutdoorSleep;
+      } finally { if (sync) sync.dispose(); BL.net = savedNet; }
+      newest.contributor.lastContributionAt = now;
+      crew.refreshStates(); crew.update(1.1, 1.1);
+      const priority = bed.sleeper === next && crew.list.filter(c => c.bedroll === bed).length === 1;
+      const previous = oldest.bedroll;
+      oldest.contributor.lastContributionAt = now;
+      crew.refreshStates(); crew.poseWeapon(oldest);
+      const restored = oldest.state === "working" && !oldest.bedroll && !previous.sleeper && item.visible
+        && oldest.parts.gun.parent !== oldest.sleepWeapons && oldest.parts.club.parent !== oldest.sleepWeapons;
+      record("sleep allocation: newest sleepers receive vacant beds, overflow lies on roofs with hidden gear, and waking restores items", initial && hiddenGear && roofSleep && sharedGear && priority && restored,
+        JSON.stringify({ initial, hiddenGear, roofSleep, sharedGear, priority, restored }));
     } finally {
       if (crew) crew.dispose();
       C.roster.forEach((c, i) => Object.assign(c, saved[i]));
