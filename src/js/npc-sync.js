@@ -302,6 +302,7 @@
         for (const node of cave.sleepParts.equipment) node.visible = STATES[t[o + 96]] !== "sleeping";
         for (const node of cave.swagNodes) node.visible = !outdoor;
         for (const model of cave.magazineModels) if (model) model.node.visible = !outdoor;
+        if (cave.jet) cave.jet.node.visible = !outdoor;
       }
       cave.remoteOutdoorSleep = outdoor;
       easeXYZ(bed.position, t, o + 76, gearK); easeAngles(bed.rotation, t, o + 79, gearK);

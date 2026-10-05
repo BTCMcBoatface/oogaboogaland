@@ -9022,9 +9022,12 @@ const unitChecks = async () => {
         sync = BL.npcSync.create({ crew, fx: {}, onPlan: noop, onHit: noop, onModelChange: noop });
         sync.update(0.3);
         BL.net.state.selfId = "follower";
+        const savedJet = oldest.jet, jetNode = S.createNode();
+        oldest.jet = { node: jetNode };
         item.visible = oldest.sleepWeapons.visible = true;
         sync.update(0.3);
-        sharedGear = !item.visible && !oldest.sleepWeapons.visible && oldest.remoteOutdoorSleep;
+        sharedGear = !item.visible && !oldest.sleepWeapons.visible && !jetNode.visible && oldest.remoteOutdoorSleep;
+        oldest.jet = savedJet;
       } finally { if (sync) sync.dispose(); BL.net = savedNet; }
       newest.contributor.lastContributionAt = now;
       crew.refreshStates(); crew.update(1.1, 1.1);
